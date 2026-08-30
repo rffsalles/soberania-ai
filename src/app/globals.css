@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;      /* #F8FAFC - Brand Canvas */
+    --foreground: 222 47% 11%;      /* #0F172A - Brand Ink */
+
+    --card: 0 0% 100%;              /* #FFFFFF */
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Brand Teal (Primary) */
+    --primary: 175 84% 32%;         /* #0D9488 */
+    --primary-foreground: 0 0% 100%;
+    --primary-dark: 175 68% 22%;    /* #115E59 */
+    --primary-light: 167 85% 89%;   /* #CCFBF1 */
+
+    /* Brand Warm Orange (Secondary/Accent) */
+    --secondary: 25 95% 53%;        /* #F97316 */
+    --secondary-foreground: 0 0% 100%;
+    --secondary-dark: 20 91% 48%;   /* #EA580C */
+    --secondary-light: 34 100% 92%; /* #FFEDD5 */
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 350 89% 60%;     /* #F43F5E - Rose */
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;    /* #E2E8F0 */
+    --input: 214.3 31.8% 91.4%;
+    --ring: 175 84% 32%;
+
+    --radius: 0.75rem;              /* 12px */
+  }
+
+  .dark {
+    --background: 224 71% 4%;       /* #0B1120 */
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;            /* #0F172A */
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 175 84% 38%;         /* #14B8A6 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 25 95% 53%;        /* #F97316 */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 350 89% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 175 84% 38%;
+  }
+}
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-dark: hsl(var(--primary-dark));
+  --color-primary-light: hsl(var(--primary-light));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-dark: hsl(var(--secondary-dark));
+  --color-secondary-light: hsl(var(--secondary-light));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-brand-teal: #0D9488;
+  --color-brand-teal-dark: #115E59;
+  --color-brand-teal-light: #CCFBF1;
+
+  --color-brand-orange: #F97316;
+  --color-brand-orange-dark: #EA580C;
+  --color-brand-orange-light: #FFEDD5;
+
+  --color-brand-ink: #0F172A;
+  --color-brand-canvas: #F8FAFC;
+
+  --font-heading: 'Poppins', sans-serif;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: var(--font-heading);
+}
+
+/* Glassmorphism & Diffused Shadows */
+.shadow-soft-sm {
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+}
+
+.shadow-soft-md {
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+.shadow-soft-xl {
+  box-shadow: 0 20px 30px -8px rgba(15, 23, 42, 0.07), 0 8px 12px -4px rgba(15, 23, 42, 0.03);
+}

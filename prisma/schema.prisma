@@ -1,0 +1,184 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum AgendaType {
+  CLASSROOM
+  STUDY_GROUP
+  EXAM
+  DRAFT_REVIEW
+  OFFICE_HOURS
+}
+
+enum AgendaStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum InteractionType {
+  QUESTION
+  SOCRATIC_CHALLENGE
+  FAQ_CLICK
+  DRAFT_SUBMISSION
+  EXAM_ANSWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  role         Role     @default(STUDENT)
+  enrollment   String?  @unique
+  avatarUrl    String?
+  classId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  class        Class?                @relation(fields: [classId], references: [id])
+  minutes      PedagogicalMinute[]
+  interactions StudentInteraction[]
+  submissions  ExamSubmission[]
+
+  @@map("users")
+}
+
+model Class {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  semester    Int
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students    User[]
+  agendas     Agenda[]
+
+  @@map("classes")
+}
+
+model Agenda {
+  id           String       @id @default(cuid())
+  title        String
+  subject      String
+  type         AgendaType
+  status       AgendaStatus @default(SCHEDULED)
+  startTime    DateTime
+  endTime      DateTime
+  videoUrl     String?
+  classId      String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  class        Class                 @relation(fields: [classId], references: [id])
+  minutes      PedagogicalMinute[]
+  interactions StudentInteraction[]
+  submissions  ExamSubmission[]
+
+  @@map("agendas")
+}
+
+model DidacticMaterial {
+  id          String          @id @default(cuid())
+  title       String
+  author      String
+  edition     String?
+  subject     String
+  totalPages  Int
+  filePath    String
+  status      String          @default("INDEXED") // INDEXING, INDEXED, ERROR
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  chunks      MaterialChunk[]
+
+  @@map("didactic_materials")
+}
+
+model MaterialChunk {
+  id          String           @id @default(cuid())
+  materialId  String
+  chapter     String
+  section     String?
+  pageNumber  Int
+  content     String           @db.Text
+  createdAt   DateTime         @default(now())
+
+  material    DidacticMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([materialId])
+  @@index([pageNumber])
+  @@map("material_chunks")
+}
+
+model PedagogicalMinute {
+  id               String   @id @default(cuid())
+  agendaId         String
+  studentId        String
+  engagementScore  Float    // 0 to 100
+  hesitationIndex  Float    // 0 to 100
+  topicsMastered   String[]
+  topicsStruggled  String[]
+  rawSummary       String   @db.Text
+  actionableAdvice String   @db.Text
+  createdAt        DateTime @default(now())
+
+  agenda           Agenda   @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  student          User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([agendaId])
+  @@index([studentId])
+  @@map("pedagogical_minutes")
+}
+
+model StudentInteraction {
+  id                  String          @id @default(cuid())
+  agendaId            String
+  studentId           String
+  type                InteractionType
+  timestampInVideo    Int?            // seconds
+  questionText        String          @db.Text
+  responseText        String          @db.Text
+  ragSourcePage       Int?
+  ragSourceBook       String?
+  isSocraticChallenge Boolean         @default(false)
+  wasCorrect          Boolean?
+  createdAt           DateTime        @default(now())
+
+  agenda              Agenda          @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  student             User            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([agendaId])
+  @@index([studentId])
+  @@map("student_interactions")
+}
+
+model ExamSubmission {
+  id           String   @id @default(cuid())
+  agendaId     String
+  studentId    String
+  score        Float
+  maxScore     Float    @default(10.0)
+  answers      Json     // Array of { questionId, chosenOption, timeSpentSeconds, hesitationSeconds }
+  integrityLog Json?    // Tab blur events, suspicious prompts
+  submittedAt  DateTime @default(now())
+
+  agenda       Agenda   @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([agendaId, studentId])
+  @@map("exam_submissions")
+}
