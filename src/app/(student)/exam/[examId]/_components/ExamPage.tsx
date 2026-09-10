@@ -114,12 +114,20 @@ export default function ExamPage({ examId }: ExamPageProps) {
         {/* Top Exam Status Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="amber" className="gap-1 font-semibold">
                 <FileCheck2 className="h-3.5 w-3.5" />
                 AVALIAÇÃO DIAGNÓSTICA SUPERVISIONADA
               </Badge>
               <span className="text-xs text-slate-500 font-mono">ID: {examId}</span>
+              <span className="text-xs text-slate-300 dark:text-slate-700">|</span>
+              <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                👨‍🏫 Profª. Responsável: <strong>Profª. Dra. Helena Salles</strong>
+              </span>
+              <span className="text-xs text-slate-300 dark:text-slate-700">|</span>
+              <span className="text-xs text-brand-teal font-medium">
+                🛡️ Proctoring IA: <strong>Tutora Lucy</strong>
+              </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold font-heading text-slate-900 dark:text-white">
               Avaliação 01: Álgebra Relacional, SQL & Normalização

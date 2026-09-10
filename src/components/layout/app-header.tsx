@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { TelemetryBadge } from './telemetry-badge';
+import { UserNav } from './user-nav';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +51,7 @@ export function AppHeader() {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                Profª. Luci · Tutoria On-Premises
+                Tutora Lucy · Apoio Docente On-Premises
               </p>
             </div>
           </Link>
@@ -61,14 +62,16 @@ export function AppHeader() {
           <TelemetryBadge />
         </div>
 
-        {/* User Role Quick Switch */}
-        <div className="flex items-center gap-2">
+        {/* User Role Quick Switch & Auth */}
+        <div className="flex items-center gap-3">
           <Link href="/classroom/session-live-01">
             <Button size="sm" className="gap-1.5 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer shadow-sm">
               <Sparkles className="h-4 w-4" />
-              <span>Entrar na Aula AO VIVO</span>
+              <span className="hidden sm:inline">Entrar na Aula AO VIVO</span>
+              <span className="sm:hidden">Aula</span>
             </Button>
           </Link>
+          <UserNav />
         </div>
       </div>
 

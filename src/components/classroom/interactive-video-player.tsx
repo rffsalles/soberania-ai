@@ -32,7 +32,7 @@ const DEFAULT_CHECKPOINTS: SocraticCheckpoint[] = [
     timeSeconds: 45,
     label: 'Pausa Socrática 01',
     prompt:
-      'A Profª. Luci pausou o vídeo: "Se uma tabela Alunos não tiver correspondência na tabela Notas, o que o INNER JOIN fará com esse aluno?"',
+      'A Tutora Lucy pausou o vídeo sob coordenação docente: "Se uma tabela Alunos não tiver correspondência na tabela Notas, o que o INNER JOIN fará com esse aluno?"',
   },
   {
     timeSeconds: 120,

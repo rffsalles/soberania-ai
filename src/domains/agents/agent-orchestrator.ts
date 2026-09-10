@@ -1,6 +1,12 @@
 import { executeHybridSearch } from '@/domains/rag/hybrid-search';
-import { CLASSROOM_SOCRATIC_SYSTEM_PROMPT, STUDY_GROUP_SYSTEM_PROMPT, DRAFT_MENTOR_SYSTEM_PROMPT } from './prompts/socratic-prompts';
+import {
+  CLASSROOM_SOCRATIC_SYSTEM_PROMPT,
+  STUDY_GROUP_SYSTEM_PROMPT,
+  DRAFT_MENTOR_SYSTEM_PROMPT,
+  OFFICE_HOURS_SYSTEM_PROMPT,
+} from './prompts/socratic-prompts';
 import { EXAM_PROCTOR_SYSTEM_PROMPT, checkExamGuardrail } from './prompts/exam-guardrails';
+import { aiProvider, type StreamChunk } from '@/lib/ai-provider';
 import type { AgendaType } from '@/domains/agendas/types';
 
 export interface AgentRequest {
@@ -18,6 +24,29 @@ export interface AgentResponse {
   latencyMs: number;
 }
 
+/**
+ * Seleciona o System Prompt de acordo com o tipo da Multi-Agenda
+ */
+export function getSystemPromptForAgenda(agendaType: AgendaType): string {
+  switch (agendaType) {
+    case 'CLASSROOM':
+      return CLASSROOM_SOCRATIC_SYSTEM_PROMPT;
+    case 'STUDY_GROUP':
+      return STUDY_GROUP_SYSTEM_PROMPT;
+    case 'DRAFT_REVIEW':
+      return DRAFT_MENTOR_SYSTEM_PROMPT;
+    case 'OFFICE_HOURS':
+      return OFFICE_HOURS_SYSTEM_PROMPT;
+    case 'EXAM':
+      return EXAM_PROCTOR_SYSTEM_PROMPT;
+    default:
+      return CLASSROOM_SOCRATIC_SYSTEM_PROMPT;
+  }
+}
+
+/**
+ * Orquestra a resposta completa do agente com RAG Híbrido, Guardrails e Telemetria
+ */
 export async function processAgentInteraction(
   request: AgentRequest
 ): Promise<AgentResponse> {
@@ -43,57 +72,125 @@ export async function processAgentInteraction(
     topK: 2,
   });
 
-  const bestChunk = ragResult.chunks[0];
   const citation = ragResult.primaryCitation;
+  const ragContext = ragResult.chunks
+    .map((c) => `[FONTE: ${c.bookTitle} - ${c.chapter}, pág. ${c.pageNumber}]\n${c.content}`)
+    .join('\n\n');
 
-  // 3. Simulação de Resposta Socrática contextualizada
-  let generatedText = '';
+  const systemPrompt = getSystemPromptForAgenda(agendaType);
+  const enrichedSystemPrompt = `${systemPrompt}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
 
-  if (agendaType === 'CLASSROOM') {
-    if (userMessage.toLowerCase().includes('join') || userMessage.toLowerCase().includes('tabela')) {
-      generatedText = `Excelente pergunta! Vamos pensar juntos: imagine que temos a tabela de **Alunos** e a tabela de **Matrículas**. Se um aluno acabou de entrar e ainda não se matriculou em nenhuma disciplina, o que aconteceria com ele se usássemos um \`INNER JOIN\` versus um \`LEFT JOIN\`?\n\nComo está destacado no nosso material: *"o LEFT OUTER JOIN preserva todas as tuplas da tabela à esquerda, preenchendo com valores NULL os atributos da direita quando não houver correspondência."*\n\nQual desses dois você escolheria para um relatório de todos os alunos cadastrados no sistema?`;
-    } else if (userMessage.toLowerCase().includes('3fn') || userMessage.toLowerCase().includes('normalizacao') || userMessage.toLowerCase().includes('normalização')) {
-      generatedText = `Normalização é a chave para evitar anomalias de atualização! Na **3ª Forma Normal**, a regra de ouro é: cada coluna não-chave deve depender *apenas* da chave primária, e de mais nada.\n\nSe você tiver uma tabela com \`id_aluno\`, \`cidade_id\` e \`nome_cidade\`, você percebe que \`nome_cidade\` depende de \`cidade_id\` e não diretamente do aluno? Como você refatoraria essa estrutura para atingir a 3FN?`;
-    } else {
-      generatedText = `Muito bem! Analisando o conceito com base nas nossas referências didáticas: quando estruturamos esse modelo, precisamos garantir a integridade dos dados e a performance das consultas.\n\nConsiderando o trecho do livro: *"${bestChunk?.content || 'A consistência relacional depende de chaves primárias bem definidas.'}"*, como você aplicaria isso no nosso projeto de laboratório?`;
-    }
-  } else if (agendaType === 'STUDY_GROUP') {
-    generatedText = `Olá pessoal! Ótima discussão no grupo. O colega levantou um ponto importante sobre o isolamento de transações. Alguém gostaria de complementar explicando como o nível de isolamento \`READ COMMITTED\` se comporta nesse caso prático?`;
-  } else if (agendaType === 'DRAFT_REVIEW') {
-    generatedText = `### 📝 Parecer Formativo da Profª. Luci\n\n- **Estrutura & Clareza (Nota 8.5/10):** Seu texto apresenta uma linha de raciocínio clara e boa contextualização do problema.\n- **Fundamentação Teórica (Nota 8.0/10):** Recomendo enriquecer a seção 2 com referências formais à álgebra relacional e às formas normais.\n- **Dica de Aprimoramento:** Evite parágrafos com mais de 6 linhas na introdução. Leia a seção correspondente em ${citation || '[Apostila Oficial]'}.`;
-  } else {
-    generatedText = `Olá! Estou à disposição para tirar dúvidas conceituais. Em que ponto da matéria você gostaria de aprofundar hoje?`;
+  // 3. Execução via AI Provider Gateway
+  let fullContent = '';
+  const stream = aiProvider.streamChat(
+    [
+      { role: 'system', content: enrichedSystemPrompt },
+      ...(request.history || []),
+      { role: 'user', content: userMessage },
+    ],
+    { citation }
+  );
+
+  for await (const chunk of stream) {
+    fullContent += chunk.token;
   }
 
   const latencyMs = Date.now() - startTime;
+  const providerInfo = aiProvider.getProviderInfo();
 
   return {
-    content: generatedText,
+    content: fullContent.trim(),
     citation,
-    modelUsed: 'vLLM-SLM-8B-Pedagogy (Multi-LoRA-DB)',
-    latencyMs: Math.max(80, latencyMs),
+    isGuardrailViolation: false,
+    modelUsed: `${providerInfo.provider.toUpperCase()} · ${providerInfo.model}`,
+    latencyMs,
   };
 }
 
-export async function handleAgentOrchestration(params: {
+/**
+ * Streaming em tempo real para a Sala de Aula Interativa e Chat
+ */
+export async function* streamAgentInteraction(
+  request: AgentRequest
+): AsyncGenerator<StreamChunk, void, unknown> {
+  const { userMessage, agendaType } = request;
+
+  // 1. Guardrail Check
+  if (agendaType === 'EXAM') {
+    const guardrailCheck = checkExamGuardrail(userMessage);
+    if (guardrailCheck.isViolation) {
+      yield {
+        token: guardrailCheck.refusalMessage!,
+        isComplete: true,
+      };
+      return;
+    }
+  }
+
+  // 2. Busca RAG Híbrida
+  const ragResult = await executeHybridSearch({
+    query: userMessage,
+    topK: 2,
+  });
+
+  const citation = ragResult.primaryCitation;
+  const ragContext = ragResult.chunks
+    .map((c) => `[FONTE: ${c.bookTitle} - ${c.chapter}, pág. ${c.pageNumber}]\n${c.content}`)
+    .join('\n\n');
+
+  const systemPrompt = getSystemPromptForAgenda(agendaType);
+  const enrichedSystemPrompt = `${systemPrompt}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG):\n${ragContext}`;
+
+  const stream = aiProvider.streamChat(
+    [
+      { role: 'system', content: enrichedSystemPrompt },
+      ...(request.history || []),
+      { role: 'user', content: userMessage },
+    ],
+    { citation }
+  );
+
+  for await (const chunk of stream) {
+    yield chunk;
+  }
+}
+
+export interface AgentOrchestrationParams {
   message: string;
-  agendaType: AgendaType;
+  agendaType?: AgendaType;
   studentId?: string;
   studentName?: string;
   sessionId?: string;
   videoTimestampSeconds?: number;
-}) {
+}
+
+export interface AgentOrchestrationResult {
+  reply: string;
+  isSocraticChallenge: boolean;
+  citations: string[];
+  latencyMs: number;
+  blockedByExamGuardrail: boolean;
+  modelUsed: string;
+}
+
+/**
+ * Ponto de entrada de orquestração do agente para APIs e rotas de chat
+ */
+export async function handleAgentOrchestration(
+  params: AgentOrchestrationParams
+): Promise<AgentOrchestrationResult> {
   const result = await processAgentInteraction({
     userMessage: params.message,
-    agendaType: params.agendaType,
+    agendaType: params.agendaType || 'CLASSROOM',
     sessionId: params.sessionId,
   });
 
   return {
     reply: result.content,
+    isSocraticChallenge: !result.isGuardrailViolation,
     citations: result.citation ? [result.citation] : [],
-    isSocraticChallenge: params.agendaType === 'CLASSROOM' && !result.isGuardrailViolation,
     latencyMs: result.latencyMs,
-    blockedByExamGuardrail: result.isGuardrailViolation,
+    blockedByExamGuardrail: result.isGuardrailViolation || false,
+    modelUsed: result.modelUsed,
   };
 }

@@ -24,3 +24,28 @@ export interface RAGSearchResult {
   primaryCitation?: string;
   latencyMs: number;
 }
+
+export interface RawDocumentPage {
+  pageNumber: number;
+  chapter?: string;
+  section?: string;
+  text: string;
+}
+
+export interface MaterialIngestionInput {
+  title: string;
+  author: string;
+  edition?: string;
+  subject: string;
+  materialType?: 'BOOK' | 'SCIENTIFIC_PAPER' | 'INSTITUTIONAL_GUIDE';
+  pages: RawDocumentPage[];
+}
+
+export interface IngestionResult {
+  materialId: string;
+  title: string;
+  totalChunks: number;
+  totalPages: number;
+  status: 'SUCCESS' | 'PARTIAL' | 'ERROR';
+  indexedAt: string;
+}

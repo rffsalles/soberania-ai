@@ -13,7 +13,9 @@ const MOCK_SESSIONS: AgendaSession[] = [
     videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Player interativo
     classId: 'class-ads-3a',
     className: '3º Semestre · Análise e Desenv. de Sistemas',
-    instructorName: 'Profª. Luci',
+    instructorName: 'Prof. Carlos Eduardo',
+    teacherResponsible: 'Prof. Carlos Eduardo',
+    tutorSupport: 'Tutora Lucy (Apoio IA)',
   },
   {
     id: 'group-study-01',
@@ -25,7 +27,9 @@ const MOCK_SESSIONS: AgendaSession[] = [
     endTime: new Date(Date.now() + 50 * 60 * 1000).toISOString(),
     classId: 'class-ads-3a',
     className: '3º Semestre · Análise e Desenv. de Sistemas',
-    instructorName: 'Profª. Luci (Mediação IA)',
+    instructorName: 'Prof. Carlos Eduardo',
+    teacherResponsible: 'Prof. Carlos Eduardo',
+    tutorSupport: 'Tutora Lucy (Mediação IA)',
   },
   {
     id: 'exam-01',
@@ -37,7 +41,9 @@ const MOCK_SESSIONS: AgendaSession[] = [
     endTime: new Date(Date.now() + 180 * 60 * 1000).toISOString(),
     classId: 'class-ads-3a',
     className: '3º Semestre · Análise e Desenv. de Sistemas',
-    instructorName: 'Profª. Luci (Fiscal IA)',
+    instructorName: 'Prof. Carlos Eduardo',
+    teacherResponsible: 'Prof. Carlos Eduardo',
+    tutorSupport: 'Tutora Lucy (Fiscalização IA)',
   },
   {
     id: 'office-hours-01',
@@ -49,7 +55,9 @@ const MOCK_SESSIONS: AgendaSession[] = [
     endTime: new Date(Date.now() + 360 * 60 * 1000).toISOString(),
     classId: 'class-ads-3a',
     className: '3º Semestre · Análise e Desenv. de Sistemas',
-    instructorName: 'Profª. Luci (Tutor)',
+    instructorName: 'Profª. Dra. Helena Salles',
+    teacherResponsible: 'Profª. Dra. Helena Salles',
+    tutorSupport: 'Tutora Lucy (Tutoria Socrática)',
   },
 ];
 

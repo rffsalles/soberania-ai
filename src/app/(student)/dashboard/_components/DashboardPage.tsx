@@ -185,16 +185,21 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex items-start gap-3 pt-2">
-                      <div className={cn('p-2 rounded-xl shrink-0', isLive ? 'bg-brand-orange/10 text-brand-orange' : 'bg-slate-100 text-slate-600')}>
+                      <div className={cn('p-2 rounded-xl shrink-0', isLive ? 'bg-brand-orange/10 text-brand-orange' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')}>
                         <Icon className="h-5 w-5" />
                       </div>
-                      <div>
+                      <div className="space-y-1 flex-1 min-w-0">
                         <CardTitle className="text-base font-semibold leading-snug">
                           {agenda.title}
                         </CardTitle>
-                        <CardDescription className="text-xs mt-1">
-                          {agenda.instructorName}
-                        </CardDescription>
+                        <div className="flex flex-col gap-0.5 text-xs text-slate-600 dark:text-slate-400">
+                          <span className="font-medium text-slate-800 dark:text-slate-200">
+                            👨‍🏫 {agenda.teacherResponsible || agenda.instructorName}
+                          </span>
+                          <span className="text-[11px] text-brand-teal font-medium">
+                            🤖 Apoio: {agenda.tutorSupport || 'Tutora Lucy (Apoio IA)'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </CardHeader>

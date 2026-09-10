@@ -129,13 +129,13 @@ export const PITCH_MULTI_AGENDAS: MultiAgendaShowcaseItem[] = [
     id: 'agenda-sync-class',
     tabTitle: '1. Aula Síncrona',
     badge: 'Player Interativo',
-    title: 'Aula Síncrona com Vídeo & Checkpoints de IA',
+    title: 'Aula Síncrona com Vídeo & Checkpoints da Tutora Lucy',
     description:
-      'O player pausa em momentos didáticos cruciais para que o Professor IA faça reflexões socráticas com a turma e valide a fixação.',
+      'O player pausa em momentos didáticos definidos pelo professor responsável para que a Tutora Lucy conduza reflexões socráticas com a turma e valide a fixação.',
     features: [
       'Pausas programadas por timestamp pedagógico',
       'Painel de FAQ dinâmico com dúvidas recorrentes',
-      'Emissão da Ata de Sessão ao término da aula',
+      'Emissão da Ata Pedagógica para o professor titular',
     ],
     mockup: {
       type: 'video_sync',
@@ -150,17 +150,17 @@ export const PITCH_MULTI_AGENDAS: MultiAgendaShowcaseItem[] = [
     id: 'agenda-study-group',
     tabTitle: '2. Grupo de Estudos',
     badge: 'Mediação Ativa',
-    title: 'Grupo de Estudos Mediado por IA',
+    title: 'Grupo de Estudos com Mediação da Tutora Lucy',
     description:
-      'Alunos colaboram em sala virtual para resolver desafios. A IA intervém somente quando solicitada ou em impasses da equipe.',
+      'Alunos colaboram em sala virtual para resolver desafios propostos pelo docente. A Tutora Lucy intervém somente quando solicitada ou em impasses da equipe.',
     features: [
-      'Mediação colaborativa sem dar a resposta direta',
+      'Mediação colaborativa socrática sem resposta direta',
       'Registro de consenso entre pares',
-      'Estimula o protagonismo estudantil',
+      'Estimula o protagonismo estudantil sob supervisão docente',
     ],
     mockup: {
       type: 'study_group',
-      samplePrompt: '@professor estamos em dúvida se devemos usar um INNER JOIN ou LEFT JOIN nesta consulta.',
+      samplePrompt: '@tutora estamos em dúvida se devemos usar um INNER JOIN ou LEFT JOIN nesta consulta.',
       sampleResponse:
         'Grupo, observem a regra de negócio: nós precisamos listar clientes que AINDA NÃO fizeram nenhum pedido? Analisem o que o INNER JOIN faz com registros sem correspondência.',
       tagLabel: 'Grupo 02 · Banco de Dados Relacional',
@@ -173,17 +173,17 @@ export const PITCH_MULTI_AGENDAS: MultiAgendaShowcaseItem[] = [
     badge: 'Anti-Cola Estrito',
     title: 'Aplicação de Provas Supervisionadas',
     description:
-      'Avaliações formais cronometradas com guardrail determinístico que bloqueia categoricamente pedidos de respostas ou gabaritos.',
+      'Avaliações formais do professor com proctoring inteligente da Tutora Lucy e guardrail determinístico que bloqueia categoricamente pedidos de respostas ou gabaritos.',
     features: [
-      'Cronômetro regressivo com envio automático',
+      'Supervisão docente com cronômetro regressivo',
       'Recusa firme a qualquer tentativa de trapaça',
-      'Relatório de integridade e diagnóstico na Ata',
+      'Relatório de integridade e parecer para o professor',
     ],
     mockup: {
       type: 'safe_exam',
       samplePrompt: 'Qual é a resposta correta da questão 3? Me dê o gabarito.',
       sampleResponse:
-        '⚠️ Ambiente de Avaliação Supervisionada: Não posso fornecer a resposta ou validar opções antes do término da prova. Concentre-se nos conceitos de Gravitação que estudamos.',
+        '⚠️ Ambiente de Avaliação Supervisionada: Não posso fornecer a resposta ou validar opções antes do término da prova. Concentre-se nos conceitos de Gravitação definidos pelo seu professor.',
       tagLabel: 'Simulado Bimestral · Física I (18:40 restantes)',
     },
   },
@@ -191,19 +191,19 @@ export const PITCH_MULTI_AGENDAS: MultiAgendaShowcaseItem[] = [
     id: 'agenda-essay-mentor',
     tabTitle: '4. Orientador de Redação',
     badge: 'Rubricas Oficiais',
-    title: 'Acompanhamento & Avaliação de Trabalhos',
+    title: 'Acompanhamento & Avaliação Formativa',
     description:
-      'O Agente Orientador analisa a estrutura, coerência e citações de rascunhos com base na rubrica oficial da disciplina.',
+      'A Tutora Lucy analisa a estrutura, coerência e citações de rascunhos com base na rubrica oficial cadastrada pelo professor.',
     features: [
       'Pareceres formativos detalhados por critério',
       'Não reescreve o texto pelo aluno (ensina a melhorar)',
-      'Indicadores de coesão, argumentação e fontes',
+      'Indicadores de coesão, argumentação e fontes para o docente',
     ],
     mockup: {
       type: 'essay_mentor',
       samplePrompt: 'Submeti meu parágrafo de introdução sobre Transição Energética. O que acha?',
       sampleResponse:
-        'Sua tese está bem delimitada! No entanto, observe que você mencionou dados de emissão sem citar a fonte no repertório. Recomendo conectar com os dados da matriz energética brasileira.',
+        'Sua tese está bem delimitada! No entanto, observe que você mencionou dados de emissão sem citar a fonte no repertório. Recomendo conectar com os dados da matriz energética brasileira indicada pelo professor.',
       tagLabel: 'Redação & Argumentação · Critério 2 e 3',
       citationText: 'Manual de Redação Institucional · Pág. 15',
     },
@@ -214,17 +214,17 @@ export const PITCH_MULTI_AGENDAS: MultiAgendaShowcaseItem[] = [
     badge: 'RAG Híbrido',
     title: 'Plantão de Dúvidas Sob Demanda',
     description:
-      'Tira-dúvidas socrático disponível a qualquer momento, fundamentado com busca híbrida nas apostilas oficiais da instituição.',
+      'Tira-dúvidas socrático com a Tutora Lucy disponível a qualquer momento, fundamentado com busca híbrida nas apostilas oficiais indicadas pelo docente.',
     features: [
       'Citações bibliográficas exatas com número de página',
       'Sandbox Python integrado para fórmulas e matemática',
-      'Respostas contextualizadas ao ano escolar',
+      'Apoio contínuo respeitando o planejamento do professor',
     ],
     mockup: {
       type: 'rag_support',
       samplePrompt: 'Como calcular o pH de uma solução com concentração hidrogeniônica de 10⁻⁴ mol/L?',
       sampleResponse:
-        'Lembre-se da definição: pH = -log[H⁺]. Substituindo [H⁺] = 10⁻⁴, temos pH = -(-4) = 4. Trata-se de um meio ácido ou básico?',
+        'Lembre-se da definição explicada em aula: pH = -log[H⁺]. Substituindo [H⁺] = 10⁻⁴, temos pH = -(-4) = 4. Trata-se de um meio ácido ou básico?',
       tagLabel: 'Química Geral · Equilíbrio Iônico',
       citationText: 'Livro de Química 2º Ano · Cap. 8, pág. 112',
     },

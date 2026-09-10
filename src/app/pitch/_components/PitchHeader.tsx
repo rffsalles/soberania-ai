@@ -6,6 +6,8 @@ import { ShieldCheck, ArrowRight, Sparkles, Cpu, Layers, Calculator } from 'luci
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
+import { UserNav } from '@/components/layout/user-nav';
+
 interface PitchHeaderProps {
   onNavigateSection?: (sectionId: string) => void;
 }
@@ -90,7 +92,7 @@ export function PitchHeader({ onNavigateSection }: PitchHeaderProps) {
           </button>
         </nav>
 
-        {/* CTA: Direto para a Plataforma / Demonstração ao Vivo */}
+        {/* CTA: Direto para a Plataforma e UserNav */}
         <div className="flex items-center gap-2.5">
           <Link href="/dashboard">
             <Button
@@ -101,6 +103,7 @@ export function PitchHeader({ onNavigateSection }: PitchHeaderProps) {
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
+          <UserNav />
         </div>
       </div>
     </header>

@@ -53,7 +53,7 @@ export function PedagogicalMinutesModal({
       open={open}
       onOpenChange={onOpenChange}
       title="Ata Pedagógica Individual"
-      description="Síntese gerada pela Profª. Luci ao término da aula síncrona."
+      description="Parecer formativo e diagnóstico gerado pela Tutora Lucy para acompanhamento do Professor Responsável."
       footer={
         <div className="flex items-center justify-between w-full">
           <Button
@@ -181,7 +181,7 @@ export function PedagogicalMinutesModal({
         <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
           <span className="text-xs font-semibold text-brand-teal flex items-center gap-1.5">
             <BookOpen className="h-4 w-4" />
-            Parecer Formativo da Profª. Luci
+            Parecer Formativo da Tutora Lucy (Apoio Docente)
           </span>
           <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
             {minute.rawSummary}

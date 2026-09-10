@@ -2,12 +2,14 @@ import { searchDidacticMaterialTool } from './tools/search-material-tool';
 import { getLessonFaqsTool } from './tools/faq-tool';
 import { registerInteractionTool } from './tools/interaction-tool';
 import { generateMinutesTool } from './tools/minutes-tool';
+import { ingestDidacticMaterialTool } from './tools/ingest-material-tool';
 
 export const MCP_TOOLS = [
   searchDidacticMaterialTool,
   getLessonFaqsTool,
   registerInteractionTool,
   generateMinutesTool,
+  ingestDidacticMaterialTool,
 ];
 
 export const localMcpServer = {

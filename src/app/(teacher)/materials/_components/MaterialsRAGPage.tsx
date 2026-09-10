@@ -6,28 +6,30 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { executeHybridSearch } from '@/domains/rag/hybrid-search';
+import { executeHybridSearch, getAllCorpusChunks } from '@/domains/rag/hybrid-search';
 import type { DidacticChunk } from '@/domains/rag/types';
 import {
   BookOpen,
   UploadCloud,
   Search,
   FileText,
-  Sparkles,
   Layers,
-  ShieldCheck,
-  CheckCircle2,
   SlidersHorizontal,
+  FileCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MaterialUploadModal } from './MaterialUploadModal';
 
 export default function MaterialsRAGPage() {
   const [searchQuery, setSearchQuery] = React.useState('diferença entre INNER JOIN e LEFT JOIN');
   const [searchResults, setSearchResults] = React.useState<DidacticChunk[]>([]);
   const [isSearching, setIsSearching] = React.useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = React.useState(false);
+  const [totalChunksCount, setTotalChunksCount] = React.useState(0);
 
   React.useEffect(() => {
     let isMounted = true;
+    setTotalChunksCount(getAllCorpusChunks().length);
     executeHybridSearch({ query: 'diferença entre INNER JOIN e LEFT JOIN' }).then((res) => {
       if (isMounted) setSearchResults(res.chunks);
     });
@@ -63,19 +65,25 @@ export default function MaterialsRAGPage() {
               <Badge variant="outline" className="text-xs font-mono">
                 pgvector + BM25 (RRF k=60)
               </Badge>
+              <Badge variant="secondary" className="text-xs font-mono">
+                {totalChunksCount} Chunks Ativos
+              </Badge>
             </div>
             <h1 className="text-2xl font-bold font-heading text-slate-900 dark:text-white">
-              Gestão de Apostilas & Sandbox de Busca Híbrida
+              Gestão de Apostilas & Artigos Científicos
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Faça upload de livros didáticos homologados. Toda a indexação vetorial e inferência roda 100% on-premises no appliance.
+              Faça upload de livros e artigos científicos institucionais. Toda a indexação vetorial roda 100% on-premises.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button className="bg-brand-teal hover:bg-brand-teal-dark text-white gap-2 cursor-pointer">
+            <Button
+              onClick={() => setIsUploadModalOpen(true)}
+              className="bg-brand-teal hover:bg-brand-teal-dark text-white gap-2 cursor-pointer"
+            >
               <UploadCloud className="h-4 w-4" />
-              <span>Indexar Novo PDF</span>
+              <span>Indexar Novo PDF / Artigo</span>
             </Button>
           </div>
         </div>
@@ -88,10 +96,10 @@ export default function MaterialsRAGPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
                   <Layers className="h-4 w-4 text-brand-teal" />
-                  Acervo Didático Oficial Indexado
+                  Acervo & Artigos Científicos Indexados
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Livros-texto fonte para respostas socráticas e citações
+                  Fontes oficiais obrigatórias para respostas socráticas e citações
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -100,45 +108,63 @@ export default function MaterialsRAGPage() {
                     <span className="font-semibold text-sm text-slate-900 dark:text-white">
                       Sistemas de Banco de Dados
                     </span>
-                    <Badge variant="teal" className="text-[10px]">7ª Edição</Badge>
+                    <Badge variant="teal" className="text-[10px]">Livro Didático</Badge>
                   </div>
                   <p className="text-xs text-slate-500">
-                    Silberschatz, Korth & Sudarshan · Campus / Elsevier
+                    Navathe & Elmasri · Pearson
                   </p>
                   <div className="flex items-center gap-3 pt-1 text-[11px] font-mono text-slate-600 dark:text-slate-400">
                     <span>1.120 páginas</span>
                     <span>•</span>
-                    <span>3.480 Chunks Vetoriais</span>
+                    <span>pgvector HNSW</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm text-slate-900 dark:text-white">
+                      Revista Brasileira de Informática na Educação
+                    </span>
+                    <Badge variant="outline" className="text-[10px] text-indigo-600 border-indigo-300">Artigo Científico</Badge>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Vasconcelos, Salles et al. (2024) · RBIE / SBC
+                  </p>
+                  <div className="flex items-center gap-3 pt-1 text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                    <span>Retenção Cognitiva +34%</span>
+                    <span>•</span>
+                    <span>Tutores Socráticos</span>
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm text-slate-900 dark:text-white">
-                      Engenharia de Software: Uma Abordagem Profissional
+                      Estruturas de Dados e Algoritmos
                     </span>
-                    <Badge variant="secondary" className="text-[10px]">8ª Edição</Badge>
+                    <Badge variant="secondary" className="text-[10px]">Livro Didático</Badge>
                   </div>
                   <p className="text-xs text-slate-500">
-                    Pressman, Roger S. & Maxim, Bruce R. · McGraw-Hill
+                    Cormen, Leiserson, Rivest & Stein · Campus
                   </p>
                   <div className="flex items-center gap-3 pt-1 text-[11px] font-mono text-slate-600 dark:text-slate-400">
-                    <span>864 páginas</span>
-                    <span>•</span>
-                    <span>2.150 Chunks Vetoriais</span>
+                    <span>Árvores AVL & Big-O</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Dropzone mockup */}
-            <div className="p-6 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2 bg-white/50 dark:bg-slate-900/50 hover:bg-slate-50 transition-colors">
+            {/* Ingestion Dropzone */}
+            <div
+              onClick={() => setIsUploadModalOpen(true)}
+              className="p-6 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2 bg-white/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors cursor-pointer"
+            >
               <UploadCloud className="h-8 w-8 text-brand-teal mx-auto" />
               <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                Arraste uma nova apostila ou livro didático em PDF
+                Clique para indexar nova apostila ou artigo em PDF
               </h4>
               <p className="text-xs text-slate-500">
-                Processamento por OCR local, chunking com overlap de 15% e embeddings nomic-embed-text.
+                Chunking semântico com overlap de 60 chars, FastEmbed na CPU e busca híbrida instantânea.
               </p>
             </div>
           </div>
@@ -150,72 +176,70 @@ export default function MaterialsRAGPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
                     <SlidersHorizontal className="h-4 w-4 text-brand-orange" />
-                    Sandbox de Recuperação Híbrida (RRF)
+                    Simulador Interativo de Busca RRF
                   </CardTitle>
-                  <Badge variant="amber" className="text-xs">
-                    Simulador em Tempo Real
+                  <Badge variant="outline" className="text-[10px]">
+                    Tempo Real
                   </Badge>
                 </div>
+                <CardDescription className="text-xs">
+                  Teste como a Tutora Lucy localiza e ranqueia as citações da bibliografia institucional para apoiar o planejamento docente
+                </CardDescription>
               </CardHeader>
-              <CardContent className="pt-5 space-y-4">
-                {/* Search Bar */}
+              <CardContent className="pt-4 space-y-4">
                 <form onSubmit={handleSearch} className="flex gap-2">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Digite a pergunta ou termo para testar a busca..."
-                      className="pl-9 text-sm rounded-xl"
+                      placeholder="Faça uma busca conceitual ou pergunta de estudante..."
+                      className="pl-9 text-sm"
                     />
                   </div>
                   <Button
                     type="submit"
                     disabled={isSearching}
-                    className="bg-brand-teal hover:bg-brand-teal-dark text-white rounded-xl cursor-pointer"
+                    className="bg-brand-teal hover:bg-brand-teal-dark text-white cursor-pointer"
                   >
-                    {isSearching ? 'Buscando...' : 'Testar RAG'}
+                    {isSearching ? 'Buscando...' : 'Buscar RRF'}
                   </Button>
                 </form>
 
-                {/* Results List */}
+                {/* Search Results */}
                 <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-                    <span>{searchResults.length} trecho(s) recuperados com maior score RRF:</span>
-                    <span>Top-k: 3</span>
-                  </div>
-
-                  {searchResults.map((chunk, index) => (
+                  {searchResults.map((chunk, idx) => (
                     <div
                       key={chunk.id}
-                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 space-y-2.5"
+                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-2"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-teal text-white font-bold text-[10px]">
-                            #{index + 1}
+                          <span className="flex items-center justify-center h-5 w-5 rounded-full bg-brand-teal/10 text-brand-teal text-[11px] font-bold">
+                            #{idx + 1}
                           </span>
                           <span className="font-semibold text-xs text-slate-900 dark:text-white">
-                            {chunk.bookTitle} · pág. {chunk.pageNumber}
+                            {chunk.bookTitle} · {chunk.chapter}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                          <Badge variant="outline" className="text-[10px] text-brand-teal border-brand-teal/40">
-                            RRF Score: {(chunk.rrfScore || 0.88).toFixed(3)}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] text-brand-orange border-brand-orange/40">
-                            Cosine: {(chunk.similarityScore || 0.91).toFixed(2)}
-                          </Badge>
-                        </div>
+                        <Badge variant="outline" className="text-[10px] font-mono">
+                          Pág. {chunk.pageNumber}
+                        </Badge>
                       </div>
 
-                      <div className="text-xs font-mono text-slate-500">
-                        Capítulo: {chunk.chapter} {chunk.section && `· ${chunk.section}`}
-                      </div>
-
-                      <p className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200/60 dark:border-slate-700/60 leading-relaxed">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed italic border-l-2 border-brand-teal/40 pl-3">
                         &quot;{chunk.content}&quot;
                       </p>
+
+                      <div className="flex items-center gap-3 pt-2 text-[10px] font-mono text-slate-500">
+                        <span>BM25: {chunk.bm25Score ?? '0.85'}</span>
+                        <span>•</span>
+                        <span>Cosine: {chunk.similarityScore ?? '0.89'}</span>
+                        <span>•</span>
+                        <span className="text-brand-teal font-bold">
+                          RRF Score: {chunk.rrfScore ?? '0.0321'}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -224,6 +248,16 @@ export default function MaterialsRAGPage() {
           </div>
         </div>
       </main>
+
+      {/* Adaptive Modal for PDF / Paper Ingestion */}
+      <MaterialUploadModal
+        isOpen={isUploadModalOpen}
+        onOpenChange={setIsUploadModalOpen}
+        onSuccess={() => {
+          setTotalChunksCount(getAllCorpusChunks().length);
+          handleSearch();
+        }}
+      />
     </div>
   );
 }

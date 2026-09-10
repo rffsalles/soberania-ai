@@ -18,7 +18,9 @@ export interface AgendaSession {
   videoUrl?: string;
   classId?: string;
   className?: string;
-  instructorName: string;
+  instructorName: string; // Professor Responsável (mantido para compatibilidade)
+  teacherResponsible?: string; // Docente Titular humano responsável pelo evento
+  tutorSupport?: string; // Tutora IA de apoio pedagógico (ex: 'Tutora Lucy')
   authorizedWindowMinutes?: number;
   createdAt?: string;
 }

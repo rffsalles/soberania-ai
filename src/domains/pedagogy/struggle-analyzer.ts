@@ -7,7 +7,7 @@ export function getTeacherStruggleHeatmap(): TeacherStruggleHeatmap[] {
       strugglePercentage: 54.2,
       affectedStudentsCount: 19,
       suggestedAction:
-        'A Profª. Luci sugere dedicar os primeiros 15 minutos da próxima aula a um diagrama visual comparando INNER vs LEFT JOIN com exemplos práticos.',
+        'A Tutora Lucy sugere ao Professor Responsável dedicar os primeiros 15 minutos da próxima aula a um diagrama visual comparando INNER vs LEFT JOIN com exemplos práticos.',
     },
     {
       topic: 'Identificação de Dependência Transitiva (3FN)',

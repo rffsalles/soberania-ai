@@ -47,7 +47,7 @@ export default function TeacherReportsPage() {
               Diagnóstico de Dificuldades & Atas Pedagógicas
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Análise sintética gerada em tempo real pela Profª. Luci Virtual a partir das sessões de aula e grupo de estudos.
+              Análise sintética gerada em tempo real pela Tutora Lucy (Apoio Docente) a partir das sessões de aula e grupos de estudo sob supervisão do professor titular.
             </p>
           </div>
 
@@ -143,7 +143,7 @@ export default function TeacherReportsPage() {
                   <TableHead>Engajamento</TableHead>
                   <TableHead>Hesitação</TableHead>
                   <TableHead>Pontos de Atenção</TableHead>
-                  <TableHead>Parecer Sintético da Profª. Luci</TableHead>
+                  <TableHead>Parecer da Tutora Lucy (Apoio ao Docente)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

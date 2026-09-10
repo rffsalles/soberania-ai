@@ -62,7 +62,7 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
     },
     {
       id: 'm3',
-      senderName: 'Profª. Luci (Mediação)',
+      senderName: 'Tutora Lucy (Mediação IA)',
       isAi: true,
       text: 'Excelente raciocínio, Beatriz e Gabriel! Como vocês garantiriam que o valor_total do pedido permaneça consistente sem violar a 3FN?',
       time: '14:43',
@@ -90,11 +90,14 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
     setMessages((prev) => [...prev, newMsg]);
     setInputMsg('');
 
-    // Trigger AI mediation if Luci is mentioned or requested
+    // Trigger AI mediation if Tutora Lucy is mentioned or requested
+    const lower = userText.toLowerCase();
     if (
-      userText.toLowerCase().includes('@luci') ||
-      userText.toLowerCase().includes('@professora') ||
-      userText.toLowerCase().includes('prof')
+      lower.includes('@lucy') ||
+      lower.includes('@tutora') ||
+      lower.includes('@luci') ||
+      lower.includes('@professora') ||
+      lower.includes('tutora')
     ) {
       setIsAiResponding(true);
       try {
@@ -105,7 +108,7 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
 
         const aiMsg: PeerMessage = {
           id: `ai-${Date.now()}`,
-          senderName: 'Profª. Luci (Mediação)',
+          senderName: 'Tutora Lucy (Mediação IA)',
           isAi: true,
           text: response.content,
           time: new Date().toLocaleTimeString('pt-BR', {
@@ -129,12 +132,20 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
         {/* Top bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="indigo" className="gap-1">
                 <Users className="h-3.5 w-3.5" />
                 Grupo de Estudos Interativo
               </Badge>
               <span className="text-xs text-slate-500">Turma ADS-3A</span>
+              <span className="text-xs text-slate-300 dark:text-slate-700">|</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                👨‍🏫 Prof. Responsável: <strong>Prof. Carlos Eduardo</strong>
+              </span>
+              <span className="text-xs text-slate-300 dark:text-slate-700">|</span>
+              <span className="text-xs text-brand-teal font-medium">
+                🤖 Mediação: <strong>Tutora Lucy</strong>
+              </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold font-heading text-slate-900 dark:text-white">
               Desafio Prático: Normalização 3FN em Equipe
@@ -203,7 +214,7 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
             </Card>
           </div>
 
-          {/* Right Column: Group Chat with Luci Mediation (5 cols) */}
+          {/* Right Column: Group Chat with Tutora Lucy Mediation (5 cols) */}
           <div className="lg:col-span-5 h-[580px] flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
               <div className="flex items-center gap-2">
@@ -213,7 +224,7 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
                 </h4>
               </div>
               <Badge variant="secondary" className="text-[10px]">
-                Marque @luci para ajuda
+                Marque @lucy ou @tutora para ajuda
               </Badge>
             </div>
 
@@ -242,7 +253,7 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
               {isAiResponding && (
                 <div className="text-xs text-brand-teal animate-pulse flex items-center gap-1.5 p-2">
                   <Bot className="h-3.5 w-3.5" />
-                  <span>Profª. Luci está formulando uma intervenção mediadora...</span>
+                  <span>Tutora Lucy está formulando uma intervenção mediadora sob coordenação docente...</span>
                 </div>
               )}
             </div>
@@ -258,7 +269,7 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
                 <Input
                   value={inputMsg}
                   onChange={(e) => setInputMsg(e.target.value)}
-                  placeholder="Escreva para a equipe ou chame @luci..."
+                  placeholder="Escreva para a equipe ou chame @lucy ou @tutora..."
                   className="rounded-xl text-xs"
                 />
                 <Button type="submit" size="sm" className="bg-brand-teal hover:bg-brand-teal-dark text-white rounded-xl cursor-pointer">

@@ -39,7 +39,7 @@ const INITIAL_MESSAGES: ChatMessage[] = [
   {
     id: 'msg-1',
     sender: 'teacher',
-    text: 'Olá! Sou a Profª. Luci, sua tutora virtual de Banco de Dados. Acompanharei sua aula síncrona. Durante o vídeo, faremos pausas socráticas para exercitar o raciocínio. Como posso ajudar no seu aprendizado agora?',
+    text: 'Olá! Sou a Tutora Lucy, assistente virtual de tutoria socrática em apoio ao Professor Responsável. Durante a aula, faremos pausas reflexivas para aprofundar seu raciocínio. Como posso apoiar seu aprendizado agora?',
     citation: '[Sistemas de Banco de Dados · Cap. 4, pág. 58]',
     timestamp: '14:32',
   },
@@ -134,7 +134,7 @@ export function SocraticChatPanel({
           <div className="relative">
             <Avatar className="h-10 w-10 ring-2 ring-brand-orange ring-offset-2">
               <AvatarFallback className="bg-brand-teal text-white font-bold">
-                PL
+                TL
               </AvatarFallback>
             </Avatar>
             <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white" />
@@ -142,14 +142,14 @@ export function SocraticChatPanel({
           <div>
             <div className="flex items-center gap-2">
               <h4 className="font-heading font-semibold text-sm text-slate-900 dark:text-white">
-                Profª. Luci Virtual
+                Tutora Lucy Virtual
               </h4>
               <Badge variant="secondary" className="text-[10px] py-0">
-                IA Socrática
+                Tutoria IA
               </Badge>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Inferência 100% On-Premises · vLLM SLM-8B
+              Apoio Pedagógico ao Docente · On-Premises
             </p>
           </div>
         </div>
@@ -226,7 +226,7 @@ export function SocraticChatPanel({
         {isTyping && (
           <div className="flex items-center gap-2 text-xs text-slate-400 p-2 animate-pulse">
             <Bot className="h-4 w-4 text-brand-teal" />
-            <span>Profª. Luci está consultando o material didático e formulando uma pergunta...</span>
+            <span>Tutora Lucy está consultando o material didático e formulando uma reflexão...</span>
           </div>
         )}
 

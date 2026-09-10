@@ -28,7 +28,9 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
     endTime: new Date(Date.now() + 70 * 60 * 1000).toISOString(),
     classId: 'class-ads-3a',
     className: '3º Semestre · Análise e Desenv. de Sistemas',
-    instructorName: 'Profª. Luci',
+    teacherResponsible: 'Prof. Carlos Eduardo',
+    tutorSupport: 'Tutora Lucy',
+    instructorName: 'Prof. Carlos Eduardo',
   };
 
   const timeValidation = validateAgendaTimeWindow(session);
@@ -57,6 +59,15 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
             <h1 className="text-xl sm:text-2xl font-bold font-heading text-slate-900 dark:text-white">
               {session.title}
             </h1>
+            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 pt-0.5 flex-wrap">
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                👨‍🏫 Professor Responsável: {session.teacherResponsible || session.instructorName}
+              </span>
+              <span>•</span>
+              <span className="text-brand-teal font-medium">
+                🤖 Apoio Pedagógico: {session.tutorSupport || 'Tutora Lucy (Apoio IA)'}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -75,7 +86,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
             <DynamicFaqAccordion />
           </div>
 
-          {/* Right Column: Socratic Chat Panel with Prof. Luci (5 cols) */}
+          {/* Right Column: Socratic Chat Panel with Tutora Lucy (5 cols) */}
           <div className="lg:col-span-5 h-[680px]">
             <SocraticChatPanel
               agendaType="CLASSROOM"

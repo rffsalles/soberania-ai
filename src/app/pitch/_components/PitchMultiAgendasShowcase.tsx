@@ -52,10 +52,10 @@ export function PitchMultiAgendasShowcase() {
           </Badge>
 
           <h2 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            As 5 Multi-Agendas Especializadas do Professor IA
+            As 5 Multi-Agendas de Apoio Docente com a Tutora Lucy
           </h2>
           <p className="mt-4 max-w-2xl text-slate-400 text-sm sm:text-base leading-relaxed">
-            Em vez de um chatbot genérico que dá respostas prontas, a IA assume papéis didáticos estruturados que guiam e desafiam o estudante.
+            O professor humano é a peça-chave: cada evento conta com sua coordenação e com o apoio socrático da Tutora Lucy para mediar, engajar e diagnosticar o aprendizado.
           </p>
         </div>
 
@@ -155,7 +155,7 @@ export function PitchMultiAgendasShowcase() {
                               IA
                             </div>
                             <span className="text-xs font-semibold text-brand-orange">
-                              Agente Tutor Soberania
+                              Tutora Lucy (Apoio Docente)
                             </span>
                           </div>
                           <p>{agenda.mockup.sampleResponse}</p>

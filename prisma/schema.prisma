@@ -42,17 +42,38 @@ model User {
   email        String   @unique
   role         Role     @default(STUDENT)
   enrollment   String?  @unique
+  passwordHash String   @default("")
   avatarUrl    String?
   classId      String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   class        Class?                @relation(fields: [classId], references: [id])
+  sessions     Session[]
   minutes      PedagogicalMinute[]
   interactions StudentInteraction[]
   submissions  ExamSubmission[]
 
+  @@index([classId])
   @@map("users")
+}
+
+model Session {
+  id           String    @id @default(cuid())
+  userId       String
+  sessionToken String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@map("sessions")
 }
 
 model Class {
@@ -88,6 +109,7 @@ model Agenda {
   interactions StudentInteraction[]
   submissions  ExamSubmission[]
 
+  @@index([classId])
   @@map("agendas")
 }
 
@@ -172,9 +194,10 @@ model ExamSubmission {
   studentId    String
   score        Float
   maxScore     Float    @default(10.0)
-  answers      Json     // Array of { questionId, chosenOption, timeSpentSeconds, hesitationSeconds }
+  answers      Json     // Array of [questionId, chosenOption, timeSpentSeconds, hesitationSeconds]
   integrityLog Json?    // Tab blur events, suspicious prompts
   submittedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   agenda       Agenda   @relation(fields: [agendaId], references: [id], onDelete: Cascade)
   student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)

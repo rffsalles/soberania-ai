@@ -155,7 +155,7 @@ export default function ApplianceTelemetryPage() {
             </CardHeader>
             <CardContent>
               <p className="text-xs text-slate-500">
-                Persona didática socrática da Profª. Luci carregada via dynamic adapter.
+                Persona didática socrática da Tutora Lucy carregada via dynamic adapter.
               </p>
             </CardContent>
           </Card>
