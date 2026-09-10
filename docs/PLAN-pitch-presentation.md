@@ -1,7 +1,7 @@
 # 📋 PLAN: Pitch de Apresentação Executiva & Interativa (`/pitch`)
 
 > **Documento:** Plano de Engenharia e Arquitetura de Front-End  
-> **Status:** 🟡 Proposto para Aprovação  
+> **Status:** 🟢 Concluído & Implementado  
 > **Responsável Principal:** `@[project-planner]` e `@[frontend-specialist]`  
 > **Referência Técnica:** [`docs/PRD.md`](file:///c:/projects/soberania-ai/docs/PRD.md) · [`docs/UX_UI_DESIGN_SYSTEM.md`](file:///c:/projects/soberania-ai/docs/UX_UI_DESIGN_SYSTEM.md) · [`docs/rules/CLEAN_CODE.md`](file:///c:/projects/soberania-ai/docs/rules/CLEAN_CODE.md)  
 > **Stitch Screen Blueprint:** `bea1d9e991ca4feea645e187af97a6d0` (Projeto `9396079196886748298`)
@@ -111,12 +111,12 @@ src/app/pitch/
 
 ## 5. 🚦 Plano de Execução & Tarefas
 
-| Tarefa | Descrição | Responsável |
-| :--- | :--- | :--- |
-| **Task 1** | Criar utilitário `src/lib/currency-math.ts` para cálculos de precisão monetária e ROI | `@[backend-specialist]` |
-| **Task 2** | Criar `pitch-constants.ts` com dados dos dilemas, 5 agendas, métricas e parâmetros de TCO | `@[frontend-specialist]` |
-| **Task 3** | Implementar `PitchHeader.tsx`, `PitchHero.tsx` e `PitchDilemmasSection.tsx` | `@[frontend-specialist]` |
-| **Task 4** | Implementar `PitchMultiAgendasShowcase.tsx` e `PitchRoiCalculator.tsx` | `@[frontend-specialist]` |
-| **Task 5** | Implementar `PitchHardwareTelemetry.tsx` e `PitchFooter.tsx` | `@[frontend-specialist]` |
-| **Task 6** | Montar `PitchPage.tsx` e o thin wrapper `src/app/pitch/page.tsx` | `@[frontend-specialist]` |
-| **Task 7** | Validar build (`npm run build`), testes e responsividade visual | `@[security-auditor]` / `@[frontend-specialist]` |
+| Tarefa | Descrição | Responsável | Status |
+| :--- | :--- | :--- | :--- |
+| **Task 1** | Criar utilitário `src/lib/currency-math.ts` para cálculos de precisão monetária e ROI | `@[backend-specialist]` | ✅ Concluído |
+| **Task 2** | Criar `pitch-constants.ts` com dados dos dilemas, 5 agendas, métricas e parâmetros de TCO | `@[frontend-specialist]` | ✅ Concluído |
+| **Task 3** | Implementar `PitchHeader.tsx`, `PitchHero.tsx` e `PitchDilemmasSection.tsx` | `@[frontend-specialist]` | ✅ Concluído |
+| **Task 4** | Implementar `PitchMultiAgendasShowcase.tsx` e `PitchRoiCalculator.tsx` | `@[frontend-specialist]` | ✅ Concluído |
+| **Task 5** | Implementar `PitchHardwareTelemetry.tsx` e `PitchFooter.tsx` | `@[frontend-specialist]` | ✅ Concluído |
+| **Task 6** | Montar `PitchPage.tsx` e o thin wrapper `src/app/pitch/page.tsx` | `@[frontend-specialist]` | ✅ Concluído |
+| **Task 7** | Validar build (`npm run build`), testes e responsividade visual | `@[security-auditor]` / `@[frontend-specialist]` | ✅ Concluído |
