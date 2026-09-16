@@ -13,6 +13,11 @@
 
 export type AIProviderType = 'groq' | 'together' | 'ollama' | 'vllm' | 'mock';
 
+// No ambiente de desenvolvimento/local, ignora erros de certificado autoassinado de proxies/antivírus de rede
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -47,16 +52,20 @@ export interface AICompletionOptions {
 }
 
 export class AIProviderGateway {
-  private provider: AIProviderType;
-  private baseUrl: string;
-  private apiKey: string;
-  private model: string;
+  private get provider(): AIProviderType {
+    return (process.env.AI_PROVIDER as AIProviderType) || 'mock';
+  }
 
-  constructor() {
-    this.provider = (process.env.AI_PROVIDER as AIProviderType) || 'mock';
-    this.baseUrl = process.env.AI_BASE_URL || this.getDefaultBaseUrl(this.provider);
-    this.apiKey = process.env.AI_API_KEY || '';
-    this.model = process.env.AI_MODEL || this.getDefaultModel(this.provider);
+  private get baseUrl(): string {
+    return process.env.AI_BASE_URL || this.getDefaultBaseUrl(this.provider);
+  }
+
+  private get apiKey(): string {
+    return process.env.AI_API_KEY || '';
+  }
+
+  private get model(): string {
+    return process.env.AI_MODEL || this.getDefaultModel(this.provider);
   }
 
   private getDefaultBaseUrl(provider: AIProviderType): string {
@@ -77,7 +86,7 @@ export class AIProviderGateway {
   private getDefaultModel(provider: AIProviderType): string {
     switch (provider) {
       case 'groq':
-        return 'llama-3.2-3b-preview';
+        return 'groq/compound-mini';
       case 'together':
         return 'meta-llama/Llama-3.2-3B-Instruct-Turbo';
       case 'ollama':
@@ -113,26 +122,37 @@ export class AIProviderGateway {
     let generatedText = '';
     let tokenCount = 0;
 
+    const currentProvider = this.provider;
+    const currentApiKey = this.apiKey;
+    const currentBaseUrl = this.baseUrl;
+    const currentModel = this.model;
+
     const isLiveProvider =
-      this.provider !== 'mock' &&
-      (Boolean(this.apiKey) || this.provider === 'ollama' || this.provider === 'vllm');
+      currentProvider !== 'mock' &&
+      (Boolean(currentApiKey) || currentProvider === 'ollama' || currentProvider === 'vllm');
 
     if (isLiveProvider) {
       try {
-        const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        console.log(`[AIProvider] Chamando ${currentProvider.toUpperCase()} (${currentModel}) em ${currentBaseUrl}...`);
+        const response = await fetch(`${currentBaseUrl}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+            ...(currentApiKey ? { Authorization: `Bearer ${currentApiKey}` } : {}),
           },
           body: JSON.stringify({
-            model: this.model,
+            model: currentModel,
             messages,
             temperature: options.temperature ?? 0.3,
             max_tokens: options.maxTokens ?? 512,
             stream: true,
           }),
         });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error(`[AIProvider Error ${response.status}] ${currentProvider}: ${errText}`);
+        }
 
         if (response.ok && response.body) {
           const reader = response.body.getReader();
@@ -178,6 +198,8 @@ export class AIProviderGateway {
           const totalLatencyMs = Date.now() - startTime;
           const tokensPerSec = Number(((tokenCount / (totalLatencyMs / 1000)) || 45).toFixed(1));
 
+          console.log(`[AIProvider Success] Sucesso Groq/Provider (${tokenCount} tokens gerados em ${totalLatencyMs}ms)`);
+
           yield {
             token: '',
             isComplete: true,
@@ -189,15 +211,15 @@ export class AIProviderGateway {
               promptTokens: messages.reduce((acc, m) => acc + m.content.split(' ').length, 0),
               completionTokens: tokenCount,
               totalTokens: tokenCount + 50,
-              provider: this.provider,
-              model: this.model,
-              externalTrafficBytes: this.provider === 'vllm' || this.provider === 'ollama' ? 0 : tokenCount * 4,
+              provider: currentProvider,
+              model: currentModel,
+              externalTrafficBytes: currentProvider === 'vllm' || currentProvider === 'ollama' ? 0 : tokenCount * 4,
             },
           };
           return;
         }
-      } catch {
-        // Falha no endpoint real -> fallback suave para modo simulado pedagógico
+      } catch (err) {
+        console.error(`[AIProvider Exception] Falha ao conectar ao provedor ${currentProvider}:`, err);
       }
     }
 

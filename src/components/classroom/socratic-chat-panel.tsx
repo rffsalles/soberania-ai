@@ -86,18 +86,28 @@ export function SocraticChatPanel({
     setIsTyping(true);
 
     try {
-      const response = await processAgentInteraction({
-        userMessage: messageContent,
-        agendaType,
-        sessionId,
+      const res = await fetch('/api/v1/agent/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: messageContent,
+          agendaType,
+          sessionId,
+        }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.reply) {
+        throw new Error(data.error || 'Falha na resposta do servidor.');
+      }
 
       const teacherMsg: ChatMessage = {
         id: `teacher-${Date.now()}`,
         sender: 'teacher',
-        text: response.content,
-        citation: response.citation,
-        isGuardrailViolation: response.isGuardrailViolation,
+        text: data.reply,
+        citation: data.citations?.[0],
+        isGuardrailViolation: data.blockedByExamGuardrail,
         timestamp: new Date().toLocaleTimeString('pt-BR', {
           hour: '2-digit',
           minute: '2-digit',
