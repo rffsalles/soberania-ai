@@ -53,6 +53,7 @@ model User {
   minutes      PedagogicalMinute[]
   interactions StudentInteraction[]
   submissions  ExamSubmission[]
+  teacherSubjects TeacherSubject[]
 
   @@index([classId])
   @@map("users")
@@ -87,6 +88,7 @@ model Class {
 
   students    User[]
   agendas     Agenda[]
+  subjects    Subject[]
 
   @@map("classes")
 }
@@ -108,12 +110,144 @@ model Agenda {
   minutes      PedagogicalMinute[]
   interactions StudentInteraction[]
   submissions  ExamSubmission[]
+  lessonPlan   LessonPlan?
 
   @@index([classId])
   @@map("agendas")
 }
 
+// ==========================================
+// Módulo de Gestão Acadêmica & Professores (Etapa 0)
+// ==========================================
+
+model Subject {
+  id            String             @id @default(cuid())
+  name          String             // ex: "Banco de Dados I" ou "Física III"
+  code          String             @unique // ex: "BD101"
+  description   String?            @db.Text
+  courseName    String             // ex: "ADS", "Engenharia de Software" ou "3º Ano EM"
+  academicLevel String             @default("HIGHER_EDUCATION") // "HIGHER_EDUCATION" | "HIGH_SCHOOL" | "ELEMENTARY"
+  academicYear  Int                @default(2026) // Ano letivo (ex: 2026)
+  semester      Int?               // Semestre (opcional para escolas anuais)
+  classId       String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  class              Class?           @relation(fields: [classId], references: [id])
+  teacherAssignments TeacherSubject[]
+  teachingPlans      TeachingPlan[]
+
+  @@index([classId])
+  @@map("subjects")
+}
+
+// Tabela Pivô para Vínculo N:N (Professor <-> Matérias)
+model TeacherSubject {
+  id        String   @id @default(cuid())
+  teacherId String
+  subjectId String
+  createdAt DateTime @default(now())
+
+  teacher User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, subjectId])
+  @@index([teacherId])
+  @@index([subjectId])
+  @@map("teacher_subjects")
+}
+
+// ==========================================
+// Esteira Pedagógica do Professor (Etapas 1 a 4)
+// ==========================================
+
+// 1. Plano de Ensino (Macro)
+model TeachingPlan {
+  id                  String           @id @default(cuid())
+  subjectId           String
+  teacherId           String
+  syllabus            String           @db.Text // Ementa oficial
+  generalObjectives   String           @db.Text // Objetivos gerais
+  specificObjectives  String           @db.Text // Objetivos específicos
+  unitsContent        Json             // Array de { unitNumber, title, topics: [] }
+  methodology         String           @db.Text // Metodologia de ensino
+  assessmentCriteria  String           @db.Text // Critérios de avaliação
+  basicBibliography   String[]         // Bibliografia básica
+  complementaryBiblio String[]         // Bibliografia complementar
+  status              String           @default("DRAFT") // DRAFT, APPROVED
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  subject     Subject          @relation(fields: [subjectId], references: [id])
+  schedules   CourseSchedule[]
+  assessments Assessment[]
+
+  @@index([subjectId])
+  @@map("teaching_plans")
+}
+
+// 2. Cronograma de Aulas (Calendário)
+model CourseSchedule {
+  id             String       @id @default(cuid())
+  teachingPlanId String
+  startDate      DateTime
+  endDate        DateTime
+  holidays       Json?        // Datas de recessos e feriados
+  totalClasses   Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  teachingPlan TeachingPlan @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  lessonPlans  LessonPlan[]
+
+  @@map("course_schedules")
+}
+
+// 3. Plano de Aula (Micro / Encontro Específico)
+model LessonPlan {
+  id               String         @id @default(cuid())
+  courseScheduleId String
+  agendaId         String?        @unique
+  classDate        DateTime
+  classNumber      Int
+  topicTitle       String
+  dailyObjective   String         @db.Text
+  timeScript       Json           // Roteiro minuto a minuto [{ timeRange, activity, description }]
+  methodology      String         @db.Text
+  resourcesNeeded  String[]
+  fixationExercise String         @db.Text
+  mediaType        String?        // "YOUTUBE" | "S3_UPLOAD" | "NONE"
+  mediaUrl         String?        // URL do YouTube ou URI do S3
+  s3ObjectKey      String?        // Chave do objeto no S3 da instituição
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  courseSchedule CourseSchedule @relation(fields: [courseScheduleId], references: [id], onDelete: Cascade)
+  agenda         Agenda?        @relation(fields: [agendaId], references: [id])
+
+  @@index([courseScheduleId])
+  @@map("lesson_plans")
+}
+
+// 4. Instrumentos de Avaliação
+model Assessment {
+  id             String       @id @default(cuid())
+  teachingPlanId String
+  title          String
+  type           String       // "EXAM" | "GROUP_WORK" | "CASE_STUDY"
+  questions      Json         // Questões, enunciados, gabaritos e critérios
+  rubrics        Json         // Rubricas formais de correção
+  maxScore       Float        @default(10.0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  teachingPlan TeachingPlan @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+
+  @@map("assessments")
+}
+
 model DidacticMaterial {
+
   id          String          @id @default(cuid())
   title       String
   author      String
