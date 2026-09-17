@@ -70,3 +70,52 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, name, code, description, courseName, academicLevel, academicYear, teacherIds } = body;
+
+    if (!id || !name || !code || !courseName) {
+      return NextResponse.json(
+        { success: false, error: 'ID, nome, código e curso são obrigatórios.' },
+        { status: 400 }
+      );
+    }
+
+    // Re-sincronizar alocações N:N de professores
+    await db.teacherSubject.deleteMany({
+      where: { subjectId: id },
+    });
+
+    const subject = await db.subject.update({
+      where: { id },
+      data: {
+        name,
+        code,
+        description,
+        courseName,
+        academicLevel: academicLevel || 'HIGHER_EDUCATION',
+        academicYear: Number(academicYear) || 2026,
+        teacherAssignments: {
+          create: Array.isArray(teacherIds)
+            ? teacherIds.map((tId: string) => ({ teacherId: tId }))
+            : [],
+        },
+      },
+      include: {
+        teacherAssignments: {
+          include: { teacher: true },
+        },
+      },
+    });
+
+    return NextResponse.json({ success: true, subject });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Falha ao atualizar disciplina.';
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
+  }
+}

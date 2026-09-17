@@ -7,9 +7,9 @@ import {
   Users,
   Search,
   CheckCircle2,
-  Clock,
   Layers,
   Upload,
+  UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,42 +23,22 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-
-interface Teacher {
-  id: string;
-  name: string;
-  email: string;
-  enrollment: string;
-}
-
-interface Subject {
-  id: string;
-  name: string;
-  code: string;
-  courseName: string;
-  academicLevel: string;
-  academicYear: number;
-  teacherAssignments: { teacher: Teacher }[];
-}
+  TeacherCreateModal,
+  type Teacher,
+} from './_components/TeacherCreateModal';
+import {
+  SubjectFormModal,
+  type SubjectItem,
+} from './_components/SubjectFormModal';
 
 export default function AdminSubjectsPage() {
-  const [subjects, setSubjects] = React.useState<Subject[]>([]);
+  const [subjects, setSubjects] = React.useState<SubjectItem[]>([]);
   const [teachers, setTeachers] = React.useState<Teacher[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-
-  // Form State
-  const [name, setName] = React.useState('');
-  const [code, setCode] = React.useState('');
-  const [courseName, setCourseName] = React.useState('');
+  const [isTeacherModalOpen, setIsTeacherModalOpen] = React.useState(false);
+  const [editingSubject, setEditingSubject] = React.useState<SubjectItem | null>(null);
   const [selectedTeachers, setSelectedTeachers] = React.useState<string[]>([]);
 
   const fetchSubjectData = React.useCallback(async () => {
@@ -104,33 +84,21 @@ export default function AdminSubjectsPage() {
     fetchSubjectData();
   }, [fetchSubjectData]);
 
-  const handleCreateSubject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch('/api/v1/admin/subjects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          code,
-          courseName,
-          academicLevel: 'HIGHER_EDUCATION',
-          academicYear: 2026,
-          teacherIds: selectedTeachers,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setIsModalOpen(false);
-        setName('');
-        setCode('');
-        setCourseName('');
-        setSelectedTeachers([]);
-        fetchSubjectData();
-      }
-    } catch {
-      alert('Erro ao salvar disciplina.');
-    }
+  const handleOpenCreateModal = () => {
+    setEditingSubject(null);
+    setSelectedTeachers([]);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (sub: SubjectItem) => {
+    setEditingSubject(sub);
+    setSelectedTeachers(sub.teacherAssignments.map((ta) => ta.teacher.id));
+    setIsModalOpen(true);
+  };
+
+  const handleTeacherCreated = (newTeacher: Teacher) => {
+    fetchSubjectData();
+    setSelectedTeachers((prev) => [...prev, newTeacher.id]);
   };
 
   const filteredSubjects = subjects.filter(
@@ -161,82 +129,26 @@ export default function AdminSubjectsPage() {
           </p>
         </div>
 
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-brand-teal hover:bg-brand-teal-dark text-white gap-2 cursor-pointer rounded-xl">
-              <Plus className="h-4 w-4" />
-              <span>+ Vincular Professor a Disciplina</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md rounded-2xl">
-            <DialogHeader>
-              <DialogTitle className="font-heading">Nova Disciplina & Vínculos</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateSubject} className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label>Nome da Disciplina</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="ex: Banco de Dados I"
-                  required
-                  className="rounded-xl"
-                />
-              </div>
+        <div className="flex items-center gap-2">
+          {/* Modal 1: Cadastrar Novo Professor */}
+          <Button
+            variant="outline"
+            onClick={() => setIsTeacherModalOpen(true)}
+            className="gap-2 cursor-pointer rounded-xl border-slate-300"
+          >
+            <UserPlus className="h-4 w-4 text-brand-teal" />
+            <span>+ Cadastrar Novo Professor</span>
+          </Button>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Código</Label>
-                  <Input
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder="ex: BD101"
-                    required
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Curso / Ano</Label>
-                  <Input
-                    value={courseName}
-                    onChange={(e) => setCourseName(e.target.value)}
-                    placeholder="ex: ADS / 3º EM"
-                    required
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Professores Alocados (N:N)</Label>
-                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
-                  {teachers.map((t) => (
-                    <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer p-1 rounded hover:bg-slate-50">
-                      <input
-                        type="checkbox"
-                        checked={selectedTeachers.includes(t.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedTeachers((prev) => [...prev, t.id]);
-                          else setSelectedTeachers((prev) => prev.filter((id) => id !== t.id));
-                        }}
-                      />
-                      <span>{t.name} ({t.enrollment})</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" className="bg-brand-teal text-white">
-                  Salvar Vínculo
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+          {/* Modal 2: Nova / Editar Disciplina & Vínculos */}
+          <Button
+            onClick={handleOpenCreateModal}
+            className="bg-brand-teal hover:bg-brand-teal-dark text-white gap-2 cursor-pointer rounded-xl"
+          >
+            <Plus className="h-4 w-4" />
+            <span>+ Vincular Professor a Disciplina</span>
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -346,7 +258,12 @@ export default function AdminSubjectsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" className="text-xs text-brand-teal cursor-pointer">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenEditModal(sub)}
+                      className="text-xs text-brand-teal hover:text-brand-teal/80 cursor-pointer"
+                    >
                       Editar Vínculo
                     </Button>
                   </TableCell>
@@ -356,6 +273,27 @@ export default function AdminSubjectsPage() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Overlays / Modals */}
+      <TeacherCreateModal
+        open={isTeacherModalOpen}
+        onOpenChange={setIsTeacherModalOpen}
+        onSuccess={handleTeacherCreated}
+      />
+
+      <SubjectFormModal
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          setIsModalOpen(open);
+          if (!open) setEditingSubject(null);
+        }}
+        editingSubject={editingSubject}
+        teachers={teachers}
+        selectedTeachers={selectedTeachers}
+        setSelectedTeachers={setSelectedTeachers}
+        onSuccess={fetchSubjectData}
+        onRequestCreateTeacher={() => setIsTeacherModalOpen(true)}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 .pnp
 .pnp.js
@@ -45,3 +45,8 @@ lerna-debug.log*
 .agent/preview.log
 .agent/scratch_test.js
 .agent/reviews/
+
+# Local Uploads / Storage
+storage/*
+!storage/.gitkeep
+

@@ -10,6 +10,7 @@ export async function GET(req: Request) {
       where: subjectId ? { subjectId } : undefined,
       include: {
         subject: true,
+        academicPeriod: true,
         schedules: {
           include: {
             lessonPlans: true,
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
     const {
       subjectId,
       teacherId,
+      academicPeriodId,
       syllabus,
       generalObjectives,
       specificObjectives,
@@ -44,6 +46,10 @@ export async function POST(req: Request) {
       basicBibliography,
       complementaryBiblio,
       status,
+      totalHours,
+      theoryHours,
+      practiceHours,
+      ndeComplianceStatus,
     } = body;
 
     if (!subjectId || !syllabus) {
@@ -57,6 +63,7 @@ export async function POST(req: Request) {
       data: {
         subjectId,
         teacherId: teacherId || 'PROF001',
+        academicPeriodId: academicPeriodId || null,
         syllabus,
         generalObjectives: generalObjectives || '',
         specificObjectives: specificObjectives || '',
@@ -66,9 +73,14 @@ export async function POST(req: Request) {
         basicBibliography: basicBibliography || [],
         complementaryBiblio: complementaryBiblio || [],
         status: status || 'DRAFT',
+        totalHours: totalHours ? Number(totalHours) : 80,
+        theoryHours: theoryHours ? Number(theoryHours) : 60,
+        practiceHours: practiceHours ? Number(practiceHours) : 20,
+        ndeComplianceStatus: ndeComplianceStatus || '100% OK - Alinhado DCNs',
       },
       include: {
         subject: true,
+        academicPeriod: true,
       },
     });
 

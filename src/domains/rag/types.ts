@@ -7,6 +7,7 @@ export interface DidacticChunk {
   section?: string;
   pageNumber: number;
   content: string;
+  category?: string;
   similarityScore?: number;
   bm25Score?: number;
   rrfScore?: number;
@@ -15,6 +16,10 @@ export interface DidacticChunk {
 export interface RAGSearchQuery {
   query: string;
   subject?: string;
+  subjectName?: string;
+  categories?: string[];
+  allowedMaterialIds?: string[];
+  minRelevanceScore?: number;
   topK?: number;
 }
 
@@ -33,11 +38,17 @@ export interface RawDocumentPage {
 }
 
 export interface MaterialIngestionInput {
+  id?: string;
   title: string;
   author: string;
   edition?: string;
   subject: string;
   materialType?: 'BOOK' | 'SCIENTIFIC_PAPER' | 'INSTITUTIONAL_GUIDE';
+  filePath?: string;
+  originalFilename?: string;
+  fileSize?: number;
+  mimeType?: string;
+  isOcrApplied?: boolean;
   pages: RawDocumentPage[];
 }
 
@@ -48,4 +59,16 @@ export interface IngestionResult {
   totalPages: number;
   status: 'SUCCESS' | 'PARTIAL' | 'ERROR';
   indexedAt: string;
+  isOcrApplied?: boolean;
+  createdChunks?: DidacticChunk[];
 }
+
+
+export interface ParsedDocumentResult {
+  title?: string;
+  totalPages: number;
+  pages: RawDocumentPage[];
+  isOcrApplied: boolean;
+  detectedMimeType: string;
+}
+

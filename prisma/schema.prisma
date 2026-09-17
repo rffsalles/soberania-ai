@@ -161,11 +161,31 @@ model TeacherSubject {
 // Esteira Pedagógica do Professor (Etapas 1 a 4)
 // ==========================================
 
+// Modelo de Período Letivo Normalizado (Base)
+model AcademicPeriod {
+  id          String    @id @default(cuid())
+  name        String    // ex: "1º Semestre / 2026 (2026.1)"
+  code        String    @unique // ex: "2026.1"
+  year        Int       @default(2026)
+  semester    Int?      // 1, 2, ou null para anual
+  type        String    @default("SEMESTER") // "SEMESTER" | "ANNUAL" | "TERM" | "INTENSIVE"
+  startDate   DateTime?
+  endDate     DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  teachingPlans TeachingPlan[]
+
+  @@map("academic_periods")
+}
+
 // 1. Plano de Ensino (Macro)
 model TeachingPlan {
   id                  String           @id @default(cuid())
   subjectId           String
   teacherId           String
+  academicPeriodId    String?
   syllabus            String           @db.Text // Ementa oficial
   generalObjectives   String           @db.Text // Objetivos gerais
   specificObjectives  String           @db.Text // Objetivos específicos
@@ -175,14 +195,20 @@ model TeachingPlan {
   basicBibliography   String[]         // Bibliografia básica
   complementaryBiblio String[]         // Bibliografia complementar
   status              String           @default("DRAFT") // DRAFT, APPROVED
+  totalHours          Int              @default(80)
+  theoryHours         Int              @default(60)
+  practiceHours       Int              @default(20)
+  ndeComplianceStatus String           @default("100% OK - Alinhado DCNs")
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  subject     Subject          @relation(fields: [subjectId], references: [id])
-  schedules   CourseSchedule[]
-  assessments Assessment[]
+  subject        Subject         @relation(fields: [subjectId], references: [id])
+  academicPeriod AcademicPeriod? @relation(fields: [academicPeriodId], references: [id])
+  schedules      CourseSchedule[]
+  assessments    Assessment[]
 
   @@index([subjectId])
+  @@index([academicPeriodId])
   @@map("teaching_plans")
 }
 
@@ -246,20 +272,36 @@ model Assessment {
   @@map("assessments")
 }
 
+// Tabela Base para Categorias do Acervo Bibliográfico & Documentos
+model DocumentCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?  @db.Text
+  color       String?  @default("teal")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_categories")
+}
+
 model DidacticMaterial {
+  id               String          @id @default(cuid())
+  title            String
+  author           String
+  edition          String?
+  subject          String
+  totalPages       Int
+  filePath         String
+  originalFilename String?
+  fileSize         Int?
+  mimeType         String?
+  isOcrApplied     Boolean         @default(false)
+  status           String          @default("INDEXED") // UPLOADING, PARSING, OCR_PROCESSING, INDEXED, ERROR
+  errorMessage     String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  id          String          @id @default(cuid())
-  title       String
-  author      String
-  edition     String?
-  subject     String
-  totalPages  Int
-  filePath    String
-  status      String          @default("INDEXED") // INDEXING, INDEXED, ERROR
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-
-  chunks      MaterialChunk[]
+  chunks           MaterialChunk[]
 
   @@map("didactic_materials")
 }

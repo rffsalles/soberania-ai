@@ -25,4 +25,30 @@ describe('RAG Domain - Hybrid Search (RRF pgvector + BM25)', () => {
     expect(result.primaryCitation).toContain('Banco de Dados');
     expect(result.primaryCitation).toContain('pág.');
   });
+
+  it('deve descartar chunks da categoria Banco de Dados ao buscar por disciplina Matemática', async () => {
+    const result = await executeHybridSearch({
+      query: 'Matemática fundamentos conceitos',
+      subjectName: 'Matemática',
+      topK: 5,
+    });
+
+    const hasDatabaseChunk = result.chunks.some((c) =>
+      c.category?.toLowerCase().includes('banco')
+    );
+    expect(hasDatabaseChunk).toBe(false);
+  });
+
+  it('deve filtrar estritamente por allowedMaterialIds quando fornecido', async () => {
+    const result = await executeHybridSearch({
+      query: 'aprendizagem ativa',
+      allowedMaterialIds: ['mat-paper-edu-1'],
+      topK: 5,
+    });
+
+    expect(result.chunks.length).toBeGreaterThan(0);
+    result.chunks.forEach((c) => {
+      expect(c.materialId).toBe('mat-paper-edu-1');
+    });
+  });
 });

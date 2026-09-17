@@ -324,6 +324,7 @@ export function UniversalSocraticChat({
                   {msg.attachment && (
                     <div className="mb-3 p-2 rounded-lg bg-black/10 dark:bg-white/10 space-y-2">
                       {msg.attachment.type === 'image' && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={msg.attachment.url}
                           alt="Anexo de imagem"

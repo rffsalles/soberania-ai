@@ -48,4 +48,27 @@ describe('RAG Domain - Ingestion Service', () => {
     expect(searchResult.chunks[0].content).toContain(uniqueKeyword);
     expect(searchResult.primaryCitation).toContain('pág. 42');
   });
+
+  it('deve associar categoria corretamente ao chunk ingerido', async () => {
+    const categoryName = 'Diretrizes Curriculares Nacionais (DCN / MEC)';
+    documentIngestionService.ingestMaterial({
+      title: 'Guia de Diretrizes Pedagógicas',
+      author: 'Comissão Especial MEC',
+      subject: categoryName,
+      pages: [
+        {
+          pageNumber: 5,
+          text: 'As diretrizes curriculares orientam a articulação entre teoria e prática profissional no ensino superior.',
+        },
+      ],
+    });
+
+    const searchResult = await executeHybridSearch({
+      query: 'articulação entre teoria e prática',
+      topK: 1,
+    });
+
+    expect(searchResult.chunks[0].category).toBe(categoryName);
+  });
 });
+

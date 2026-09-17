@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist', 'tesseract.js', 'mammoth', '@napi-rs/canvas'],
   async headers() {
     return [
       {

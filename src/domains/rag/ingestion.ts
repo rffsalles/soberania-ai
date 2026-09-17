@@ -24,7 +24,7 @@ export class DocumentIngestionService {
     options: ChunkingOptions = {}
   ): IngestionResult {
     const config = { ...DEFAULT_OPTIONS, ...options };
-    const materialId = `mat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const materialId = input.id || `mat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const createdChunks: DidacticChunk[] = [];
 
     for (const page of input.pages) {
@@ -41,6 +41,7 @@ export class DocumentIngestionService {
           section: page.section || `Página ${page.pageNumber}`,
           pageNumber: page.pageNumber,
           content: chunkText,
+          category: input.subject || 'Geral',
         });
       });
     }
@@ -55,6 +56,8 @@ export class DocumentIngestionService {
       totalPages: input.pages.length,
       status: 'SUCCESS',
       indexedAt: new Date().toISOString(),
+      isOcrApplied: input.isOcrApplied,
+      createdChunks,
     };
   }
 
