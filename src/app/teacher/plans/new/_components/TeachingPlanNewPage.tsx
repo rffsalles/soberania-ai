@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PlanHeaderControls } from './PlanHeaderControls';
 import { PlanBibliographyCard } from './PlanBibliographyCard';
 import { PlanEditorForm } from './PlanEditorForm';
@@ -18,6 +18,8 @@ import type {
 
 export default function TeachingPlanNewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editingPlanId = searchParams.get('id');
 
   // Dynamic Subjects & Academic Periods from DB
   const [subjects, setSubjects] = React.useState<SubjectOption[]>([]);
@@ -26,11 +28,11 @@ export default function TeachingPlanNewPage() {
   const [periods, setPeriods] = React.useState<AcademicPeriodOption[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = React.useState<string>('');
 
-  // References: Starts completely clean (unselected)
+  // References: Starts clean or loaded from DB
   const [references, setReferences] = React.useState<DocumentReference[]>([]);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
 
-  // Form Fields: Starts empty prior to AI socratic assistance or manual entry
+  // Form Fields
   const [syllabus, setSyllabus] = React.useState('');
   const [generalObjectives, setGeneralObjectives] = React.useState('');
   const [bloomBadges, setBloomBadges] = React.useState<string[]>([]);
@@ -58,7 +60,9 @@ export default function TeachingPlanNewPage() {
       .then((data) => {
         if (data.success && Array.isArray(data.subjects) && data.subjects.length > 0) {
           setSubjects(data.subjects);
-          setSelectedSubjectId(data.subjects[0].id);
+          if (!editingPlanId) {
+            setSelectedSubjectId(data.subjects[0].id);
+          }
         }
       })
       .catch((err) => {
@@ -71,13 +75,53 @@ export default function TeachingPlanNewPage() {
       .then((data) => {
         if (data.success && Array.isArray(data.periods) && data.periods.length > 0) {
           setPeriods(data.periods);
-          setSelectedPeriodId(data.periods[0].id);
+          if (!editingPlanId) {
+            setSelectedPeriodId(data.periods[0].id);
+          }
         }
       })
       .catch((err) => {
         console.warn('Erro ao carregar períodos letivos:', err);
       });
-  }, []);
+  }, [editingPlanId]);
+
+  // Fetch existing plan details if editingPlanId is present
+  React.useEffect(() => {
+    if (!editingPlanId) return;
+
+    fetch(`/api/v1/teacher/plans/${editingPlanId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.plan) {
+          const plan = data.plan;
+          if (plan.subjectId) setSelectedSubjectId(plan.subjectId);
+          if (plan.academicPeriodId) setSelectedPeriodId(plan.academicPeriodId);
+          if (plan.syllabus) setSyllabus(plan.syllabus);
+          if (plan.generalObjectives) setGeneralObjectives(plan.generalObjectives);
+          if (plan.methodology) setMethodology(plan.methodology);
+          if (Array.isArray(plan.basicBibliography) && plan.basicBibliography.length > 0) {
+            const loadedRefs: DocumentReference[] = plan.basicBibliography.map(
+              (item: string, index: number) => ({
+                id: `ref-loaded-${index}`,
+                title: item.replace(/\s*\(.*?\).*/, '').trim() || item,
+                author: item.match(/\((.*?)\)/)?.[1] || 'Autor no acervo',
+                category: item.match(/\[(.*?)\]/)?.[1] || 'Geral',
+              })
+            );
+            setReferences(loadedRefs);
+          }
+          setNdeCompliance({
+            totalHours: plan.totalHours || 80,
+            theoryHours: plan.theoryHours || 60,
+            practiceHours: plan.practiceHours || 20,
+            ndeComplianceStatus: plan.ndeComplianceStatus || '100% OK - Alinhado DCNs',
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('Erro ao carregar dados do plano de ensino:', err);
+      });
+  }, [editingPlanId]);
 
   // Active Subject details
   const activeSubject = React.useMemo(() => {
@@ -180,7 +224,7 @@ export default function TeachingPlanNewPage() {
     }
   };
 
-  // Handler: Save Plan
+  // Handler: Save / Update Plan
   const handleSavePlan = async (status: 'DRAFT' | 'APPROVED') => {
     if (!selectedSubjectId) {
       alert('Por favor, selecione uma disciplina.');
@@ -189,8 +233,13 @@ export default function TeachingPlanNewPage() {
 
     try {
       setIsSaving(true);
-      const res = await fetch('/api/v1/teacher/plans', {
-        method: 'POST',
+      const url = editingPlanId
+        ? `/api/v1/teacher/plans/${editingPlanId}`
+        : '/api/v1/teacher/plans';
+      const method = editingPlanId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subjectId: selectedSubjectId,

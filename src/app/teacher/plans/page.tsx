@@ -11,7 +11,6 @@ import {
   Sparkles,
   FileText,
   ArrowRight,
-  Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +29,9 @@ interface TeachingPlan {
   subjectId: string;
   syllabus: string;
   status: 'DRAFT' | 'IN_REVIEW' | 'APPROVED';
+  totalHours?: number;
+  theoryHours?: number;
+  practiceHours?: number;
   createdAt: string;
   updatedAt: string;
   subject?: {
@@ -51,63 +53,13 @@ export default function TeacherPlansListPage() {
       setLoading(true);
       const res = await fetch('/api/v1/teacher/plans');
       const data = await res.json();
-      if (data.success && Array.isArray(data.plans) && data.plans.length > 0) {
+      if (data.success && Array.isArray(data.plans)) {
         setPlans(data.plans);
       } else {
-        // Fallback mock de planos padrão
-        setPlans([
-          {
-            id: 'plan-1',
-            subjectId: 'sub-1',
-            syllabus:
-              'Visão geral da arquitetura de SGBDs relacionais. Modelagem conceitual com Diagramas Entidade-Relacionamento (DER). Mapeamento lógico...',
-            status: 'DRAFT',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            subject: {
-              id: 'sub-1',
-              name: 'Banco de Dados I',
-              code: 'BD101',
-              courseName: 'Análise e Desenv. de Sistemas',
-              academicYear: 2026,
-            },
-          },
-          {
-            id: 'plan-2',
-            subjectId: 'sub-2',
-            syllabus:
-              'Engenharia de requisitos, metodologias ágeis (Scrum/Kanban), testes de software e integração contínua.',
-            status: 'APPROVED',
-            createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-            updatedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-            subject: {
-              id: 'sub-2',
-              name: 'Engenharia de Software II',
-              code: 'ES202',
-              courseName: 'Ciência da Computação',
-              academicYear: 2026,
-            },
-          },
-        ]);
+        setPlans([]);
       }
     } catch {
-      setPlans([
-        {
-          id: 'plan-1',
-          subjectId: 'sub-1',
-          syllabus: 'Visão geral de SGBD relacional e vetorial...',
-          status: 'DRAFT',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          subject: {
-            id: 'sub-1',
-            name: 'Banco de Dados I',
-            code: 'BD101',
-            courseName: 'Análise e Desenv. de Sistemas',
-            academicYear: 2026,
-          },
-        },
-      ]);
+      setPlans([]);
     } finally {
       setLoading(false);
     }
@@ -124,6 +76,10 @@ export default function TeacherPlansListPage() {
     const course = p.subject?.courseName?.toLowerCase() || '';
     return name.includes(term) || code.includes(term) || course.includes(term);
   });
+
+  const totalMappedHours = React.useMemo(() => {
+    return plans.reduce((acc, p) => acc + (p.totalHours || 80), 0);
+  }, [plans]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -209,8 +165,10 @@ export default function TeacherPlansListPage() {
             <span className="text-xs text-slate-500 font-medium">Carga Horária Mapeada</span>
             <BookOpen className="h-4 w-4 text-brand-orange" />
           </div>
-          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">160h</p>
-          <span className="text-[11px] text-slate-500 font-medium">80h por disciplina ativa</span>
+          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
+            {totalMappedHours}h
+          </p>
+          <span className="text-[11px] text-slate-500 font-medium">Soma total de disciplinas ativas</span>
         </div>
 
         <div className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
@@ -218,7 +176,9 @@ export default function TeacherPlansListPage() {
             <span className="text-xs text-slate-500 font-medium">Aderência RAG / DCN</span>
             <Sparkles className="h-4 w-4 text-brand-orange" />
           </div>
-          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">98.4%</p>
+          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
+            {plans.length > 0 ? '100%' : '0%'}
+          </p>
           <span className="text-[11px] text-emerald-600 font-medium">Conformidade IA Validada</span>
         </div>
       </div>
@@ -268,23 +228,25 @@ export default function TeacherPlansListPage() {
                   <TableCell className="font-medium">
                     <div className="flex flex-col">
                       <span className="text-slate-900 dark:text-white font-semibold">
-                        {plan.subject?.name || 'Disciplina'}
+                        {plan.subject?.name || 'Disciplina não informada'}
                       </span>
                       <span className="text-xs text-brand-teal font-mono">
-                        {plan.subject?.code || 'COD123'}
+                        {plan.subject?.code || 'COD-SLM'}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell className="text-sm">
-                    {plan.subject?.courseName || 'Análise e Desenv. de Sistemas'}
+                    {plan.subject?.courseName || 'Curso não informado'}
                   </TableCell>
                   <TableCell>{getStatusBadge(plan.status)}</TableCell>
-                  <TableCell className="text-sm text-slate-600 font-medium">80h</TableCell>
+                  <TableCell className="text-sm text-slate-600 font-medium">
+                    {plan.totalHours ? `${plan.totalHours}h` : '80h'}
+                  </TableCell>
                   <TableCell className="text-xs text-slate-500">
                     {new Date(plan.updatedAt).toLocaleDateString('pt-BR')}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link href="/teacher/plans/new">
+                    <Link href={`/teacher/plans/new?id=${plan.id}`}>
                       <Button
                         variant="outline"
                         size="sm"
@@ -304,3 +266,4 @@ export default function TeacherPlansListPage() {
     </div>
   );
 }
+
