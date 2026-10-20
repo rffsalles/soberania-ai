@@ -1,4 +1,5 @@
-import { OPTION_KEYS, type Question, type Rubric } from '@/domains/assessments/question-schema';
+import { OPTION_KEYS } from '@/lib/constants/assessments';
+import type { Question, Rubric } from '@/domains/assessments/question-schema';
 
 import { MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from '@/lib/validators/assessment.validator';
 

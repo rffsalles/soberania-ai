@@ -19,7 +19,8 @@ import type {
   PublishAssessmentInput,
   UpdateAssessmentInput,
 } from '@/lib/validators/assessment.validator';
-import { OPTION_KEYS, questionSchema, type Question, type Rubric } from '../question-schema';
+import { OPTION_KEYS } from '@/lib/constants/assessments';
+import { questionSchema, type Question, type Rubric } from '../question-schema';
 
 export type AssessmentActor = AgendaActor;
 

@@ -3,7 +3,8 @@ import { Role } from '@prisma/client';
 import type { StreamChunk } from '@/lib/ai-provider';
 import type { DidacticChunk } from '@/domains/rag/types';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
-import { OPTION_KEYS, questionSchema, type Question } from '../../question-schema';
+import { OPTION_KEYS } from '@/lib/constants/assessments';
+import { questionSchema, type Question } from '../../question-schema';
 import {
   generateQuestions,
   publishAssessment,

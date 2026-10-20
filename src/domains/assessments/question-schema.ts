@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const OPTION_KEYS = ['A', 'B', 'C', 'D'] as const;
+import { OPTION_KEYS } from '@/lib/constants/assessments';
 
 export const questionSchema = z.object({
   id: z.string(),

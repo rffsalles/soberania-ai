@@ -8,8 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { OPTION_KEYS, type Question, type Rubric } from '@/domains/assessments/question-schema';
-import { ASSESSMENT_TYPE } from '@/lib/constants/teaching';
+import { OPTION_KEYS } from '@/lib/constants/assessments';
+import type { Question, Rubric } from '@/domains/assessments/question-schema';
+import { ASSESSMENT_TYPE, type AssessmentType } from '@/lib/constants/teaching';
+import { MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from '@/lib/validators/assessment.validator';
 import { validateAssessmentDraft } from '@/components/assessments/assessment-draft';
 import {
   generateAssessment,
@@ -19,7 +21,7 @@ import {
   type PlanOption,
 } from '@/components/assessments/use-assessments';
 
-const ASSESSMENT_TYPE_LABEL: Record<string, string> = { [ASSESSMENT_TYPE.EXAM]: 'Prova' };
+const ASSESSMENT_TYPE_LABEL = { [ASSESSMENT_TYPE.EXAM]: 'Prova' } satisfies Record<AssessmentType, string>;
 const DEFAULT_DURATION_MINUTES = 60;
 const DEFAULT_MAX_SCORE = 10;
 const DEFAULT_QUESTION_COUNT = 5;
@@ -132,7 +134,8 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
             <Input
               id="as-duration"
               type="number"
-              min={1}
+              min={MIN_DURATION_MINUTES}
+              max={MAX_DURATION_MINUTES}
               value={draft.durationMinutes}
               onChange={(e) => setDraft({ ...draft, durationMinutes: Number(e.target.value) })}
             />

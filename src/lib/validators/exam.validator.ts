@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { OPTION_KEYS } from '@/domains/assessments/question-schema';
+import { OPTION_KEYS } from '@/lib/constants/assessments';
 
 export const submitExamSchema = z.object({
   answers: z.array(

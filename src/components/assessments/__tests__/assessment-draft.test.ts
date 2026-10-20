@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { OPTION_KEYS, type Question } from '@/domains/assessments/question-schema';
+import { OPTION_KEYS } from '@/lib/constants/assessments';
+import type { Question } from '@/domains/assessments/question-schema';
 import { validateAssessmentDraft } from '../assessment-draft';
 
 const question = (patch: Partial<Question> = {}): Question => ({
