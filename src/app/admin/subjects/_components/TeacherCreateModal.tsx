@@ -28,10 +28,16 @@ export function TeacherCreateModal({
   const [teacherEmail, setTeacherEmail] = React.useState('');
   const [teacherEnrollment, setTeacherEnrollment] = React.useState('');
   const [teacherPassword, setTeacherPassword] = React.useState('');
+  const [passwordError, setPasswordError] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (teacherPassword.length < 8) {
+      setPasswordError('A senha deve ter no mínimo 8 caracteres.');
+      return;
+    }
+    setPasswordError('');
     try {
       setLoading(true);
       const res = await fetch('/api/v1/admin/teachers', {
@@ -41,7 +47,7 @@ export function TeacherCreateModal({
           name: teacherName,
           email: teacherEmail,
           enrollment: teacherEnrollment,
-          passwordPlain: teacherPassword || 'prof123',
+          password: teacherPassword,
         }),
       });
       const data = await res.json();
@@ -111,9 +117,16 @@ export function TeacherCreateModal({
               type="password"
               value={teacherPassword}
               onChange={(e) => setTeacherPassword(e.target.value)}
-              placeholder="prof123"
+              placeholder="Mínimo 8 caracteres"
+              required
+              minLength={8}
               className="rounded-xl"
             />
+            {passwordError && (
+              <p role="alert" className="text-xs text-red-600">
+                {passwordError}
+              </p>
+            )}
           </div>
         </div>
 
