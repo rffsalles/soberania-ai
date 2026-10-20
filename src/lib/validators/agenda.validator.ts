@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AgendaStatus, AgendaType } from '@prisma/client';
 
-const isoDate = z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), 'Data inválida');
+const isoDate = z.string().datetime({ offset: true });
 
 export const createAgendaSchema = z
   .object({
@@ -20,6 +20,8 @@ export const createAgendaSchema = z
     path: ['endTime'],
   });
 
-export const setAgendaStatusSchema = z.object({ status: z.nativeEnum(AgendaStatus) });
+export const setAgendaStatusSchema = z.object({
+  status: z.enum([AgendaStatus.CANCELLED, AgendaStatus.COMPLETED]),
+});
 
 export type CreateAgendaInput = z.infer<typeof createAgendaSchema>;

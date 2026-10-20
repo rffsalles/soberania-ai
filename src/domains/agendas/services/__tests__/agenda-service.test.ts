@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgendaStatus, AgendaType, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
-import { createAgendaSchema } from '@/lib/validators/agenda.validator';
+import { createAgendaSchema, setAgendaStatusSchema } from '@/lib/validators/agenda.validator';
 import { deriveAgendaStatus } from '../../agenda-validator';
 import {
   createAgenda,
@@ -11,7 +11,7 @@ import {
   type AgendaActor,
   type AgendaDeps,
 } from '../agenda-service';
-import type { AgendaRecord, AgendaScope } from '../agenda-repository';
+import type { AgendaRecord } from '../agenda-repository';
 
 const NOW = new Date('2026-10-20T12:00:00Z');
 const hour = 3600_000;
@@ -43,14 +43,9 @@ function makeDeps(agendas: AgendaRecord[], allocations: Record<string, string[]>
   const deps: AgendaDeps = {
     now: () => NOW,
     repo: {
-      async findAgendas(scope: AgendaScope) {
-        return store
-          .filter((a) => {
-            if (scope.kind === 'all') return true;
-            if (scope.kind === 'class') return a.classId === scope.classId;
-            return a.teacherId === scope.teacherId || (!!a.subjectId && scope.subjectIds.includes(a.subjectId));
-          })
-          .sort((x, y) => x.startTime.getTime() - y.startTime.getTime());
+      // Deliberately unfiltered: the service must apply inScope itself.
+      async findAgendas() {
+        return [...store].sort((x, y) => x.startTime.getTime() - y.startTime.getTime());
       },
       async findAgendaById(id) {
         return store.find((a) => a.id === id) ?? null;
@@ -174,6 +169,26 @@ describe('createAgenda / setAgendaStatus', () => {
     await expect(
       setAgendaStatus('a1', { ...teacher, id: 'zzz' }, AgendaStatus.CANCELLED, deps)
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('list shows teacher-created agenda outside allocations; filters other class even if repo returns it', async () => {
+    const own = makeAgenda({ id: 'own', teacherId: 'teacher-2', subjectId: 'subj-unallocated' });
+    const other = makeAgenda({ id: 'other', teacherId: 'x', subjectId: 'subj-unallocated' });
+    const tDeps = makeDeps([own, other], { 'teacher-2': ['subj-bd'] });
+    expect((await listAgendasForUser(teacher, tDeps)).map((a) => a.id)).toEqual(['own']);
+    const sDeps = makeDeps([makeAgenda({ id: 'a1' }), makeAgenda({ id: 'b1', classId: 'class-b' })]);
+    expect((await listAgendasForUser(studentA, sDeps)).map((a) => a.id)).toEqual(['a1']);
+  });
+
+  it('status schema accepts only CANCELLED/COMPLETED', () => {
+    expect(setAgendaStatusSchema.safeParse({ status: 'CANCELLED' }).success).toBe(true);
+    expect(setAgendaStatusSchema.safeParse({ status: 'COMPLETED' }).success).toBe(true);
+    expect(setAgendaStatusSchema.safeParse({ status: 'LIVE' }).success).toBe(false);
+    expect(setAgendaStatusSchema.safeParse({ status: 'SCHEDULED' }).success).toBe(false);
+  });
+
+  it('schema requires ISO datetime with offset', () => {
+    expect(createAgendaSchema.safeParse({ ...input, startTime: '2026-10-21' }).success).toBe(false);
   });
 
   it('schema rejects endTime <= startTime', () => {

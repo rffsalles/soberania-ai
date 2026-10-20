@@ -34,6 +34,12 @@ describe('apiError', () => {
     expect((await run(prismaError('P2025'))).status).toBe(404);
   });
 
+  it('Prisma P2003 -> 400 com mensagem de referência inválida', async () => {
+    const { status, body } = await run(prismaError('P2003'));
+    expect(status).toBe(400);
+    expect(body.error).toBe('Referência inválida: registro relacionado não existe.');
+  });
+
   it('DomainError usa seu status', async () => {
     const { status, body } = await run(new DomainError(422, 'inválido'));
     expect(status).toBe(422);

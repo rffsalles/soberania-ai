@@ -92,7 +92,7 @@ async function loadInScope(id: string, user: AgendaActor, deps: AgendaDeps): Pro
 export async function listAgendasForUser(user: AgendaActor, deps: AgendaDeps = defaultDeps): Promise<AgendaDTO[]> {
   const scope = await resolveScope(user, deps);
   if (!scope) return [];
-  const rows = await deps.repo.findAgendas(scope);
+  const rows = (await deps.repo.findAgendas(scope)).filter((a) => inScope(a, scope));
   const now = deps.now();
   return rows.map((a) => toDTO(a, now));
 }

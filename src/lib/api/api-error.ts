@@ -18,6 +18,7 @@ export function apiError(err: unknown): NextResponse {
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') return fail(409, 'Registro já existe');
     if (err.code === 'P2025') return fail(404, 'Registro não encontrado');
+    if (err.code === 'P2003') return fail(400, 'Referência inválida: registro relacionado não existe.');
   }
   console.error('[api] unhandled error', err);
   return fail(500, 'Erro interno do servidor');
