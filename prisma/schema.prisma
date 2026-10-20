@@ -48,12 +48,15 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  class        Class?                @relation(fields: [classId], references: [id])
-  sessions     Session[]
-  minutes      PedagogicalMinute[]
-  interactions StudentInteraction[]
-  submissions  ExamSubmission[]
-  teacherSubjects TeacherSubject[]
+  class              Class?               @relation(fields: [classId], references: [id])
+  sessions           Session[]
+  minutes            PedagogicalMinute[]
+  interactions       StudentInteraction[]
+  submissions        ExamSubmission[]
+  teacherSubjects    TeacherSubject[]
+  teacherAgendas     Agenda[]             @relation("TeacherAgendas")
+  studyGroupMessages StudyGroupMessage[]
+  draftSubmissions   DraftSubmission[]
 
   @@index([classId])
   @@map("users")
@@ -70,7 +73,7 @@ model Session {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([sessionToken])
@@ -78,17 +81,17 @@ model Session {
 }
 
 model Class {
-  id          String   @id @default(cuid())
-  name        String
-  code        String   @unique
-  semester    Int
-  year        Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  semester  Int
+  year      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  students    User[]
-  agendas     Agenda[]
-  subjects    Subject[]
+  students User[]
+  agendas  Agenda[]
+  subjects Subject[]
 
   @@map("classes")
 }
@@ -103,16 +106,28 @@ model Agenda {
   endTime      DateTime
   videoUrl     String?
   classId      String
+  teacherId    String?
+  subjectId    String?
+  lessonPlanId String?      @unique
+  assessmentId String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  class        Class                 @relation(fields: [classId], references: [id])
-  minutes      PedagogicalMinute[]
-  interactions StudentInteraction[]
-  submissions  ExamSubmission[]
-  lessonPlan   LessonPlan?
+  class              Class                @relation(fields: [classId], references: [id])
+  teacher            User?                @relation("TeacherAgendas", fields: [teacherId], references: [id])
+  subjectRef         Subject?             @relation(fields: [subjectId], references: [id])
+  assessment         Assessment?          @relation(fields: [assessmentId], references: [id])
+  minutes            PedagogicalMinute[]
+  interactions       StudentInteraction[]
+  submissions        ExamSubmission[]
+  lessonPlan         LessonPlan?          @relation(fields: [lessonPlanId], references: [id])
+  studyGroupMessages StudyGroupMessage[]
+  draftSubmissions   DraftSubmission[]
 
   @@index([classId])
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([assessmentId])
   @@map("agendas")
 }
 
@@ -121,21 +136,22 @@ model Agenda {
 // ==========================================
 
 model Subject {
-  id            String             @id @default(cuid())
-  name          String             // ex: "Banco de Dados I" ou "Física III"
-  code          String             @unique // ex: "BD101"
-  description   String?            @db.Text
-  courseName    String             // ex: "ADS", "Engenharia de Software" ou "3º Ano EM"
-  academicLevel String             @default("HIGHER_EDUCATION") // "HIGHER_EDUCATION" | "HIGH_SCHOOL" | "ELEMENTARY"
-  academicYear  Int                @default(2026) // Ano letivo (ex: 2026)
-  semester      Int?               // Semestre (opcional para escolas anuais)
+  id            String   @id @default(cuid())
+  name          String // ex: "Banco de Dados I" ou "Física III"
+  code          String   @unique // ex: "BD101"
+  description   String?  @db.Text
+  courseName    String // ex: "ADS", "Engenharia de Software" ou "3º Ano EM"
+  academicLevel String   @default("HIGHER_EDUCATION") // "HIGHER_EDUCATION" | "HIGH_SCHOOL" | "ELEMENTARY"
+  academicYear  Int      @default(2026) // Ano letivo (ex: 2026)
+  semester      Int? // Semestre (opcional para escolas anuais)
   classId       String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   class              Class?           @relation(fields: [classId], references: [id])
   teacherAssignments TeacherSubject[]
   teachingPlans      TeachingPlan[]
+  agendas            Agenda[]
 
   @@index([classId])
   @@map("subjects")
@@ -163,17 +179,17 @@ model TeacherSubject {
 
 // Modelo de Período Letivo Normalizado (Base)
 model AcademicPeriod {
-  id          String    @id @default(cuid())
-  name        String    // ex: "1º Semestre / 2026 (2026.1)"
-  code        String    @unique // ex: "2026.1"
-  year        Int       @default(2026)
-  semester    Int?      // 1, 2, ou null para anual
-  type        String    @default("SEMESTER") // "SEMESTER" | "ANNUAL" | "TERM" | "INTENSIVE"
-  startDate   DateTime?
-  endDate     DateTime?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String    @id @default(cuid())
+  name      String // ex: "1º Semestre / 2026 (2026.1)"
+  code      String    @unique // ex: "2026.1"
+  year      Int       @default(2026)
+  semester  Int? // 1, 2, ou null para anual
+  type      String    @default("SEMESTER") // "SEMESTER" | "ANNUAL" | "TERM" | "INTENSIVE"
+  startDate DateTime?
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   teachingPlans TeachingPlan[]
 
@@ -182,28 +198,28 @@ model AcademicPeriod {
 
 // 1. Plano de Ensino (Macro)
 model TeachingPlan {
-  id                  String           @id @default(cuid())
+  id                  String   @id @default(cuid())
   subjectId           String
   teacherId           String
   academicPeriodId    String?
-  syllabus            String           @db.Text // Ementa oficial
-  generalObjectives   String           @db.Text // Objetivos gerais
-  specificObjectives  String           @db.Text // Objetivos específicos
-  unitsContent        Json             // Array de { unitNumber, title, topics: [] }
-  methodology         String           @db.Text // Metodologia de ensino
-  assessmentCriteria  String           @db.Text // Critérios de avaliação
-  basicBibliography   String[]         // Bibliografia básica
-  complementaryBiblio String[]         // Bibliografia complementar
-  status              String           @default("DRAFT") // DRAFT, APPROVED
-  totalHours          Int              @default(80)
-  theoryHours         Int              @default(60)
-  practiceHours       Int              @default(20)
-  ndeComplianceStatus String           @default("100% OK - Alinhado DCNs")
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  syllabus            String   @db.Text // Ementa oficial
+  generalObjectives   String   @db.Text // Objetivos gerais
+  specificObjectives  String   @db.Text // Objetivos específicos
+  unitsContent        Json // Array de { unitNumber, title, topics: [] }
+  methodology         String   @db.Text // Metodologia de ensino
+  assessmentCriteria  String   @db.Text // Critérios de avaliação
+  basicBibliography   String[] // Bibliografia básica
+  complementaryBiblio String[] // Bibliografia complementar
+  status              String   @default("DRAFT") // DRAFT, APPROVED
+  totalHours          Int      @default(80)
+  theoryHours         Int      @default(60)
+  practiceHours       Int      @default(20)
+  ndeComplianceStatus String   @default("100% OK - Alinhado DCNs")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  subject        Subject         @relation(fields: [subjectId], references: [id])
-  academicPeriod AcademicPeriod? @relation(fields: [academicPeriodId], references: [id])
+  subject        Subject          @relation(fields: [subjectId], references: [id])
+  academicPeriod AcademicPeriod?  @relation(fields: [academicPeriodId], references: [id])
   schedules      CourseSchedule[]
   assessments    Assessment[]
 
@@ -214,14 +230,14 @@ model TeachingPlan {
 
 // 2. Cronograma de Aulas (Calendário)
 model CourseSchedule {
-  id             String       @id @default(cuid())
+  id             String   @id @default(cuid())
   teachingPlanId String
   startDate      DateTime
   endDate        DateTime
-  holidays       Json?        // Datas de recessos e feriados
+  holidays       Json? // Datas de recessos e feriados
   totalClasses   Int
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   teachingPlan TeachingPlan @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
   lessonPlans  LessonPlan[]
@@ -231,25 +247,24 @@ model CourseSchedule {
 
 // 3. Plano de Aula (Micro / Encontro Específico)
 model LessonPlan {
-  id               String         @id @default(cuid())
+  id               String   @id @default(cuid())
   courseScheduleId String
-  agendaId         String?        @unique
   classDate        DateTime
   classNumber      Int
   topicTitle       String
-  dailyObjective   String         @db.Text
-  timeScript       Json           // Roteiro minuto a minuto [{ timeRange, activity, description }]
-  methodology      String         @db.Text
+  dailyObjective   String   @db.Text
+  timeScript       Json // Roteiro minuto a minuto [{ timeRange, activity, description }]
+  methodology      String   @db.Text
   resourcesNeeded  String[]
-  fixationExercise String         @db.Text
-  mediaType        String?        // "YOUTUBE" | "S3_UPLOAD" | "NONE"
-  mediaUrl         String?        // URL do YouTube ou URI do S3
-  s3ObjectKey      String?        // Chave do objeto no S3 da instituição
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  fixationExercise String   @db.Text
+  mediaType        String? // "YOUTUBE" | "S3_UPLOAD" | "NONE"
+  mediaUrl         String? // URL do YouTube ou URI do S3
+  s3ObjectKey      String? // Chave do objeto no S3 da instituição
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   courseSchedule CourseSchedule @relation(fields: [courseScheduleId], references: [id], onDelete: Cascade)
-  agenda         Agenda?        @relation(fields: [agendaId], references: [id])
+  agenda         Agenda?
 
   @@index([courseScheduleId])
   @@map("lesson_plans")
@@ -257,17 +272,20 @@ model LessonPlan {
 
 // 4. Instrumentos de Avaliação
 model Assessment {
-  id             String       @id @default(cuid())
-  teachingPlanId String
-  title          String
-  type           String       // "EXAM" | "GROUP_WORK" | "CASE_STUDY"
-  questions      Json         // Questões, enunciados, gabaritos e critérios
-  rubrics        Json         // Rubricas formais de correção
-  maxScore       Float        @default(10.0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id              String   @id @default(cuid())
+  teachingPlanId  String
+  title           String
+  type            String // "EXAM" | "GROUP_WORK" | "CASE_STUDY"
+  questions       Json // Questões, enunciados, gabaritos e critérios
+  rubrics         Json // Rubricas formais de correção
+  maxScore        Float    @default(10.0)
+  durationMinutes Int      @default(60)
+  status          String   @default("DRAFT")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   teachingPlan TeachingPlan @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  agendas      Agenda[]
 
   @@map("assessments")
 }
@@ -281,11 +299,13 @@ model DocumentCategory {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  materials DidacticMaterial[]
+
   @@map("document_categories")
 }
 
 model DidacticMaterial {
-  id               String          @id @default(cuid())
+  id               String   @id @default(cuid())
   title            String
   author           String
   edition          String?
@@ -295,27 +315,28 @@ model DidacticMaterial {
   originalFilename String?
   fileSize         Int?
   mimeType         String?
-  isOcrApplied     Boolean         @default(false)
-  status           String          @default("INDEXED") // UPLOADING, PARSING, OCR_PROCESSING, INDEXED, ERROR
+  isOcrApplied     Boolean  @default(false)
+  status           String   @default("INDEXED") // UPLOADING, PARSING, OCR_PROCESSING, INDEXED, ERROR
   errorMessage     String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  chunks           MaterialChunk[]
+  chunks     MaterialChunk[]
+  categories DocumentCategory[]
 
   @@map("didactic_materials")
 }
 
 model MaterialChunk {
-  id          String           @id @default(cuid())
-  materialId  String
-  chapter     String
-  section     String?
-  pageNumber  Int
-  content     String           @db.Text
-  createdAt   DateTime         @default(now())
+  id         String   @id @default(cuid())
+  materialId String
+  chapter    String
+  section    String?
+  pageNumber Int
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
 
-  material    DidacticMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  material DidacticMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
   @@index([materialId])
   @@index([pageNumber])
@@ -323,20 +344,24 @@ model MaterialChunk {
 }
 
 model PedagogicalMinute {
-  id               String   @id @default(cuid())
-  agendaId         String
-  studentId        String
-  engagementScore  Float    // 0 to 100
-  hesitationIndex  Float    // 0 to 100
-  topicsMastered   String[]
-  topicsStruggled  String[]
-  rawSummary       String   @db.Text
-  actionableAdvice String   @db.Text
-  createdAt        DateTime @default(now())
+  id                         String   @id @default(cuid())
+  agendaId                   String
+  studentId                  String
+  engagementScore            Float // 0 to 100
+  hesitationIndex            Float // 0 to 100
+  topicsMastered             String[]
+  topicsStruggled            String[]
+  rawSummary                 String   @db.Text
+  actionableAdvice           String   @db.Text
+  totalQuestionsAsked        Int      @default(0)
+  socraticChallengesAnswered Int      @default(0)
+  sessionTitle               String   @default("")
+  createdAt                  DateTime @default(now())
 
-  agenda           Agenda   @relation(fields: [agendaId], references: [id], onDelete: Cascade)
-  student          User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  agenda  Agenda @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
+  @@unique([agendaId, studentId])
   @@index([agendaId])
   @@index([studentId])
   @@map("pedagogical_minutes")
@@ -347,17 +372,20 @@ model StudentInteraction {
   agendaId            String
   studentId           String
   type                InteractionType
-  timestampInVideo    Int?            // seconds
+  timestampInVideo    Int? // seconds
   questionText        String          @db.Text
   responseText        String          @db.Text
   ragSourcePage       Int?
   ragSourceBook       String?
   isSocraticChallenge Boolean         @default(false)
   wasCorrect          Boolean?
+  agendaType          AgendaType      @default(CLASSROOM)
+  guardrailBlocked    Boolean         @default(false)
+  latencyMs           Int?
   createdAt           DateTime        @default(now())
 
-  agenda              Agenda          @relation(fields: [agendaId], references: [id], onDelete: Cascade)
-  student             User            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  agenda  Agenda @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([agendaId])
   @@index([studentId])
@@ -370,14 +398,63 @@ model ExamSubmission {
   studentId    String
   score        Float
   maxScore     Float    @default(10.0)
-  answers      Json     // Array of [questionId, chosenOption, timeSpentSeconds, hesitationSeconds]
-  integrityLog Json?    // Tab blur events, suspicious prompts
+  answers      Json // Array of [questionId, chosenOption, timeSpentSeconds, hesitationSeconds]
+  integrityLog Json? // Tab blur events, suspicious prompts
   submittedAt  DateTime @default(now())
   createdAt    DateTime @default(now())
 
-  agenda       Agenda   @relation(fields: [agendaId], references: [id], onDelete: Cascade)
-  student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  agenda  Agenda @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([agendaId, studentId])
   @@map("exam_submissions")
+}
+
+model StudyGroupMessage {
+  id        String   @id @default(cuid())
+  agendaId  String
+  authorId  String?
+  content   String   @db.Text
+  isAi      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  agenda Agenda @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  author User?  @relation(fields: [authorId], references: [id])
+
+  @@index([agendaId])
+  @@map("study_group_messages")
+}
+
+model DraftSubmission {
+  id           String   @id @default(cuid())
+  agendaId     String
+  studentId    String
+  content      String   @db.Text
+  feedback     String?  @db.Text
+  rubricScores Json?
+  createdAt    DateTime @default(now())
+
+  agenda  Agenda @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([agendaId])
+  @@index([studentId])
+  @@map("draft_submissions")
+}
+
+model InferenceLog {
+  id                   String      @id @default(cuid())
+  provider             String
+  model                String
+  ttftMs               Int
+  totalLatencyMs       Int
+  tokensPerSecond      Float
+  promptTokens         Int
+  completionTokens     Int
+  externalTrafficBytes Int         @default(0)
+  agendaType           AgendaType?
+  createdAt            DateTime    @default(now())
+
+  @@index([createdAt])
+  @@map("inference_logs")
 }
