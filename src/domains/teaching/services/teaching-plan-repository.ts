@@ -32,3 +32,7 @@ export function insertPlan(data: Prisma.TeachingPlanUncheckedCreateInput) {
 export function updatePlanById(id: string, data: Prisma.TeachingPlanUncheckedUpdateInput) {
   return db.teachingPlan.update({ where: { id }, data, include: planBasic });
 }
+
+export function findPlanOwner(id: string) {
+  return db.teachingPlan.findUnique({ where: { id }, select: { id: true, teacherId: true } });
+}

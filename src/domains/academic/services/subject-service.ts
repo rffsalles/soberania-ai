@@ -23,16 +23,16 @@ export function updateSubject(id: string, input: SubjectInput, deps: SubjectDeps
   return deps.repo.replaceSubjectTeachers(id, data, teacherIds);
 }
 
-export function listTeachers() {
-  return teacherRepo.listTeachersWithSubjects();
+export type TeacherDeps = { repo: Pick<typeof teacherRepo, 'listTeachersWithSubjects' | 'createTeacher'> };
+
+export function listTeachers(deps: TeacherDeps = { repo: teacherRepo }) {
+  return deps.repo.listTeachersWithSubjects();
 }
 
-export async function createTeacher(input: {
-  name: string;
-  email: string;
-  enrollment: string;
-  password: string;
-}) {
+export async function createTeacher(
+  input: { name: string; email: string; enrollment: string; password: string },
+  deps: TeacherDeps = { repo: teacherRepo }
+) {
   const { password, ...rest } = input;
-  return teacherRepo.createTeacher({ ...rest, passwordHash: await hashPassword(password) });
+  return deps.repo.createTeacher({ ...rest, passwordHash: await hashPassword(password) });
 }

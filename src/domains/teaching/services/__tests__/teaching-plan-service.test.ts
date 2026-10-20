@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
+import { updateTeachingPlanSchema } from '@/lib/validators/teaching-plan.validator';
 import { PLAN_STATUS } from '@/lib/constants/teaching';
 import {
   createPlan,
@@ -90,5 +91,22 @@ describe('teaching-plan-service', () => {
     const { deps } = makeDeps(seed);
     await expect(getPlan('p1', otherTeacher, deps)).rejects.toMatchObject({ status: 403 });
     expect((await getPlan('p1', teacher, deps)).id).toBe('p1');
+  });
+
+  it('partial update leaves unspecified fields untouched and null clears academicPeriodId', async () => {
+    const { deps, plans } = makeDeps([
+      { id: 'p1', teacherId: 't1', subjectId: 's1', syllabus: 'a', methodology: 'm', academicPeriodId: 'ap1' },
+    ]);
+    await updatePlan('p1', teacher, { syllabus: 'new' }, deps);
+    expect(plans[0]).toMatchObject({ syllabus: 'new', methodology: 'm', academicPeriodId: 'ap1', subjectId: 's1' });
+    await updatePlan('p1', teacher, { academicPeriodId: null }, deps);
+    expect(plans[0].academicPeriodId).toBeNull();
+    expect(plans[0].syllabus).toBe('new');
+  });
+
+  it('update schema rejects null for non-nullable columns', () => {
+    expect(updateTeachingPlanSchema.safeParse({ syllabus: null }).success).toBe(false);
+    expect(updateTeachingPlanSchema.safeParse({ subjectId: null }).success).toBe(false);
+    expect(updateTeachingPlanSchema.safeParse({ academicPeriodId: null }).success).toBe(true);
   });
 });

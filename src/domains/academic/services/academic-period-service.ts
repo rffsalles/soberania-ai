@@ -1,23 +1,24 @@
 import { DomainError } from '@/lib/api/domain-error';
-import * as periodRepo from './academic-period-repository';
+import * as realRepo from './academic-period-repository';
+
+export type PeriodDeps = {
+  repo: Pick<typeof realRepo, 'listPeriods' | 'ensureDefaultPeriods' | 'findPeriodByCode' | 'createPeriod'>;
+};
 
 /** Lists active periods, seeding the defaults when none exist (temporary until the seed script owns it). */
-export async function listPeriodsEnsuringDefaults() {
-  const periods = await periodRepo.listPeriods();
+export async function listPeriodsEnsuringDefaults(deps: PeriodDeps = { repo: realRepo }) {
+  const periods = await deps.repo.listPeriods();
   if (periods.length > 0) return periods;
-  await periodRepo.ensureDefaultPeriods();
-  return periodRepo.listPeriods();
+  await deps.repo.ensureDefaultPeriods();
+  return deps.repo.listPeriods();
 }
 
-export async function createPeriod(input: {
-  name: string;
-  code: string;
-  year: number;
-  semester?: number | null;
-  type: string;
-}) {
-  if (await periodRepo.findPeriodByCode(input.code)) {
+export async function createPeriod(
+  input: { name: string; code: string; year: number; semester?: number | null; type: string },
+  deps: PeriodDeps = { repo: realRepo }
+) {
+  if (await deps.repo.findPeriodByCode(input.code)) {
     throw new DomainError(409, `Já existe um período letivo com o código ${input.code}.`);
   }
-  return periodRepo.createPeriod({ ...input, semester: input.semester ?? null });
+  return deps.repo.createPeriod({ ...input, semester: input.semester ?? null });
 }
