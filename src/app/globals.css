@@ -161,7 +161,7 @@ h1, h2, h3, h4, .font-heading {
   }
 
   /* Modal aberto (html.print-modal): imprime apenas o conteúdo do diálogo. */
-  html.print-modal body > *:not([data-print-root]) {
+  html.print-modal body > *:not(:has([data-print-root])):not([data-print-root]) {
     display: none !important;
   }
 
@@ -176,7 +176,9 @@ h1, h2, h3, h4, .font-heading {
     animation: none !important;
   }
 
-  html.print-modal [data-print-root] > button {
-    display: none !important;
+  html.print-modal [data-print-root] {
+    width: 100% !important;
+    margin: 0 !important;
+    inset: auto !important;
   }
 }
