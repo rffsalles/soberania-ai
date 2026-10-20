@@ -26,11 +26,9 @@ export function SocraticChatPanel({
   onOpenMinutesModal,
   className,
 }: SocraticChatPanelProps) {
-  const mode = agendaType === 'EXAM' ? 'ASSESSMENT_EXAM' : 'CLASSROOM_STUDENT';
-
   return (
     <UniversalSocraticChat
-      mode={mode}
+      agendaType={agendaType}
       sessionId={sessionId}
       onOpenMinutesModal={onOpenMinutesModal}
       className={className}

@@ -10,15 +10,13 @@ const chatRequestSchema = z.object({
     .enum(['CLASSROOM', 'STUDY_GROUP', 'DRAFT_REVIEW', 'OFFICE_HOURS', 'EXAM'])
     .optional()
     .default('CLASSROOM'),
-  studentId: z.string().optional().default('student-lucas'),
-  studentName: z.string().optional().default('Lucas Ferreira'),
   sessionId: z.string().optional().default('session-live-01'),
   videoTimestampSeconds: z.number().optional(),
 });
 
 export async function POST(req: NextRequest) {
   try {
-    await requireUser(req);
+    const user = await requireUser(req);
     const body = await req.json();
     const parsed = chatRequestSchema.safeParse(body);
 
@@ -29,14 +27,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { message, agendaType, studentId, studentName, sessionId, videoTimestampSeconds } =
+    const { message, agendaType, sessionId, videoTimestampSeconds } =
       parsed.data;
 
     const orchestrationResult = await handleAgentOrchestration({
       message,
       agendaType,
-      studentId,
-      studentName,
+      studentId: user.id,
+      studentName: user.name,
       sessionId,
       videoTimestampSeconds,
     });

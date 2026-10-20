@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import type { AgendaType } from '@/domains/agendas/types';
 
 export interface ChatMessage {
   id: string;
@@ -38,7 +39,7 @@ export interface ChatMessage {
 }
 
 export interface UniversalSocraticChatProps {
-  mode?: 'CLASSROOM_STUDENT' | 'TEACHER_ASSISTANT' | 'ASSESSMENT_EXAM' | 'ADMIN_AUDIT';
+  agendaType: AgendaType;
   subjectId?: string;
   teachingPlanId?: string;
   lessonPlanId?: string;
@@ -68,7 +69,7 @@ const SUGGESTIONS = [
 ];
 
 export function UniversalSocraticChat({
-  mode = 'CLASSROOM_STUDENT',
+  agendaType,
   sessionId = 'session-live-01',
   onOpenMinutesModal,
   className,
@@ -200,10 +201,8 @@ export function UniversalSocraticChat({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: messageContent,
-          mode,
+          agendaType,
           sessionId,
-          hasAttachment: !!selectedFile,
-          attachmentType: selectedFile?.type,
         }),
       });
 
