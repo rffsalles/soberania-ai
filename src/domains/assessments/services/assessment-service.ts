@@ -44,6 +44,7 @@ export type AssessmentDeps = {
   findPlan(id: string): Promise<PlanForAssessment | null>;
   findAssessment(id: string): Promise<AssessmentWithPlan | null>;
   updateAssessmentById(id: string, data: Prisma.AssessmentUncheckedUpdateInput): Promise<unknown>;
+  claimAssessmentForPublish(id: string): Promise<boolean>;
   search(query: RAGSearchQuery): Promise<Pick<RAGSearchResult, 'chunks'>>;
   streamChat(messages: AIMessage[], options?: AICompletionOptions): AsyncGenerator<StreamChunk>;
   createAgenda(user: AgendaActor, input: Parameters<typeof createAgenda>[1]): Promise<AgendaDTO>;
@@ -53,6 +54,7 @@ const defaultDeps: AssessmentDeps = {
   findPlan: planRepo.findPlanForAssessment,
   findAssessment: assessmentRepo.findAssessmentWithPlan,
   updateAssessmentById: assessmentRepo.updateAssessmentById,
+  claimAssessmentForPublish: assessmentRepo.claimAssessmentForPublish,
   search: executeHybridSearch,
   streamChat: (messages, options) => aiProvider.streamChat(messages, options),
   createAgenda: (user, input) => createAgenda(user, input),
@@ -231,10 +233,9 @@ export async function publishAssessment(
   const assessment = await loadOwnedAssessment(id, user, deps);
   const start = new Date(input.startTime);
   const end = new Date(start.getTime() + assessment.durationMinutes * MS_PER_MINUTE);
-  if (assessment.status === ASSESSMENT_STATUS.PUBLISHED) throw new DomainError(409, 'Avaliação já publicada.');
 
-  // Claim the PUBLISHED status first so a second publish is rejected; revert on failure so a retry works.
-  await deps.updateAssessmentById(id, { status: ASSESSMENT_STATUS.PUBLISHED });
+  // Atomic DRAFT -> PUBLISHED claim: only one concurrent publish wins; revert on failure so a retry works.
+  if (!(await deps.claimAssessmentForPublish(id))) throw new DomainError(409, 'Avaliação já publicada.');
   try {
     return await deps.createAgenda(user, {
       title: assessment.title,
@@ -246,7 +247,11 @@ export async function publishAssessment(
       assessmentId: id,
     });
   } catch (err) {
-    await deps.updateAssessmentById(id, { status: ASSESSMENT_STATUS.DRAFT });
+    try {
+      await deps.updateAssessmentById(id, { status: ASSESSMENT_STATUS.DRAFT });
+    } catch (revertErr) {
+      console.error('[assessments] falha ao reverter o status após erro na agenda', revertErr);
+    }
     throw err;
   }
 }

@@ -60,6 +60,7 @@ function makeDeps(aiText: string, fallback = false) {
             }
           : null,
     updateAssessmentById,
+    claimAssessmentForPublish: async (id) => (await deps.findAssessment(id))?.status === 'DRAFT',
     search: async () => ({ chunks: [chunk(1), chunk(2), chunk(3)] }),
     streamChat: async function* (): AsyncGenerator<StreamChunk> {
       yield { token: aiText, isComplete: true, fallback };
@@ -150,13 +151,34 @@ describe('publishAssessment', () => {
         endTime: '2026-11-01T11:00:00.000Z',
       })
     );
-    expect(updateAssessmentById).toHaveBeenCalledWith('as1', { status: 'PUBLISHED' });
+    expect(updateAssessmentById).not.toHaveBeenCalled();
   });
 
   it('rejects publishing an already published assessment with 409', async () => {
     const { deps, createAgenda } = makeDeps('x');
     await expect(publishAssessment('pub1', teacher, body, deps)).rejects.toMatchObject({ status: 409 });
     expect(createAgenda).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when the atomic claim loses the race', async () => {
+    const { deps, createAgenda } = makeDeps('x');
+    deps.claimAssessmentForPublish = async () => false;
+    await expect(publishAssessment('as1', teacher, body, deps)).rejects.toMatchObject({ status: 409 });
+    expect(createAgenda).not.toHaveBeenCalled();
+  });
+
+  it('rethrows the original error even when the revert fails', async () => {
+    const { deps } = makeDeps('x');
+    deps.createAgenda = async () => {
+      throw new Error('boom');
+    };
+    deps.updateAssessmentById = async () => {
+      throw new Error('revert failed');
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(publishAssessment('as1', teacher, body, deps)).rejects.toThrow('boom');
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   it('reverts the status to DRAFT when agenda creation fails', async () => {
