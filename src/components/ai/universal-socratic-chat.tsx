@@ -17,6 +17,7 @@ export interface UniversalSocraticChatProps {
   placeholder?: string;
   suggestions?: string[];
   onOpenMinutesModal?: () => void;
+  onGuardrailBlock?: () => void;
   className?: string;
   title?: string;
   subtitle?: string;
@@ -38,6 +39,7 @@ export function UniversalSocraticChat({
   placeholder,
   suggestions,
   onOpenMinutesModal,
+  onGuardrailBlock,
   className,
   title = 'Tutora Lucy Virtual',
   subtitle = 'Apoio Socrático Multimodal · On-Premises',
@@ -57,6 +59,7 @@ export function UniversalSocraticChat({
   const { messages, send, isStreaming, error } = useTutorChat({
     agendaId,
     initialMessages: greeting,
+    onGuardrailBlock,
   });
 
   return (

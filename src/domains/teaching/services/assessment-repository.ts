@@ -30,6 +30,13 @@ export function findAssessmentWithPlan(id: string) {
   });
 }
 
+export function findAssessmentById(id: string) {
+  return db.assessment.findUnique({
+    where: { id },
+    select: { id: true, questions: true, maxScore: true, durationMinutes: true },
+  });
+}
+
 export function updateAssessmentById(id: string, data: Prisma.AssessmentUncheckedUpdateInput) {
   return db.assessment.update({ where: { id }, data });
 }

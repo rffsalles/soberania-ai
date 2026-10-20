@@ -8,6 +8,7 @@ export interface SocraticChatPanelProps {
   agendaId: string;
   agendaType: AgendaType;
   onOpenMinutesModal?: () => void;
+  onGuardrailBlock?: () => void;
   className?: string;
 }
 
@@ -15,6 +16,7 @@ export function SocraticChatPanel({
   agendaId,
   agendaType,
   onOpenMinutesModal,
+  onGuardrailBlock,
   className,
 }: SocraticChatPanelProps) {
   return (
@@ -22,6 +24,7 @@ export function SocraticChatPanel({
       agendaId={agendaId}
       agendaType={agendaType}
       onOpenMinutesModal={onOpenMinutesModal}
+      onGuardrailBlock={onGuardrailBlock}
       className={className}
     />
   );

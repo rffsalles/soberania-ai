@@ -17,60 +17,201 @@ import {
   Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { EXAM_QUESTIONS } from '@/lib/mocks-pending';
+import { API_ROUTES } from '@/lib/constants/routes';
+import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
+import type { PublicQuestion } from '@/domains/assessments/services/exam-service';
 
 interface ExamPageProps {
   examId: string;
 }
 
-interface Question {
-  id: number;
-  enunciation: string;
-  options: { key: string; text: string }[];
-  selectedOption?: string;
+interface ExamPayload {
+  agenda: AgendaDTO;
+  questions: PublicQuestion[];
+  durationMinutes: number;
+  maxScore: number;
+  alreadySubmitted: boolean;
+  submission?: { score: number; maxScore: number };
 }
 
+interface ExamResult {
+  score: number;
+  maxScore: number;
+  correct?: number;
+  total?: number;
+}
+
+type LoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; exam: ExamPayload };
+
+const HTTP_NOT_FOUND = 404;
+const MS_PER_SECOND = 1000;
+const LOAD_ERROR = 'Não foi possível carregar a prova. Tente novamente.';
+const SUBMIT_ERROR = 'Não foi possível enviar a prova. Tente novamente.';
+const NOT_FOUND_MESSAGE = 'Prova não encontrada.';
+
+const formatTimer = (totalSecs: number) => {
+  const m = Math.floor(totalSecs / 60)
+    .toString()
+    .padStart(2, '0');
+  const s = (totalSecs % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+};
+
+function StatusCard({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
+      <AppHeader />
+      <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-12">
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle className="font-heading">{title}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-slate-600 dark:text-slate-300">{message}</CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}
 
 export default function ExamPage({ examId }: ExamPageProps) {
-  const [questions, setQuestions] = React.useState<Question[]>(EXAM_QUESTIONS);
-  const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [secondsRemaining, setSecondsRemaining] = React.useState(2850); // 47:30 min
-  const [tabBlurCount, setTabBlurCount] = React.useState(0);
-  const [isSubmitted, setIsSubmitted] = React.useState(false);
+  const [load, setLoad] = React.useState<LoadState>({ status: 'loading' });
 
-  // Monitoramento de integridade e perda de foco de aba
   React.useEffect(() => {
-    const handleBlur = () => {
-      setTabBlurCount((prev) => prev + 1);
-    };
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(`${API_ROUTES.EXAMS}/${examId}`, { signal: controller.signal });
+        const body = await res.json().catch(() => null);
+        if (controller.signal.aborted) return;
+        if (res.ok && body?.success) {
+          setLoad({ status: 'ready', exam: body as ExamPayload });
+        } else {
+          setLoad({
+            status: 'error',
+            message:
+              res.status === HTTP_NOT_FOUND
+                ? NOT_FOUND_MESSAGE
+                : typeof body?.error === 'string'
+                  ? body.error
+                  : LOAD_ERROR,
+          });
+        }
+      } catch {
+        if (!controller.signal.aborted) setLoad({ status: 'error', message: LOAD_ERROR });
+      }
+    })();
+    return () => controller.abort();
+  }, [examId]);
+
+  if (load.status === 'loading') return <StatusCard title="Prova" message="Carregando prova..." />;
+  if (load.status === 'error') return <StatusCard title="Prova indisponível" message={load.message} />;
+  return <ExamRunner examId={examId} exam={load.exam} />;
+}
+
+function ExamRunner({ examId, exam }: { examId: string; exam: ExamPayload }) {
+  const [selected, setSelected] = React.useState<Record<string, string>>({});
+  const [currentIndex, setCurrentIndex] = React.useState(0);
+  const endMs = React.useMemo(() => new Date(exam.agenda.endTime).getTime(), [exam.agenda.endTime]);
+  const remaining = React.useCallback(() => Math.max(0, Math.ceil((endMs - Date.now()) / MS_PER_SECOND)), [endMs]);
+  const [secondsRemaining, setSecondsRemaining] = React.useState(remaining);
+  const [tabBlurCount, setTabBlurCount] = React.useState(0);
+  const [guardrailBlocks, setGuardrailBlocks] = React.useState(0);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<ExamResult | null>(
+    exam.alreadySubmitted && exam.submission ? exam.submission : null
+  );
+  const spentRef = React.useRef<Record<string, number>>({});
+  const enteredAtRef = React.useRef(Date.now());
+  const questions = exam.questions;
+  const currentQ = questions[currentIndex];
+
+  const flushTime = React.useCallback(() => {
+    const q = questions[currentIndex];
+    const now = Date.now();
+    if (q) {
+      spentRef.current[q.id] =
+        (spentRef.current[q.id] ?? 0) + Math.round((now - enteredAtRef.current) / MS_PER_SECOND);
+    }
+    enteredAtRef.current = now;
+  }, [questions, currentIndex]);
+
+  const goTo = (index: number) => {
+    flushTime();
+    setCurrentIndex(index);
+  };
+
+  React.useEffect(() => {
+    const handleBlur = () => setTabBlurCount((prev) => prev + 1);
     window.addEventListener('blur', handleBlur);
     return () => window.removeEventListener('blur', handleBlur);
   }, []);
 
-  // Timer regressivo
+  const submit = React.useCallback(async () => {
+    if (isSubmitting || result) return;
+    flushTime();
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch(`${API_ROUTES.EXAMS}/${examId}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answers: Object.entries(selected).map(([questionId, chosenKey]) => ({
+            questionId,
+            chosenKey,
+            timeSpentSeconds: spentRef.current[questionId] ?? 0,
+          })),
+          integrityLog: { blurEvents: tabBlurCount, guardrailBlocks },
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok && body?.success) {
+        setResult(body as ExamResult);
+      } else {
+        setSubmitError(typeof body?.error === 'string' ? body.error : SUBMIT_ERROR);
+      }
+    } catch {
+      setSubmitError(SUBMIT_ERROR);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, result, flushTime, examId, selected, tabBlurCount, guardrailBlocks]);
+
+  const submitRef = React.useRef(submit);
+  submitRef.current = submit;
+
+  // Timer regressivo calculado a partir do fim da agenda; envia automaticamente ao zerar
   React.useEffect(() => {
-    if (isSubmitted) return;
+    if (result) return;
     const timer = setInterval(() => {
-      setSecondsRemaining((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+      const left = remaining();
+      setSecondsRemaining(left);
+      if (left === 0) {
+        clearInterval(timer);
+        void submitRef.current();
+      }
+    }, MS_PER_SECOND);
     return () => clearInterval(timer);
-  }, [isSubmitted]);
+  }, [result, remaining]);
 
-  const formatTimer = (totalSecs: number) => {
-    const m = Math.floor(totalSecs / 60)
-      .toString()
-      .padStart(2, '0');
-    const s = (totalSecs % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  const currentQ = questions[currentIndex];
-
-  const handleSelectOption = (key: string) => {
-    setQuestions((prev) =>
-      prev.map((q, i) => (i === currentIndex ? { ...q, selectedOption: key } : q))
+  if (result) {
+    return (
+      <StatusCard
+        title={exam.alreadySubmitted ? 'Prova já enviada' : 'Prova enviada'}
+        message={`Sua nota: ${result.score.toLocaleString('pt-BR')} de ${result.maxScore.toLocaleString('pt-BR')}.${
+          result.total !== undefined ? ` Acertos: ${result.correct} de ${result.total}.` : ''
+        }`}
+      />
     );
-  };
+  }
+
+  if (!currentQ) return <StatusCard title="Prova indisponível" message="Esta prova não possui questões." />;
+
+  const handleSelectOption = (key: string) => setSelected((prev) => ({ ...prev, [currentQ.id]: key }));
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
@@ -88,7 +229,7 @@ export default function ExamPage({ examId }: ExamPageProps) {
               <span className="text-xs text-slate-500 font-mono">ID: {examId}</span>
               <span className="text-xs text-slate-300 dark:text-slate-700">|</span>
               <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-                👨‍🏫 Profª. Responsável: <strong>Profª. Dra. Helena Salles</strong>
+                👨‍🏫 Prof. Responsável: <strong>{exam.agenda.teacherName}</strong>
               </span>
               <span className="text-xs text-slate-300 dark:text-slate-700">|</span>
               <span className="text-xs text-brand-teal font-medium">
@@ -96,7 +237,7 @@ export default function ExamPage({ examId }: ExamPageProps) {
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold font-heading text-slate-900 dark:text-white">
-              Avaliação 01: Álgebra Relacional, SQL & Normalização
+              {exam.agenda.title}
             </h1>
           </div>
 
@@ -124,23 +265,23 @@ export default function ExamPage({ examId }: ExamPageProps) {
             <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
               <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between">
                 <CardTitle className="text-base font-heading">
-                  Questão {currentQ.id} de {questions.length}
+                  Questão {currentIndex + 1} de {questions.length}
                 </CardTitle>
                 <div className="flex gap-1">
                   {questions.map((q, idx) => (
                     <button
                       key={q.id}
-                      onClick={() => setCurrentIndex(idx)}
+                      onClick={() => goTo(idx)}
                       className={cn(
                         'h-7 w-7 rounded-lg text-xs font-bold font-mono transition-colors cursor-pointer',
                         currentIndex === idx
                           ? 'bg-brand-teal text-white'
-                          : q.selectedOption
+                          : selected[q.id]
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                           : 'bg-slate-100 text-slate-600'
                       )}
                     >
-                      {q.id}
+                      {idx + 1}
                     </button>
                   ))}
                 </div>
@@ -153,7 +294,7 @@ export default function ExamPage({ examId }: ExamPageProps) {
                 {/* Options List */}
                 <div className="space-y-2.5">
                   {currentQ.options.map((opt) => {
-                    const isSelected = currentQ.selectedOption === opt.key;
+                    const isSelected = selected[currentQ.id] === opt.key;
                     return (
                       <div
                         key={opt.key}
@@ -181,13 +322,19 @@ export default function ExamPage({ examId }: ExamPageProps) {
                   })}
                 </div>
 
+                {submitError && (
+                  <p role="alert" className="text-sm text-red-600">
+                    {submitError}
+                  </p>
+                )}
+
                 {/* Navigation Buttons */}
                 <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={currentIndex === 0}
-                    onClick={() => setCurrentIndex((prev) => prev - 1)}
+                    onClick={() => goTo(currentIndex - 1)}
                     className="gap-1 cursor-pointer"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -197,7 +344,7 @@ export default function ExamPage({ examId }: ExamPageProps) {
                   {currentIndex < questions.length - 1 ? (
                     <Button
                       size="sm"
-                      onClick={() => setCurrentIndex((prev) => prev + 1)}
+                      onClick={() => goTo(currentIndex + 1)}
                       className="gap-1 bg-brand-teal hover:bg-brand-teal-dark text-white cursor-pointer"
                     >
                       <span>Próxima</span>
@@ -206,11 +353,12 @@ export default function ExamPage({ examId }: ExamPageProps) {
                   ) : (
                     <Button
                       size="sm"
-                      onClick={() => setIsSubmitted(true)}
+                      disabled={isSubmitting}
+                      onClick={() => void submit()}
                       className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      <span>Submeter Avaliação</span>
+                      <span>{isSubmitting ? 'Enviando...' : 'Submeter Avaliação'}</span>
                     </Button>
                   )}
                 </div>
@@ -223,6 +371,7 @@ export default function ExamPage({ examId }: ExamPageProps) {
             <SocraticChatPanel
               agendaType="EXAM"
               agendaId={examId}
+              onGuardrailBlock={() => setGuardrailBlocks((n) => n + 1)}
             />
           </div>
         </div>

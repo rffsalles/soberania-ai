@@ -39,9 +39,11 @@ const nextId = (prefix: string) => `${prefix}-${Date.now()}-${counter++}`;
 export function useTutorChat({
   agendaId,
   initialMessages = [],
+  onGuardrailBlock,
 }: {
   agendaId: string;
   initialMessages?: ChatMessage[];
+  onGuardrailBlock?: () => void;
 }) {
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -50,6 +52,8 @@ export function useTutorChat({
   messagesRef.current = messages;
   const controllerRef = React.useRef<AbortController | null>(null);
   const isSendingRef = React.useRef(false);
+  const onGuardrailBlockRef = React.useRef(onGuardrailBlock);
+  onGuardrailBlockRef.current = onGuardrailBlock;
 
   React.useEffect(
     () => () => {
@@ -103,6 +107,7 @@ export function useTutorChat({
           } else if (event.event === SSE_EVENT.DONE) {
             finalized = true;
             const done = JSON.parse(event.data) as DonePayload;
+            if (done.blockedByExamGuardrail) onGuardrailBlockRef.current?.();
             patch(pendingId, {
               text: done.reply,
               citation: done.citations?.[0],
