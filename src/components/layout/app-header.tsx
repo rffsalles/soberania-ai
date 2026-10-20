@@ -18,19 +18,25 @@ import { TelemetryBadge } from './telemetry-badge';
 import { UserNav } from './user-nav';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ROUTES } from '@/lib/constants/routes';
+import { canAccessRoute } from '@/lib/auth/rbac';
+import { useCurrentUser } from './use-current-user';
 
 export function AppHeader() {
   const pathname = usePathname();
 
-  const navLinks = [
-    { href: '/dashboard', label: 'Painel do Aluno', icon: LayoutDashboard },
+  const { user } = useCurrentUser();
+
+  const allNavLinks = [
+    { href: ROUTES.DASHBOARD, label: 'Painel do Aluno', icon: LayoutDashboard },
     { href: '/classroom/session-live-01', label: 'Aula Interativa', icon: Video },
     { href: '/study-group/group-study-01', label: 'Grupo de Estudos', icon: Users },
     { href: '/exam/exam-01', label: 'Sala de Prova', icon: FileCheck2 },
-    { href: '/teacher/reports', label: 'Analytics Docente', icon: BarChart3 },
-    { href: '/teacher/materials', label: 'Acervo RAG', icon: BookOpen },
-    { href: '/admin/dashboard', label: 'Hardware & Telemetria', icon: Server },
+    { href: ROUTES.REPORTS, label: 'Analytics Docente', icon: BarChart3 },
+    { href: ROUTES.TEACHER_MATERIALS, label: 'Acervo RAG', icon: BookOpen },
+    { href: ROUTES.APPLIANCE, label: 'Hardware & Telemetria', icon: Server },
   ];
+  const navLinks = user ? allNavLinks.filter((link) => canAccessRoute(link.href, user.role)) : [];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md">
@@ -80,7 +86,7 @@ export function AppHeader() {
         <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto py-2 no-scrollbar">
           {navLinks.map((link) => {
             const Icon = link.icon;
-            const isActive = pathname === link.href || (link.href !== '/dashboard' && pathname.startsWith(link.href));
+            const isActive = pathname === link.href || (link.href !== ROUTES.DASHBOARD && pathname.startsWith(link.href));
             return (
               <Link key={link.href} href={link.href}>
                 <Button

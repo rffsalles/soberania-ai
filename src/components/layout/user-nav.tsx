@@ -6,6 +6,8 @@ import { LogOut, ShieldCheck, User, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { AuthenticatedUser } from '@/lib/auth/types';
+import { API_ROUTES, ROUTES } from '@/lib/constants/routes';
+import { useCurrentUser } from './use-current-user';
 
 interface UserNavProps {
   initialUser?: AuthenticatedUser | null;
@@ -13,33 +15,20 @@ interface UserNavProps {
 
 export function UserNav({ initialUser }: UserNavProps) {
   const router = useRouter();
-  const [user, setUser] = React.useState<AuthenticatedUser | null>(initialUser || null);
-  const [loading, setLoading] = React.useState(!initialUser);
+  const { user: currentUser, isLoading: loading } = useCurrentUser(initialUser);
+  const [loggedOut, setLoggedOut] = React.useState(false);
+  const user = loggedOut ? null : currentUser;
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!initialUser) {
-      fetch('/api/v1/auth/me')
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.user) {
-            setUser(data.user);
-          }
-        })
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }
-  }, [initialUser]);
 
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
-      await fetch('/api/v1/auth/logout', { method: 'POST' });
-      setUser(null);
-      router.push('/login');
+      await fetch(API_ROUTES.AUTH_LOGOUT, { method: 'POST' });
+      setLoggedOut(true);
+      router.push(ROUTES.LOGIN);
       router.refresh();
     } catch {
-      router.push('/login');
+      router.push(ROUTES.LOGIN);
     } finally {
       setIsLoggingOut(false);
     }
@@ -56,7 +45,7 @@ export function UserNav({ initialUser }: UserNavProps) {
       <Button
         variant="default"
         size="sm"
-        onClick={() => router.push('/login')}
+        onClick={() => router.push(ROUTES.LOGIN)}
         className="gap-2 bg-brand-teal hover:bg-brand-teal-dark text-white cursor-pointer shadow-sm rounded-lg"
       >
         <User className="h-4 w-4" />

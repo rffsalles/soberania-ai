@@ -13,11 +13,6 @@
 
 export type AIProviderType = 'groq' | 'together' | 'ollama' | 'vllm' | 'mock';
 
-// No ambiente de desenvolvimento/local, ignora erros de certificado autoassinado de proxies/antivírus de rede
-if (process.env.NODE_ENV !== 'production') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -134,7 +129,7 @@ export class AIProviderGateway {
     if (isLiveProvider) {
       try {
         console.log(`[AIProvider] Chamando ${currentProvider.toUpperCase()} (${currentModel}) em ${currentBaseUrl}...`);
-        const response = await fetch(`${currentBaseUrl}/chat/completions`, {
+        const requestInit: RequestInit & { dispatcher?: unknown } = {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -147,7 +142,14 @@ export class AIProviderGateway {
             max_tokens: options.maxTokens ?? 512,
             stream: true,
           }),
-        });
+        };
+        // Só aceita certificado autoassinado quando explicitamente habilitado (afeta apenas esta chamada).
+        if (process.env.AI_ALLOW_INSECURE_TLS === 'true') {
+          // import dinâmico fora do bundle: undici é exclusivo do servidor (este módulo também é alcançado pelo cliente).
+          const { Agent } = await import(/* webpackIgnore: true */ 'undici');
+          requestInit.dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+        }
+        const response = await fetch(`${currentBaseUrl}/chat/completions`, requestInit);
 
         if (!response.ok) {
           const errText = await response.text();
