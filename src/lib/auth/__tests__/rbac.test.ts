@@ -58,6 +58,7 @@ describe('canAccessRoute', () => {
       '/api/v1/agendas',
       '/api/v1/agent/chat',
       '/api/v1/exams/x',
+      '/api/v1/drafts',
       '/api/v1/auth/me',
     ]) {
       expect(canAccessRoute(path, role)).toBe(true);

@@ -56,3 +56,7 @@ export async function listAgendaIdsByAssessment(assessmentId: string): Promise<s
   const agendas = await db.agenda.findMany({ where: { assessmentId }, select: { id: true } });
   return agendas.map((a) => a.id);
 }
+
+export function findAssessmentRubrics(id: string) {
+  return db.assessment.findUnique({ where: { id }, select: { rubrics: true } });
+}

@@ -44,6 +44,7 @@ export const API_ROUTES = {
   PEDAGOGY_HEATMAP: '/api/v1/pedagogy/reports/heatmap',
   PEDAGOGY_EXPORT_CSV: '/api/v1/pedagogy/reports/export.csv',
   EXAMS: '/api/v1/exams',
+  DRAFTS: '/api/v1/drafts',
   AUTH_ME: '/api/v1/auth/me',
   AUTH_LOGOUT: '/api/v1/auth/logout',
   TEACHER: '/api/v1/teacher',

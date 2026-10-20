@@ -98,13 +98,7 @@ function AgendaCard({ agenda }: { agenda: AgendaDTO }) {
             <span>{formatTimeWindow(agenda)}</span>
           </div>
 
-          {/* REMOVER: Task 21 (página de revisão de rascunho ainda não existe) */}
-          {agenda.type === 'DRAFT_REVIEW' && !isClosed && (
-            <Button size="sm" variant="outline" disabled className="text-xs h-8">
-              Em breve
-            </Button>
-          )}
-          {agenda.type !== 'DRAFT_REVIEW' && !isClosed && (
+          {!isClosed && (
             <Link href={getAgendaLink(agenda)}>
               <Button
                 size="sm"

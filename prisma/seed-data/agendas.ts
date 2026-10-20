@@ -46,6 +46,13 @@ export const DEMO_AGENDAS: readonly AgendaSeed[] = [
     startOffsetMinutes: 300,
     endOffsetMinutes: 360,
   },
+  {
+    title: 'Orientação de Trabalho: Artigo sobre Normalização',
+    type: AgendaType.DRAFT_REVIEW,
+    status: AgendaStatus.LIVE,
+    startOffsetMinutes: -10,
+    endOffsetMinutes: 170,
+  },
 ];
 
 export function offsetDate(base: number, minutes: number): Date {
