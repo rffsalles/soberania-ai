@@ -98,7 +98,13 @@ function AgendaCard({ agenda }: { agenda: AgendaDTO }) {
             <span>{formatTimeWindow(agenda)}</span>
           </div>
 
-          {!isClosed && (
+          {/* REMOVER: Task 21 (página de revisão de rascunho ainda não existe) */}
+          {agenda.type === 'DRAFT_REVIEW' && !isClosed && (
+            <Button size="sm" variant="outline" disabled className="text-xs h-8">
+              Em breve
+            </Button>
+          )}
+          {agenda.type !== 'DRAFT_REVIEW' && !isClosed && (
             <Link href={getAgendaLink(agenda)}>
               <Button
                 size="sm"
@@ -347,11 +353,13 @@ export default function DashboardPage() {
       </main>
 
       {/* Ata Modal Viewer */}
-      <PedagogicalMinutesModal
-        open={Boolean(selectedMinuteAgenda)}
-        onOpenChange={(open) => !open && setSelectedMinuteAgenda(null)}
-        agendaId={selectedMinuteAgenda || ''}
-      />
+      {selectedMinuteAgenda && (
+        <PedagogicalMinutesModal
+          open
+          onOpenChange={(open) => !open && setSelectedMinuteAgenda(null)}
+          agendaId={selectedMinuteAgenda}
+        />
+      )}
     </div>
   );
 }

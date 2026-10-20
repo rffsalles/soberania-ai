@@ -17,6 +17,16 @@ export function validateAgendaTimeWindow(
   }
 
   if (session.status === 'LIVE') {
+    const liveEnd = new Date(session.endTime).getTime();
+    if (!isNaN(liveEnd)) {
+      const remaining = Math.max(0, Math.ceil((liveEnd - currentTime.getTime()) / (1000 * 60)));
+      return {
+        isWithinWindow: true,
+        minutesRemaining: remaining,
+        timeUntilStartMinutes: 0,
+        message: `Sessão ativa e transmitida ao vivo. Você tem ${remaining} minuto(s) restante(s).`,
+      };
+    }
     return {
       isWithinWindow: true,
       minutesRemaining: session.authorizedWindowMinutes || 90,
