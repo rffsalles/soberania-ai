@@ -9,6 +9,7 @@ import {
   DEMO_ASSESSMENT,
   DEMO_CLASS,
   DEMO_LESSON_PLANS,
+  DEMO_TOTAL_CLASSES,
   DEMO_PERIOD_CODE,
   DEMO_SCHEDULE,
   DEMO_SUBJECT,
@@ -133,7 +134,7 @@ async function main() {
     ? await prisma.teachingPlan.update({ where: { id: existingPlan.id }, data: planData })
     : await prisma.teachingPlan.create({ data: { ...planWhere, ...planData } });
 
-  const scheduleData = { ...DEMO_SCHEDULE, totalClasses: DEMO_LESSON_PLANS.length };
+  const scheduleData = { ...DEMO_SCHEDULE, totalClasses: DEMO_TOTAL_CLASSES };
   const existingSchedule = await prisma.courseSchedule.findFirst({ where: { teachingPlanId: plan.id } });
   const schedule = existingSchedule
     ? await prisma.courseSchedule.update({ where: { id: existingSchedule.id }, data: scheduleData })

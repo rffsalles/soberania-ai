@@ -39,4 +39,10 @@ describe('generateMeetings', () => {
       expect.objectContaining({ status: 400 })
     );
   });
+
+  it('rejects spans over the maximum with 400', () => {
+    expect(() => generateMeetings({ startDate: '2026-01-01', endDate: '2027-02-05', weekdays: [1], holidays: [] })).toThrowError(
+      expect.objectContaining({ status: 400 })
+    );
+  });
 });

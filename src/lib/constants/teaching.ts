@@ -12,3 +12,7 @@ export const LESSON_MEDIA_TYPE = { NONE: 'NONE' } as const;
 export const ASSESSMENT_TYPE = { EXAM: 'EXAM' } as const;
 export type AssessmentType = (typeof ASSESSMENT_TYPE)[keyof typeof ASSESSMENT_TYPE];
 export const ASSESSMENT_STATUS = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' } as const;
+
+export const SCHEDULE_MAX_SPAN_DAYS = 366;
+export const SCHEDULE_MAX_MEETINGS = 400;
+export const SCHEDULE_MAX_HOLIDAYS = 60;

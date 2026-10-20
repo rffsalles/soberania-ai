@@ -1,3 +1,4 @@
+import { generateMeetings } from '../../src/domains/teaching/schedule-generator';
 import { ASSESSMENT_STATUS, ASSESSMENT_TYPE, PLAN_STATUS } from '../../src/lib/constants/teaching';
 
 export const DEMO_CLASS = {
@@ -44,28 +45,28 @@ export const DEMO_SCHEDULE = {
   holidays: { weekdays: [1, 3], holidays: [] as string[] },
 };
 
-export const DEMO_LESSON_PLANS = [
-  {
-    classNumber: 1,
-    classDate: new Date('2026-02-10T13:00:00.000Z'),
-    topicTitle: 'Apresentação da Ementa e Arquitetura ANSI/SPARC de SGBD',
-  },
-  {
-    classNumber: 2,
-    classDate: new Date('2026-02-12T13:00:00.000Z'),
-    topicTitle: 'Mapeamento Entidade-Relacionamento no PostgreSQL Local',
-  },
-  {
-    classNumber: 3,
-    classDate: new Date('2026-02-19T13:00:00.000Z'),
-    topicTitle: 'Joins Avançados, Subqueries e Operações de Conjunto',
-  },
-  {
-    classNumber: 4,
-    classDate: new Date('2026-04-15T13:00:00.000Z'),
-    topicTitle: 'Prova Bimestral P1 Supervisionada com Anti-Fraude',
-  },
+const DEMO_MEETINGS = generateMeetings({
+  startDate: '2026-02-01',
+  endDate: '2026-06-30',
+  weekdays: DEMO_SCHEDULE.holidays.weekdays,
+  holidays: DEMO_SCHEDULE.holidays.holidays,
+});
+
+export const DEMO_TOTAL_CLASSES = DEMO_MEETINGS.length;
+
+const DEMO_LESSON_TOPICS = [
+  'Apresentação da Ementa e Arquitetura ANSI/SPARC de SGBD',
+  'Mapeamento Entidade-Relacionamento no PostgreSQL Local',
+  'Joins Avançados, Subqueries e Operações de Conjunto',
+  'Prova Bimestral P1 Supervisionada com Anti-Fraude',
 ];
+
+/** Demo lessons follow the schedule's own calendar rules, so the sync never conflicts with them. */
+export const DEMO_LESSON_PLANS = DEMO_LESSON_TOPICS.map((topicTitle, index) => ({
+  classNumber: DEMO_MEETINGS[index].classNumber,
+  classDate: new Date(`${DEMO_MEETINGS[index].date}T00:00:00Z`),
+  topicTitle,
+}));
 
 export const DEMO_ASSESSMENT = {
   title: 'Avaliação Diagnóstica 01: Álgebra Relacional e SQL',

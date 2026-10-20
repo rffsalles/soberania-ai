@@ -1,4 +1,5 @@
-import { DomainError } from '@/lib/api/domain-error';
+import { DomainError } from '../../lib/api/domain-error';
+import { SCHEDULE_MAX_MEETINGS, SCHEDULE_MAX_SPAN_DAYS } from '../../lib/constants/teaching';
 
 export type Meeting = { classNumber: number; date: string };
 
@@ -25,6 +26,9 @@ export function generateMeetings(rules: MeetingRules): Meeting[] {
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) {
     throw new DomainError(400, 'O período do cronograma é inválido.');
   }
+  if ((end - start) / MS_PER_DAY > SCHEDULE_MAX_SPAN_DAYS) {
+    throw new DomainError(400, `O período do cronograma não pode exceder ${SCHEDULE_MAX_SPAN_DAYS} dias.`);
+  }
   if (rules.weekdays.length === 0) {
     throw new DomainError(400, 'Selecione ao menos um dia da semana.');
   }
@@ -36,6 +40,9 @@ export function generateMeetings(rules: MeetingRules): Meeting[] {
     const day = new Date(time);
     const date = day.toISOString().slice(0, ISO_DATE_LENGTH);
     if (weekdays.has(day.getUTCDay()) && !holidays.has(date)) {
+      if (meetings.length >= SCHEDULE_MAX_MEETINGS) {
+        throw new DomainError(400, `O cronograma não pode exceder ${SCHEDULE_MAX_MEETINGS} aulas.`);
+      }
       meetings.push({ classNumber: meetings.length + 1, date });
     }
   }
