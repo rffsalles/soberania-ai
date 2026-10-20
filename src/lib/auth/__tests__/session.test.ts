@@ -81,10 +81,11 @@ describe('Soberania Auth & RBAC Security Suite', () => {
       expect(canAccessRoute('/appliance', Role.STUDENT)).toBe(false);
     });
 
-    it('deve permitir acesso ao /materials para TEACHER e ADMIN, mas proibir para STUDENT', () => {
+    it('deve manter /materials (legado, redirect) acessível a qualquer perfil e proibir /teacher/materials ao STUDENT', () => {
       expect(canAccessRoute('/materials', Role.TEACHER)).toBe(true);
       expect(canAccessRoute('/materials', Role.ADMIN)).toBe(true);
-      expect(canAccessRoute('/materials', Role.STUDENT)).toBe(false);
+      expect(canAccessRoute('/materials', Role.STUDENT)).toBe(true);
+      expect(canAccessRoute('/teacher/materials', Role.STUDENT)).toBe(false);
     });
 
     it('deve permitir acesso ao /pitch para qualquer perfil autenticado', () => {
@@ -95,7 +96,7 @@ describe('Soberania Auth & RBAC Security Suite', () => {
 
     it('deve retornar a rota inicial correta por papel', () => {
       expect(getDefaultRouteForRole(Role.ADMIN)).toBe('/appliance');
-      expect(getDefaultRouteForRole(Role.TEACHER)).toBe('/materials');
+      expect(getDefaultRouteForRole(Role.TEACHER)).toBe('/teacher/plans');
       expect(getDefaultRouteForRole(Role.STUDENT)).toBe('/dashboard');
     });
   });

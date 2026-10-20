@@ -1,4 +1,5 @@
 import { Role } from '@prisma/client';
+import { API_ROUTES, ROUTES } from '@/lib/constants/routes';
 
 export const AUTH_COOKIE_NAME = 'soberania_session' as const;
 
@@ -8,16 +9,63 @@ export const PUBLIC_ROUTES = [
   '/api/v1/auth/login',
 ] as const;
 
-export const PROTECTED_ROUTE_ROLES: Record<string, Role[]> = {
-  '/appliance': [Role.ADMIN],
-  '/materials': [Role.TEACHER, Role.ADMIN],
-  '/reports': [Role.TEACHER, Role.ADMIN],
-  '/pitch': [Role.STUDENT, Role.TEACHER, Role.ADMIN],
-  '/dashboard': [Role.STUDENT, Role.TEACHER, Role.ADMIN],
-  '/classroom': [Role.STUDENT, Role.TEACHER, Role.ADMIN],
-  '/exam': [Role.STUDENT, Role.TEACHER, Role.ADMIN],
-  '/study-group': [Role.STUDENT, Role.TEACHER, Role.ADMIN],
-} as const;
+const ALL_ROLES: readonly Role[] = [Role.STUDENT, Role.TEACHER, Role.ADMIN];
+const STAFF_ROLES: readonly Role[] = [Role.TEACHER, Role.ADMIN];
+const ADMIN_ONLY: readonly Role[] = [Role.ADMIN];
+
+/**
+ * Matriz prefixo -> papéis. O prefixo mais específico vence
+ * (ex.: /api/v1/admin/subjects libera TEACHER dentro de /api/v1/admin).
+ */
+export const PROTECTED_ROUTE_ROLES: Readonly<Record<string, readonly Role[]>> = {
+  [ROUTES.DASHBOARD]: ALL_ROLES,
+  [ROUTES.CLASSROOM]: ALL_ROLES,
+  [ROUTES.STUDY_GROUP]: ALL_ROLES,
+  [ROUTES.EXAM]: ALL_ROLES,
+  [ROUTES.OFFICE_HOURS]: ALL_ROLES,
+  [ROUTES.DRAFT_REVIEW]: ALL_ROLES,
+  [ROUTES.PITCH]: ALL_ROLES,
+  // Legado: vira redirect para /teacher/materials, precisa continuar alcançável.
+  [ROUTES.MATERIALS]: ALL_ROLES,
+  [ROUTES.TEACHER]: STAFF_ROLES,
+  [ROUTES.REPORTS]: STAFF_ROLES,
+  [ROUTES.ADMIN]: ADMIN_ONLY,
+  [ROUTES.APPLIANCE]: ADMIN_ONLY,
+  [API_ROUTES.AGENT]: ALL_ROLES,
+  [API_ROUTES.AGENDAS]: ALL_ROLES,
+  [API_ROUTES.PEDAGOGY]: ALL_ROLES,
+  [API_ROUTES.EXAMS]: ALL_ROLES,
+  [API_ROUTES.AUTH_ME]: ALL_ROLES,
+  [API_ROUTES.AUTH_LOGOUT]: ALL_ROLES,
+  [API_ROUTES.TEACHER]: STAFF_ROLES,
+  [API_ROUTES.LIBRARY]: STAFF_ROLES,
+  [API_ROUTES.MCP]: STAFF_ROLES,
+  // Escrita restrita a ADMIN fica em requireUser na rota.
+  [API_ROUTES.ADMIN_SUBJECTS]: STAFF_ROLES,
+  [API_ROUTES.ACADEMIC_PERIODS]: STAFF_ROLES,
+  [API_ROUTES.ADMIN]: ADMIN_ONLY,
+  [API_ROUTES.APPLIANCE]: ADMIN_ONLY,
+};
+
+/** Prefixos de área: caminhos autenticados sob eles e não listados são negados. */
+const DENY_BY_DEFAULT_PREFIXES: readonly string[] = [
+  API_ROUTES.ROOT,
+  ROUTES.TEACHER,
+  ROUTES.ADMIN,
+  ROUTES.APPLIANCE,
+  ROUTES.REPORTS,
+  ROUTES.DASHBOARD,
+  ROUTES.CLASSROOM,
+  ROUTES.STUDY_GROUP,
+  ROUTES.EXAM,
+  ROUTES.OFFICE_HOURS,
+  ROUTES.DRAFT_REVIEW,
+  ROUTES.PITCH,
+];
+
+function matchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`);
+}
 
 /**
  * Verifica se uma rota é pública (não exige autenticação).
@@ -46,12 +94,20 @@ export function isPublicRoute(pathname: string): boolean {
  * Verifica se determinado papel possui permissão para acessar a rota.
  */
 export function canAccessRoute(pathname: string, role: Role): boolean {
-  for (const [prefix, allowedRoles] of Object.entries(PROTECTED_ROUTE_ROLES)) {
-    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
-      return allowedRoles.includes(role);
+  let bestPrefix: string | null = null;
+  for (const prefix of Object.keys(PROTECTED_ROUTE_ROLES)) {
+    if (matchesPrefix(pathname, prefix) && (bestPrefix === null || prefix.length > bestPrefix.length)) {
+      bestPrefix = prefix;
     }
   }
-  // Rotas não listadas explicitamente mas internas: permitido a qualquer autenticado
+  if (bestPrefix !== null) {
+    return PROTECTED_ROUTE_ROLES[bestPrefix].includes(role);
+  }
+  // Negar por padrão em áreas e APIs não listadas.
+  if (DENY_BY_DEFAULT_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))) {
+    return false;
+  }
+  // Demais caminhos (ex.: estáticos) seguem o comportamento anterior.
   return true;
 }
 
@@ -61,11 +117,11 @@ export function canAccessRoute(pathname: string, role: Role): boolean {
 export function getDefaultRouteForRole(role: Role): string {
   switch (role) {
     case Role.ADMIN:
-      return '/appliance';
+      return ROUTES.APPLIANCE;
     case Role.TEACHER:
-      return '/materials';
+      return ROUTES.TEACHER_PLANS;
     case Role.STUDENT:
     default:
-      return '/dashboard';
+      return ROUTES.DASHBOARD;
   }
 }
