@@ -9,7 +9,10 @@ export function createInteraction(data: InteractionInput): Promise<InteractionRe
 }
 
 export function listInteractionsByAgendaAndStudent(agendaId: string, studentId: string): Promise<InteractionRecord[]> {
-  return db.studentInteraction.findMany({ where: { agendaId, studentId }, orderBy: { createdAt: 'asc' } });
+  return db.studentInteraction.findMany({
+    where: { agendaId, studentId },
+    orderBy: { createdAt: 'asc' },
+  });
 }
 
 export async function listStudentIdsWithInteractions(agendaId: string): Promise<string[]> {
@@ -22,5 +25,8 @@ export async function listStudentIdsWithInteractions(agendaId: string): Promise<
 }
 
 export function listInteractionsByAgenda(agendaId: string): Promise<InteractionRecord[]> {
-  return db.studentInteraction.findMany({ where: { agendaId }, orderBy: { createdAt: 'asc' } });
+  return db.studentInteraction.findMany({
+    where: { agendaId },
+    orderBy: { createdAt: 'asc' },
+  });
 }

@@ -2,11 +2,7 @@ import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { aiProvider } from '@/lib/ai-provider';
 import type { AIMessage, AICompletionOptions, StreamChunk } from '@/lib/ai-provider';
-import {
-  getAgendaForUser,
-  type AgendaActor,
-  type AgendaDTO,
-} from '@/domains/agendas/services/agenda-service';
+import { getAgendaForUser, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import { findTeacherSubjectIds } from '@/domains/agendas/services/agenda-repository';
 import {
   buildFallbackMinutesText,
@@ -21,7 +17,10 @@ import * as minuteRepo from './minute-repository';
 import * as interactionRepo from './interaction-repository';
 import type { MinuteRecord, MinuteWhere } from './minute-repository';
 
-export type MinuteDTO = ClassMinuteData & { subjectName: string; className: string };
+export type MinuteDTO = ClassMinuteData & {
+  subjectName: string;
+  className: string;
+};
 
 export type MinuteFilter = {
   agendaId?: string;
@@ -57,6 +56,7 @@ const defaultDeps: MinutesDeps = {
 
 const MINUTE_TEMPERATURE = 0.3;
 const MINUTE_MAX_TOKENS = 400;
+const MINUTES_BATCH_SIZE = 4;
 
 function toDTO(r: MinuteRecord): MinuteDTO {
   return {
@@ -145,7 +145,10 @@ export async function generateMinute(
   return toDTO(record);
 }
 
-export type AgendaMinutesResult = { generated: number; failed: { studentId: string; error: string }[] };
+export type AgendaMinutesResult = {
+  generated: number;
+  failed: { studentId: string; error: string }[];
+};
 
 export async function generateMinutesForAgenda(
   agendaId: string,
@@ -153,13 +156,23 @@ export async function generateMinutesForAgenda(
   deps: MinutesDeps = defaultDeps
 ): Promise<AgendaMinutesResult> {
   const result: AgendaMinutesResult = { generated: 0, failed: [] };
-  for (const studentId of await deps.listStudentIds(agendaId)) {
-    try {
-      await generateMinute(user, { agendaId, studentId }, deps);
-      result.generated += 1;
-    } catch (err) {
-      result.failed.push({ studentId, error: err instanceof Error ? err.message : String(err) });
-    }
+  const studentIds = await deps.listStudentIds(agendaId);
+  for (let i = 0; i < studentIds.length; i += MINUTES_BATCH_SIZE) {
+    const batch = studentIds.slice(i, i + MINUTES_BATCH_SIZE);
+    const settled = await Promise.allSettled(
+      batch.map((studentId) => generateMinute(user, { agendaId, studentId }, deps))
+    );
+    settled.forEach((outcome, idx) => {
+      if (outcome.status === 'fulfilled') {
+        result.generated += 1;
+      } else {
+        const reason: unknown = outcome.reason;
+        result.failed.push({
+          studentId: batch[idx],
+          error: reason instanceof Error ? reason.message : String(reason),
+        });
+      }
+    });
   }
   return result;
 }
@@ -168,7 +181,11 @@ async function scopeWhere(user: AgendaActor, deps: MinutesDeps): Promise<MinuteW
   if (user.role === Role.ADMIN) return {};
   if (user.role === Role.TEACHER) {
     const subjectIds = await deps.findTeacherSubjectIds(user.id);
-    return { agenda: { OR: [{ subjectId: { in: subjectIds } }, { teacherId: user.id }] } };
+    return {
+      agenda: {
+        OR: [{ subjectId: { in: subjectIds } }, { teacherId: user.id }],
+      },
+    };
   }
   return { studentId: user.id };
 }

@@ -13,8 +13,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { status } = setAgendaStatusSchema.parse(await req.json());
     const agenda = await setAgendaStatus(id, user, status);
     if (status !== AgendaStatus.COMPLETED) return NextResponse.json({ success: true, agenda });
-    const minutes = await generateMinutesForAgenda(id, user);
-    return NextResponse.json({ success: true, agenda, minutes });
+    // Status já gravado: falha ao gerar atas não pode derrubar a resposta.
+    try {
+      const minutesResult = await generateMinutesForAgenda(id, user);
+      return NextResponse.json({ success: true, agenda, minutesResult });
+    } catch (err) {
+      console.error('[agendas] falha ao gerar atas ao concluir agenda', err);
+      return NextResponse.json({ success: true, agenda });
+    }
   } catch (error) {
     return apiError(error);
   }

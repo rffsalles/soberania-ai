@@ -34,25 +34,43 @@ function interaction(o: Partial<MetricInteraction> = {}): MetricInteraction {
   };
 }
 
-function makeDeps(opts: { interactions?: MetricInteraction[]; ai?: string; fallback?: boolean } = {}) {
+function makeDeps(
+  opts: {
+    interactions?: MetricInteraction[];
+    ai?: string;
+    fallback?: boolean;
+  } = {}
+) {
   const upsertMinute = vi.fn(async (data: Record<string, unknown>) => ({
     id: 'm1',
     ...data,
     createdAt: NOW,
     student: { name: 'Lucas' },
-    agenda: { subject: 'BD', subjectRef: { name: 'Banco de Dados' }, class: { name: 'Turma A' } },
+    agenda: {
+      subject: 'BD',
+      subjectRef: { name: 'Banco de Dados' },
+      class: { name: 'Turma A' },
+    },
   }));
-  const listMinutesRepo = vi.fn(async () => []);
+  const listMinutesRepo = vi.fn(async (_where: unknown) => []);
   const deps = {
     getAgenda: vi.fn(async () => agenda),
-    findStudent: vi.fn(async (id: string) => ({ id, name: 'Lucas', classId: 'c1' })),
+    findStudent: vi.fn(async (id: string) => ({
+      id,
+      name: 'Lucas',
+      classId: 'c1',
+    })),
     listInteractions: vi.fn(async () => opts.interactions ?? []),
     listStudentIds: vi.fn(async () => ['stu1', 'stu2']),
     findTeacherSubjectIds: vi.fn(async () => ['sub1']),
     upsertMinute,
     listMinutes: listMinutesRepo,
     streamChat: vi.fn(async function* (): AsyncGenerator<StreamChunk> {
-      yield { token: opts.ai ?? '', isComplete: false, fallback: opts.fallback ?? true };
+      yield {
+        token: opts.ai ?? '',
+        isComplete: false,
+        fallback: opts.fallback ?? true,
+      };
       yield { token: '', isComplete: true, fallback: opts.fallback ?? true };
     }),
     now: () => NOW,
@@ -84,7 +102,11 @@ describe('generateMinute', () => {
     const { deps } = makeDeps({
       interactions: [
         interaction({ wasCorrect: true }),
-        interaction({ type: InteractionType.SOCRATIC_CHALLENGE, ragSourcePage: 9, wasCorrect: false }),
+        interaction({
+          type: InteractionType.SOCRATIC_CHALLENGE,
+          ragSourcePage: 9,
+          wasCorrect: false,
+        }),
       ],
       ai: 'Texto: {"rawSummary":"Resumo IA","actionableAdvice":"Conselho IA"}',
       fallback: false,
@@ -99,7 +121,11 @@ describe('generateMinute', () => {
   });
 
   it('usa fallback determinístico quando a IA devolve lixo', async () => {
-    const { deps } = makeDeps({ interactions: [interaction()], ai: 'não é json', fallback: false });
+    const { deps } = makeDeps({
+      interactions: [interaction()],
+      ai: 'não é json',
+      fallback: false,
+    });
     const minute = await generateMinute(teacher, { agendaId: 'ag1', studentId: 'stu1' }, deps);
     expect(minute.rawSummary.length).toBeGreaterThan(0);
     expect(minute.actionableAdvice.length).toBeGreaterThan(0);
@@ -120,16 +146,24 @@ describe('listMinutes', () => {
   it('aluno ignora studentId alheio do filtro', async () => {
     const { deps, listMinutesRepo } = makeDeps();
     await listMinutes(student, { studentId: 'other' }, deps);
-    const where = JSON.stringify(listMinutesRepo.mock.calls[0]);
-    expect(where).toContain('"studentId":"stu1"');
-    expect(where).not.toContain('other');
+    const where = listMinutesRepo.mock.calls[0][0] as unknown as {
+      AND: unknown[];
+    };
+    expect(where.AND).toEqual([{ studentId: 'stu1' }]);
   });
 
-  it('professor é limitado às suas disciplinas', async () => {
+  it('professor é limitado às suas disciplinas ou agendas próprias', async () => {
     const { deps, listMinutesRepo } = makeDeps();
-    await listMinutes(teacher, { agendaId: 'ag1' }, deps);
-    const where = JSON.stringify(listMinutesRepo.mock.calls[0]);
-    expect(where).toContain('sub1');
-    expect(where).toContain('"teacherId":"t1"');
+    await listMinutes(teacher, { agendaId: 'ag1', studentId: 'stu9' }, deps);
+    const where = listMinutesRepo.mock.calls[0][0] as unknown as {
+      AND: unknown[];
+    };
+    expect(where.AND).toEqual([
+      {
+        agenda: { OR: [{ subjectId: { in: ['sub1'] } }, { teacherId: 't1' }] },
+      },
+      { agendaId: 'ag1' },
+      { studentId: 'stu9' },
+    ]);
   });
 });
