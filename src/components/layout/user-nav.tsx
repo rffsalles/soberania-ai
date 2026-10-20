@@ -11,11 +11,15 @@ import { useCurrentUser } from './use-current-user';
 
 interface UserNavProps {
   initialUser?: AuthenticatedUser | null;
+  isLoading?: boolean;
 }
 
-export function UserNav({ initialUser }: UserNavProps) {
+export function UserNav({ initialUser, isLoading }: UserNavProps) {
   const router = useRouter();
-  const { user: currentUser, isLoading: loading } = useCurrentUser(initialUser);
+  // Quando o pai informa isLoading, ele já carregou o usuário (evita requisição duplicada).
+  const ownState = useCurrentUser(initialUser, isLoading === undefined);
+  const currentUser = isLoading === undefined ? ownState.user : (initialUser ?? null);
+  const loading = isLoading ?? ownState.isLoading;
   const [loggedOut, setLoggedOut] = React.useState(false);
   const user = loggedOut ? null : currentUser;
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);

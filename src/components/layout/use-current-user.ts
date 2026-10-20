@@ -10,12 +10,15 @@ interface CurrentUserState {
 }
 
 /** Carrega o usuário autenticado a partir de /api/v1/auth/me. */
-export function useCurrentUser(initialUser?: AuthenticatedUser | null): CurrentUserState {
+export function useCurrentUser(
+  initialUser?: AuthenticatedUser | null,
+  enabled = true,
+): CurrentUserState {
   const [user, setUser] = React.useState<AuthenticatedUser | null>(initialUser ?? null);
-  const [isLoading, setIsLoading] = React.useState(!initialUser);
+  const [isLoading, setIsLoading] = React.useState(enabled && !initialUser);
 
   React.useEffect(() => {
-    if (initialUser) return;
+    if (!enabled || initialUser) return;
     let cancelled = false;
     fetch(API_ROUTES.AUTH_ME)
       .then((res) => (res.ok ? res.json() : null))
@@ -29,7 +32,7 @@ export function useCurrentUser(initialUser?: AuthenticatedUser | null): CurrentU
     return () => {
       cancelled = true;
     };
-  }, [initialUser]);
+  }, [initialUser, enabled]);
 
   return { user, isLoading };
 }

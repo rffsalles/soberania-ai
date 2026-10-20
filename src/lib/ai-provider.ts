@@ -143,13 +143,16 @@ export class AIProviderGateway {
             stream: true,
           }),
         };
+        let doFetch: typeof fetch = fetch;
         // Só aceita certificado autoassinado quando explicitamente habilitado (afeta apenas esta chamada).
         if (process.env.AI_ALLOW_INSECURE_TLS === 'true') {
           // import dinâmico fora do bundle: undici é exclusivo do servidor (este módulo também é alcançado pelo cliente).
-          const { Agent } = await import(/* webpackIgnore: true */ 'undici');
+          // O fetch vem do mesmo pacote do Agent, pois o fetch global do Node embute outra versão do undici.
+          const { Agent, fetch: undiciFetch } = await import(/* webpackIgnore: true */ 'undici');
           requestInit.dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+          doFetch = undiciFetch as unknown as typeof fetch;
         }
-        const response = await fetch(`${currentBaseUrl}/chat/completions`, requestInit);
+        const response = await doFetch(`${currentBaseUrl}/chat/completions`, requestInit);
 
         if (!response.ok) {
           const errText = await response.text();

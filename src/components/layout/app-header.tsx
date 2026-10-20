@@ -25,7 +25,7 @@ import { useCurrentUser } from './use-current-user';
 export function AppHeader() {
   const pathname = usePathname();
 
-  const { user } = useCurrentUser();
+  const { user, isLoading } = useCurrentUser();
 
   const allNavLinks = [
     { href: ROUTES.DASHBOARD, label: 'Painel do Aluno', icon: LayoutDashboard },
@@ -77,7 +77,7 @@ export function AppHeader() {
               <span className="sm:hidden">Aula</span>
             </Button>
           </Link>
-          <UserNav />
+          <UserNav initialUser={user} isLoading={isLoading} />
         </div>
       </div>
 
