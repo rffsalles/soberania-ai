@@ -14,6 +14,8 @@ export interface ChatMessage {
   isGuardrailViolation?: boolean;
   fallback?: boolean;
   failed?: boolean;
+  /** Mensagem gerada no cliente (ex.: saudação); nunca enviada no history. */
+  synthetic?: boolean;
   timestamp: string;
 }
 
@@ -24,7 +26,8 @@ interface DonePayload {
   fallback?: boolean;
 }
 
-const STREAM_ERROR_TEXT = 'Desculpe, a resposta foi interrompida. Por favor, tente novamente.';
+const STREAM_ERROR_TEXT = 'A resposta foi interrompida. Tente novamente.';
+const WINDOW_CLOSED_STATUS = 422;
 const REQUEST_ERROR_TEXT = 'Não foi possível enviar a mensagem. Tente novamente.';
 
 const now = () =>
@@ -45,6 +48,15 @@ export function useTutorChat({
   const [error, setError] = React.useState<string | null>(null);
   const messagesRef = React.useRef(messages);
   messagesRef.current = messages;
+  const controllerRef = React.useRef<AbortController | null>(null);
+  const isSendingRef = React.useRef(false);
+
+  React.useEffect(
+    () => () => {
+      controllerRef.current?.abort();
+    },
+    []
+  );
 
   const patch = React.useCallback((id: string, changes: Partial<ChatMessage>) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...changes } : m)));
@@ -53,16 +65,19 @@ export function useTutorChat({
   const send = React.useCallback(
     async (text: string, attachment?: ChatMessage['attachment']) => {
       const message = text.trim();
-      if (!message) return;
+      if (!message || isSendingRef.current) return;
+      isSendingRef.current = true;
 
       const history = messagesRef.current
-        .filter((m) => !m.failed && m.text)
+        .filter((m) => !m.failed && !m.synthetic && m.text)
         .slice(-CHAT_HISTORY_LIMIT)
         .map((m) => ({
           role: m.sender === 'student' ? ('user' as const) : ('assistant' as const),
           content: m.text,
         }));
 
+      const controller = new AbortController();
+      controllerRef.current = controller;
       const pendingId = nextId('teacher');
       setError(null);
       setIsStreaming(true);
@@ -72,16 +87,21 @@ export function useTutorChat({
         { id: pendingId, sender: 'teacher', text: '', timestamp: now() },
       ]);
 
-      const dropPending = () => setMessages((prev) => prev.filter((m) => m.id !== pendingId));
-      const fail = () => patch(pendingId, { text: STREAM_ERROR_TEXT, failed: true });
+      let finalized = false;
+      const fail = (text = STREAM_ERROR_TEXT) => {
+        finalized = true;
+        patch(pendingId, { text, failed: true });
+      };
 
       let streamed = '';
       const parser = createParser({
         onEvent(event) {
+          if (controller.signal.aborted) return;
           if (event.event === SSE_EVENT.TOKEN) {
             streamed += (JSON.parse(event.data) as { token: string }).token;
             patch(pendingId, { text: streamed });
           } else if (event.event === SSE_EVENT.DONE) {
+            finalized = true;
             const done = JSON.parse(event.data) as DonePayload;
             patch(pendingId, {
               text: done.reply,
@@ -100,12 +120,18 @@ export function useTutorChat({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agendaId, message, history }),
+          signal: controller.signal,
         });
 
         if (!res.ok || !res.body) {
-          const data = await res.json().catch(() => null);
-          dropPending();
-          setError((data as { error?: string } | null)?.error ?? REQUEST_ERROR_TEXT);
+          const data = (await res.json().catch(() => null)) as { error?: string } | null;
+          if (controller.signal.aborted) return;
+          if (res.status === WINDOW_CLOSED_STATUS) {
+            setMessages((prev) => prev.filter((m) => m.id !== pendingId));
+            setError(data?.error ?? REQUEST_ERROR_TEXT);
+          } else {
+            fail(data?.error ?? REQUEST_ERROR_TEXT);
+          }
           return;
         }
 
@@ -116,16 +142,25 @@ export function useTutorChat({
           if (done) break;
           parser.feed(decoder.decode(value, { stream: true }));
         }
+        if (!finalized && !controller.signal.aborted) fail();
       } catch {
-        fail();
+        if (!controller.signal.aborted) fail();
       } finally {
-        setIsStreaming(false);
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+          isSendingRef.current = false;
+          if (!controller.signal.aborted) setIsStreaming(false);
+        }
       }
     },
     [agendaId, patch]
   );
 
   const reset = React.useCallback(() => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    isSendingRef.current = false;
+    setIsStreaming(false);
     setMessages(initialMessages);
     setError(null);
   }, [initialMessages]);

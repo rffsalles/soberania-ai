@@ -46,6 +46,7 @@ export function UniversalSocraticChat({
     () => [
       {
         id: 'greeting',
+        synthetic: true,
         sender: 'teacher',
         text: GREETINGS[agendaType],
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),

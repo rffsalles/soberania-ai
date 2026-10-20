@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useTutorChat } from '../use-tutor-chat';
+import { useTutorChat, type ChatMessage } from '../use-tutor-chat';
 
 function sseResponse(frames: string[]): Response {
   const encoder = new TextEncoder();
@@ -59,5 +59,91 @@ describe('useTutorChat', () => {
       await result.current.send('oi');
     });
     await waitFor(() => expect(result.current.error).toBe('Fora da janela.'));
+  });
+
+  it('não envia a saudação sintética no history', async () => {
+    const greeting: ChatMessage[] = [
+      { id: 'g', sender: 'teacher', text: 'Olá!', synthetic: true, timestamp: '10:00' },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(sseResponse(['event: done\ndata: {"reply":"ok","citations":[]}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() =>
+      useTutorChat({ agendaId: 'ag-1', initialMessages: greeting })
+    );
+    await act(async () => {
+      await result.current.send('oi');
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).history).toEqual([]);
+  });
+
+  it('ignora um segundo envio enquanto o primeiro está em andamento', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      await gate;
+      return sseResponse(['event: done\ndata: {"reply":"ok","citations":[]}\n\n']);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useTutorChat({ agendaId: 'ag-1' }));
+    await act(async () => {
+      const first = result.current.send('a');
+      void result.current.send('b');
+      release();
+      await first;
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('mantém o composer livre em respostas não-OK diferentes de 422', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ success: false, error: 'Falha interna.' }), { status: 500 })
+        )
+    );
+    const { result } = renderHook(() => useTutorChat({ agendaId: 'ag-1' }));
+    await act(async () => {
+      await result.current.send('oi');
+    });
+    expect(result.current.error).toBeNull();
+    const last = result.current.messages[result.current.messages.length - 1];
+    expect(last.failed).toBe(true);
+    expect(last.text).toBe('Falha interna.');
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it('marca como falha quando o stream termina sem done', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(sseResponse(['event: token\ndata: {"token":"Ol"}\n\n']))
+    );
+    const { result } = renderHook(() => useTutorChat({ agendaId: 'ag-1' }));
+    await act(async () => {
+      await result.current.send('oi');
+    });
+    const last = result.current.messages[result.current.messages.length - 1];
+    expect(last.failed).toBe(true);
+    expect(last.text).toBe('A resposta foi interrompida. Tente novamente.');
+  });
+
+  it('aborta o fetch ao desmontar', async () => {
+    let signal!: AbortSignal;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise(() => {});
+      })
+    );
+    const { result, unmount } = renderHook(() => useTutorChat({ agendaId: 'ag-1' }));
+    act(() => {
+      void result.current.send('oi');
+    });
+    unmount();
+    expect(signal.aborted).toBe(true);
   });
 });
