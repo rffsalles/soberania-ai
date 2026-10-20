@@ -1,4 +1,8 @@
-import { db } from '@/lib/db';
+import {
+  createUser,
+  findUserByEmailOrEnrollment,
+  setUserPasswordHash,
+} from '@/domains/auth/services/user-repository';
 import { hashPassword } from './password';
 import { Role } from '@prisma/client';
 
@@ -31,29 +35,20 @@ export const DEMO_USERS = [
  */
 export async function ensureDemoUsersExist(): Promise<void> {
   for (const demo of DEMO_USERS) {
-    const existing = await db.user.findFirst({
-      where: {
-        OR: [{ email: demo.email }, { enrollment: demo.enrollment }],
-      },
-    });
+    const existing = await findUserByEmailOrEnrollment(demo.email, demo.enrollment);
 
     const passwordHash = await hashPassword(demo.passwordPlain);
 
     if (!existing) {
-      await db.user.create({
-        data: {
-          name: demo.name,
-          email: demo.email,
-          enrollment: demo.enrollment,
-          passwordHash,
-          role: demo.role,
-        },
+      await createUser({
+        name: demo.name,
+        email: demo.email,
+        enrollment: demo.enrollment,
+        passwordHash,
+        role: demo.role,
       });
     } else if (!existing.passwordHash) {
-      await db.user.update({
-        where: { id: existing.id },
-        data: { passwordHash },
-      });
+      await setUserPasswordHash(existing.id, passwordHash);
     }
   }
 }

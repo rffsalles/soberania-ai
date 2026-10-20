@@ -1,4 +1,42 @@
 {
   "root": true,
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@/lib/db",
+            "message": "Use um *-repository.ts"
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*-repository.ts",
+        "prisma/seed.ts",
+        "**/__tests__/**",
+        "tests/**"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": [
+        "src/app/api/v1/**/*.ts",
+        "src/domains/rag/**/*.ts"
+      ],
+      "excludedFiles": [
+        "src/app/api/v1/auth/**"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }

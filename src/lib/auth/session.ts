@@ -1,4 +1,5 @@
-import { db } from '@/lib/db';
+import { findUserProfile } from '@/domains/auth/services/user-repository';
+import * as sessionRepo from '@/domains/auth/services/session-repository';
 import { signAuthToken, verifyAuthToken } from './token';
 import { AuthenticatedUser } from './types';
 
@@ -11,18 +12,7 @@ export async function createSession(
   userId: string,
   metadata?: { ip?: string; userAgent?: string }
 ): Promise<{ token: string; user: AuthenticatedUser } | null> {
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      enrollment: true,
-      avatarUrl: true,
-      classId: true,
-    },
-  });
+  const user = await findUserProfile(userId);
 
   if (!user) return null;
 
@@ -30,14 +20,11 @@ export async function createSession(
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS);
 
-  const session = await db.session.create({
-    data: {
-      userId: user.id,
-      sessionToken,
-      expiresAt,
-      ipAddress: metadata?.ip || null,
-      userAgent: metadata?.userAgent || null,
-    },
+  const session = await sessionRepo.createSession(user.id, {
+    sessionToken,
+    expiresAt,
+    ip: metadata?.ip,
+    userAgent: metadata?.userAgent,
   });
 
   const authUser: AuthenticatedUser = {
@@ -68,15 +55,7 @@ export async function createSession(
  */
 export async function revokeSession(sessionId: string): Promise<boolean> {
   try {
-    await db.session.updateMany({
-      where: {
-        OR: [{ id: sessionId }, { sessionToken: sessionId }],
-        revokedAt: null,
-      },
-      data: {
-        revokedAt: new Date(),
-      },
-    });
+    await sessionRepo.revokeSession(sessionId);
     return true;
   } catch {
     return false;
@@ -88,13 +67,7 @@ export async function revokeSession(sessionId: string): Promise<boolean> {
  */
 export async function isSessionActive(sessionId: string): Promise<boolean> {
   try {
-    const session = await db.session.findFirst({
-      where: {
-        OR: [{ id: sessionId }, { sessionToken: sessionId }],
-        revokedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-    });
+    const session = await sessionRepo.findActiveSession(sessionId);
     return !!session;
   } catch {
     return false;
@@ -112,18 +85,7 @@ export async function getSessionUser(token: string): Promise<AuthenticatedUser |
   const active = await isSessionActive(payload.sessionId);
   if (!active) return null;
 
-  const user = await db.user.findUnique({
-    where: { id: payload.sub },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      enrollment: true,
-      avatarUrl: true,
-      classId: true,
-    },
-  });
+  const user = await findUserProfile(payload.sub);
 
   if (!user) return null;
 

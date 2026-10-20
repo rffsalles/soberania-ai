@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { findUserByIdentifier } from '@/domains/auth/services/user-repository';
 import { loginSchema } from '@/lib/validators/auth.validator';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
@@ -27,14 +27,7 @@ export async function POST(req: NextRequest) {
     // Garante usuários de demonstração se banco estiver vazio
     await ensureDemoUsersExist();
 
-    const user = await db.user.findFirst({
-      where: {
-        OR: [
-          { enrollment: cleanIdentifier },
-          { email: cleanIdentifier.toLowerCase() },
-        ],
-      },
-    });
+    const user = await findUserByIdentifier(cleanIdentifier);
 
     if (!user || !user.passwordHash) {
       return NextResponse.json(
