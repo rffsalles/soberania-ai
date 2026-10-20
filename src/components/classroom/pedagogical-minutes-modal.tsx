@@ -14,39 +14,17 @@ import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { generateClassMinute } from '@/lib/mocks-pending';
-import type { ClassMinuteData } from '@/domains/pedagogy/types';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useGeneratedMinute } from '@/components/pedagogy/use-minutes';
 
 interface PedagogicalMinutesModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  agendaId?: string;
-  sessionTitle?: string;
+  agendaId: string;
 }
 
-export function PedagogicalMinutesModal({
-  open,
-  onOpenChange,
-  agendaId = 'session-live-01',
-  sessionTitle = 'Modelagem Conceitual e Álgebra Relacional (JOINs)',
-}: PedagogicalMinutesModalProps) {
-  const [minute, setMinute] = React.useState<ClassMinuteData | null>(null);
-
-  React.useEffect(() => {
-    if (open) {
-      const generated = generateClassMinute({
-        agendaId,
-        sessionTitle,
-        studentId: 'usr-student-01',
-        studentName: 'Lucas Ferreira',
-        questionsCount: 4,
-        challengesCount: 2,
-      });
-      setMinute(generated);
-    }
-  }, [open, agendaId, sessionTitle]);
-
-  if (!minute) return null;
+export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: PedagogicalMinutesModalProps) {
+  const { minute, isLoading, error } = useGeneratedMinute(agendaId, open);
 
   return (
     <AdaptiveModal
@@ -77,7 +55,8 @@ export function PedagogicalMinutesModal({
             <Button
               size="sm"
               className="gap-1.5 bg-brand-teal hover:bg-brand-teal-dark text-white cursor-pointer"
-              onClick={() => onOpenChange(false)}
+              onClick={() => window.print()}
+              disabled={!minute}
             >
               <Download className="h-4 w-4" />
               <span>Salvar PDF</span>
@@ -86,6 +65,15 @@ export function PedagogicalMinutesModal({
         </div>
       }
     >
+      {isLoading ? (
+        <div className="space-y-3" aria-busy="true">
+          <Skeleton className="h-16 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
+        </div>
+      ) : error || !minute ? (
+        <p className="text-sm text-red-600">{error ?? 'Ata indisponível.'}</p>
+      ) : (
       <div className="space-y-5 text-sm">
         {/* Metadados da Sessão */}
         <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -98,7 +86,7 @@ export function PedagogicalMinutesModal({
           <div>
             <span className="text-xs text-slate-500 font-medium">Disciplina</span>
             <p className="font-semibold text-slate-900 dark:text-white">
-              Banco de Dados I
+              {minute.subjectName}
             </p>
           </div>
           <div>
@@ -140,9 +128,6 @@ export function PedagogicalMinutesModal({
               </span>
             </div>
             <Progress value={minute.hesitationIndex} className="h-2 bg-amber-100" />
-            <p className="text-[11px] text-slate-500">
-              Média de 14s de reflexão antes de submeter respostas
-            </p>
           </div>
         </div>
 
@@ -168,6 +153,9 @@ export function PedagogicalMinutesModal({
               Pontos de Atenção Pedagógica
             </span>
             <div className="flex flex-wrap gap-1.5">
+              {minute.topicsStruggled.length === 0 && (
+                <span className="text-xs text-slate-500">Nenhum ponto de atenção registrado.</span>
+              )}
               {minute.topicsStruggled.map((topic) => (
                 <Badge key={topic} variant="amber" className="text-xs py-1">
                   {topic}
@@ -191,6 +179,7 @@ export function PedagogicalMinutesModal({
           </div>
         </div>
       </div>
+      )}
     </AdaptiveModal>
   );
 }

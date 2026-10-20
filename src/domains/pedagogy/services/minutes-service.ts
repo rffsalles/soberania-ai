@@ -26,6 +26,7 @@ export type MinuteFilter = {
   agendaId?: string;
   studentId?: string;
   subjectId?: string;
+  classId?: string;
   from?: string;
   to?: string;
 };
@@ -199,6 +200,7 @@ export async function listMinutes(
   if (filter.agendaId) conditions.push({ agendaId: filter.agendaId });
   if (user.role !== Role.STUDENT && filter.studentId) conditions.push({ studentId: filter.studentId });
   if (filter.subjectId) conditions.push({ agenda: { subjectId: filter.subjectId } });
+  if (filter.classId) conditions.push({ agenda: { classId: filter.classId } });
   if (filter.from || filter.to) {
     conditions.push({
       createdAt: {

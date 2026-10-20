@@ -107,7 +107,6 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           open={minutesModalOpen}
           onOpenChange={setMinutesModalOpen}
           agendaId={session.id}
-          sessionTitle={session.title}
         />
       )}
     </div>

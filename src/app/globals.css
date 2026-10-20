@@ -141,3 +141,18 @@ h1, h2, h3, h4, .font-heading {
 .shadow-soft-xl {
   box-shadow: 0 20px 30px -8px rgba(15, 23, 42, 0.07), 0 8px 12px -4px rgba(15, 23, 42, 0.03);
 }
+
+/* Impressão de relatórios e atas: oculta navegação e controles. */
+@media print {
+  header,
+  nav,
+  button,
+  select,
+  input {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+}

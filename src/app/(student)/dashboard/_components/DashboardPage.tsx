@@ -14,8 +14,8 @@ import { useAgendas } from '@/components/agendas/use-agenda';
 import { useCurrentUser } from '@/components/layout/use-current-user';
 import { getAgendaLink } from '@/lib/constants/routes';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
-// REMOVER: Task 17 (atas e KPIs ainda vêm de mocks-pending)
-import { getMockMinutesFeed } from '@/lib/mocks-pending';
+import { useMinutes } from '@/components/pedagogy/use-minutes';
+import { RetentionScore } from '@/components/pedagogy/retention-score';
 import {
   Calendar,
   Video,
@@ -143,13 +143,17 @@ export default function DashboardPage() {
   const [selectedMinuteAgenda, setSelectedMinuteAgenda] = React.useState<string | null>(null);
   const { agendas, isLoading: agendasLoading, error: agendasError } = useAgendas();
   const { user } = useCurrentUser();
-  // REMOVER: Task 17
-  const minutesHistory = getMockMinutesFeed();
+  const { data: minutesHistory, isLoading: minutesLoading, error: minutesError } = useMinutes();
 
   const liveAgendas = agendas.filter((a) => a.status === 'LIVE');
   const upcomingAgendas = agendas.filter((a) => a.status === 'SCHEDULED');
   const closedAgendas = agendas.filter((a) => a.status === 'COMPLETED' || a.status === 'CANCELLED');
   const firstLive = liveAgendas[0];
+  const completedCount = agendas.filter((a) => a.status === 'COMPLETED').length;
+  const averageEngagement = minutesHistory.length
+    ? (minutesHistory.reduce((sum, m) => sum + m.engagementScore, 0) / minutesHistory.length).toFixed(1)
+    : null;
+  const totalQuestions = minutesHistory.reduce((sum, m) => sum + m.totalQuestionsAsked, 0);
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
@@ -184,14 +188,14 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Metrics Quick Strip — REMOVER: Task 17 */}
+        {/* Metrics Quick Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <p className="text-xs text-slate-500 font-medium">Aulas Concluídas</p>
                 <h3 className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
-                  14 / 20
+                  {completedCount} / {agendas.length}
                 </h3>
               </div>
               <div className="h-10 w-10 rounded-xl bg-brand-teal/10 flex items-center justify-center text-brand-teal">
@@ -205,7 +209,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-xs text-slate-500 font-medium">Média de Engajamento</p>
                 <h3 className="text-2xl font-bold font-heading text-emerald-600 dark:text-emerald-400 mt-1">
-                  91.8%
+                  {averageEngagement ? `${averageEngagement}%` : '—'}
                 </h3>
               </div>
               <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
@@ -219,7 +223,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-xs text-slate-500 font-medium">Dúvidas Socráticas</p>
                 <h3 className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
-                  38 Enviadas
+                  {totalQuestions} Enviadas
                 </h3>
               </div>
               <div className="h-10 w-10 rounded-xl bg-brand-orange/10 flex items-center justify-center text-brand-orange">
@@ -233,7 +237,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-xs text-slate-500 font-medium">Atas Homologadas</p>
                 <h3 className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
-                  14 Emitidas
+                  {minutesHistory.length} Emitidas
                 </h3>
               </div>
               <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-600">
@@ -296,6 +300,27 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {minutesLoading && (
+                  <TableRow>
+                    <TableCell colSpan={5}>
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
+                  </TableRow>
+                )}
+                {minutesError && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-sm text-red-600">
+                      {minutesError}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!minutesLoading && !minutesError && minutesHistory.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-sm text-slate-500">
+                      Nenhuma ata emitida até o momento.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {minutesHistory.map((m) => (
                   <TableRow
                     key={m.id}
@@ -312,9 +337,7 @@ export default function DashboardPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs text-emerald-600 font-mono">
-                          {m.engagementScore}%
-                        </span>
+                        <RetentionScore score={m.engagementScore} />
                         <Progress value={m.engagementScore} className="w-16 h-1.5" />
                       </div>
                     </TableCell>
