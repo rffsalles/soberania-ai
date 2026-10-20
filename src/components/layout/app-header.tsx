@@ -6,13 +6,9 @@ import { usePathname } from 'next/navigation';
 import {
   GraduationCap,
   LayoutDashboard,
-  Video,
-  Users,
-  FileCheck2,
   BookOpen,
   BarChart3,
   Server,
-  Sparkles,
 } from 'lucide-react';
 import { TelemetryBadge } from './telemetry-badge';
 import { UserNav } from './user-nav';
@@ -28,10 +24,7 @@ export function AppHeader() {
   const { user, isLoading } = useCurrentUser();
 
   const allNavLinks = [
-    { href: ROUTES.DASHBOARD, label: 'Painel do Aluno', icon: LayoutDashboard },
-    { href: '/classroom/session-live-01', label: 'Aula Interativa', icon: Video },
-    { href: '/study-group/group-study-01', label: 'Grupo de Estudos', icon: Users },
-    { href: '/exam/exam-01', label: 'Sala de Prova', icon: FileCheck2 },
+    { href: ROUTES.DASHBOARD, label: 'Painel', icon: LayoutDashboard },
     { href: ROUTES.REPORTS, label: 'Analytics Docente', icon: BarChart3 },
     { href: ROUTES.TEACHER_MATERIALS, label: 'Acervo RAG', icon: BookOpen },
     { href: ROUTES.APPLIANCE, label: 'Hardware & Telemetria', icon: Server },
@@ -70,13 +63,6 @@ export function AppHeader() {
 
         {/* User Role Quick Switch & Auth */}
         <div className="flex items-center gap-3">
-          <Link href="/classroom/session-live-01">
-            <Button size="sm" className="gap-1.5 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer shadow-sm">
-              <Sparkles className="h-4 w-4" />
-              <span className="hidden sm:inline">Entrar na Aula AO VIVO</span>
-              <span className="sm:hidden">Aula</span>
-            </Button>
-          </Link>
           <UserNav initialUser={user} isLoading={isLoading} />
         </div>
       </div>

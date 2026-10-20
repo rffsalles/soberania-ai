@@ -1,3 +1,5 @@
+import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
+
 /**
  * Rotas de página da aplicação. Única fonte de strings de rota para a matriz
  * de RBAC e para a rota inicial de cada papel.
@@ -48,3 +50,15 @@ export const API_ROUTES = {
   ACADEMIC_PERIODS: '/api/v1/academic-periods',
   APPLIANCE: '/api/v1/appliance',
 } as const;
+
+/** Link da página de uma agenda, conforme o seu tipo. */
+export function getAgendaLink(agenda: Pick<AgendaDTO, 'id' | 'type'>): string {
+  const base = {
+    CLASSROOM: ROUTES.CLASSROOM,
+    STUDY_GROUP: ROUTES.STUDY_GROUP,
+    EXAM: ROUTES.EXAM,
+    OFFICE_HOURS: ROUTES.OFFICE_HOURS,
+    DRAFT_REVIEW: ROUTES.DRAFT_REVIEW,
+  } as const satisfies Record<AgendaDTO['type'], string>;
+  return `${base[agenda.type]}/${agenda.id}`;
+}

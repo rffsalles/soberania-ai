@@ -9,7 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minutes-modal';
-import { getMockAgendas } from '@/lib/mocks-pending';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAgendas } from '@/components/agendas/use-agenda';
+import { useCurrentUser } from '@/components/layout/use-current-user';
+import { getAgendaLink } from '@/lib/constants/routes';
+import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
+// REMOVER: Task 17 (atas e KPIs ainda vêm de mocks-pending)
 import { getMockMinutesFeed } from '@/lib/mocks-pending';
 import {
   Calendar,
@@ -26,36 +31,119 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const AGENDA_ICONS: Record<AgendaDTO['type'], typeof Video> = {
+  CLASSROOM: Video,
+  STUDY_GROUP: Users,
+  EXAM: FileCheck2,
+  OFFICE_HOURS: BookOpen,
+  DRAFT_REVIEW: FileText,
+};
+
+const AGENDA_STATUS_LABEL: Record<AgendaDTO['status'], string> = {
+  LIVE: 'SESSÃO AO VIVO',
+  SCHEDULED: 'AGENDADA',
+  COMPLETED: 'ENCERRADA',
+  CANCELLED: 'CANCELADA',
+};
+
+function formatTimeWindow(agenda: AgendaDTO): string {
+  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+  const start = new Date(agenda.startTime).toLocaleTimeString('pt-BR', options);
+  const end = new Date(agenda.endTime).toLocaleTimeString('pt-BR', options);
+  return `${start} – ${end}`;
+}
+
+function AgendaCard({ agenda }: { agenda: AgendaDTO }) {
+  const Icon = AGENDA_ICONS[agenda.type];
+  const isLive = agenda.status === 'LIVE';
+  const isClosed = agenda.status === 'COMPLETED' || agenda.status === 'CANCELLED';
+
+  return (
+    <Card
+      className={cn(
+        'rounded-2xl border transition-all hover:shadow-md flex flex-col justify-between',
+        isLive
+          ? 'border-brand-orange/50 bg-white dark:bg-slate-900 shadow-soft-sm'
+          : 'border-slate-200 dark:border-slate-800'
+      )}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <Badge variant={isLive ? 'amber' : 'secondary'} className="text-xs font-semibold">
+            {AGENDA_STATUS_LABEL[agenda.status]}
+          </Badge>
+          <span className="text-xs text-slate-500 font-medium">{agenda.subject}</span>
+        </div>
+
+        <div className="flex items-start gap-3 pt-2">
+          <div className={cn('p-2 rounded-xl shrink-0', isLive ? 'bg-brand-orange/10 text-brand-orange' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="space-y-1 flex-1 min-w-0">
+            <CardTitle className="text-base font-semibold leading-snug">{agenda.title}</CardTitle>
+            <div className="flex flex-col gap-0.5 text-xs text-slate-600 dark:text-slate-400">
+              <span className="font-medium text-slate-800 dark:text-slate-200">
+                👨‍🏫 {agenda.teacherName}
+              </span>
+              <span className="text-[11px] text-slate-500">{agenda.className}</span>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="pt-0">
+        <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
+          <div className="flex items-center gap-1.5 font-mono">
+            <Clock className="h-3.5 w-3.5 text-brand-teal" />
+            <span>{formatTimeWindow(agenda)}</span>
+          </div>
+
+          {!isClosed && (
+            <Link href={getAgendaLink(agenda)}>
+              <Button
+                size="sm"
+                variant={isLive ? 'default' : 'outline'}
+                className={cn(
+                  'text-xs h-8 cursor-pointer gap-1',
+                  isLive && 'bg-brand-teal hover:bg-brand-teal-dark text-white'
+                )}
+              >
+                <span>Entrar</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AgendaGroup({ title, agendas }: { title: string; agendas: AgendaDTO[] }) {
+  if (agendas.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">{title}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {agendas.map((agenda) => (
+          <AgendaCard key={agenda.id} agenda={agenda} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [selectedMinuteAgenda, setSelectedMinuteAgenda] = React.useState<string | null>(null);
-  const agendas = getMockAgendas();
+  const { agendas, isLoading: agendasLoading, error: agendasError } = useAgendas();
+  const { user } = useCurrentUser();
+  // REMOVER: Task 17
   const minutesHistory = getMockMinutesFeed();
 
-  const getAgendaIcon = (type: string) => {
-    switch (type) {
-      case 'CLASSROOM':
-        return Video;
-      case 'STUDY_GROUP':
-        return Users;
-      case 'EXAM':
-        return FileCheck2;
-      default:
-        return BookOpen;
-    }
-  };
-
-  const getAgendaLink = (id: string, type: string) => {
-    switch (type) {
-      case 'CLASSROOM':
-        return `/classroom/${id}`;
-      case 'STUDY_GROUP':
-        return `/study-group/${id}`;
-      case 'EXAM':
-        return `/exam/${id}`;
-      default:
-        return `/classroom/${id}`;
-    }
-  };
+  const liveAgendas = agendas.filter((a) => a.status === 'LIVE');
+  const upcomingAgendas = agendas.filter((a) => a.status === 'SCHEDULED');
+  const closedAgendas = agendas.filter((a) => a.status === 'COMPLETED' || a.status === 'CANCELLED');
+  const firstLive = liveAgendas[0];
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
@@ -66,27 +154,31 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-brand-teal via-brand-teal-dark to-slate-900 text-white shadow-md">
           <div className="space-y-1.5">
             <Badge className="bg-white/20 hover:bg-white/25 text-white border-0 text-xs font-semibold backdrop-blur-xs">
-              Semestre Letivo 2026.2 · Turma ADS-3A
+              Semestre Letivo 2026.2
             </Badge>
             <h1 className="text-2xl sm:text-3xl font-bold font-heading">
-              Bem-vindo, Lucas Ferreira!
+              {user ? `Bem-vindo, ${user.name}!` : 'Bem-vindo!'}
             </h1>
             <p className="text-sm text-teal-100 max-w-xl">
-              Você possui <strong>1 Aula Síncrona AO VIVO</strong> e <strong>1 Grupo de Estudos Ativo</strong> agendados para hoje.
+              {agendasLoading
+                ? 'Carregando suas agendas...'
+                : `Você possui ${liveAgendas.length} sessão(ões) ao vivo e ${upcomingAgendas.length} agendada(s).`}
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Link href="/classroom/session-live-01">
-              <Button size="lg" className="bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold cursor-pointer shadow-lg">
-                <Sparkles className="h-4 w-4 mr-2" />
-                Entrar na Aula Agora
-              </Button>
-            </Link>
-          </div>
+          {firstLive && (
+            <div className="flex items-center gap-3">
+              <Link href={getAgendaLink(firstLive)}>
+                <Button size="lg" className="bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold cursor-pointer shadow-lg">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Entrar na Sessão Agora
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
 
-        {/* Metrics Quick Strip */}
+        {/* Metrics Quick Strip — REMOVER: Task 17 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
             <CardContent className="p-5 flex items-center justify-between">
@@ -151,85 +243,28 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-brand-teal" />
               <h2 className="text-lg font-bold font-heading text-slate-900 dark:text-white">
-                Sua Grade de Multi-Agendas Hoje
+                Sua Grade de Multi-Agendas
               </h2>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {agendas.map((agenda) => {
-              const Icon = getAgendaIcon(agenda.type);
-              const isLive = agenda.status === 'LIVE';
-
-              return (
-                <Card
-                  key={agenda.id}
-                  className={cn(
-                    'rounded-2xl border transition-all hover:shadow-md flex flex-col justify-between',
-                    isLive
-                      ? 'border-brand-orange/50 bg-white dark:bg-slate-900 shadow-soft-sm'
-                      : 'border-slate-200 dark:border-slate-800'
-                  )}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <Badge
-                        variant={isLive ? 'amber' : 'secondary'}
-                        className="text-xs font-semibold"
-                      >
-                        {isLive ? 'SESSÃO AO VIVO' : 'AGENDADA'}
-                      </Badge>
-                      <span className="text-xs text-slate-500 font-medium">
-                        {agenda.subject}
-                      </span>
-                    </div>
-
-                    <div className="flex items-start gap-3 pt-2">
-                      <div className={cn('p-2 rounded-xl shrink-0', isLive ? 'bg-brand-orange/10 text-brand-orange' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="space-y-1 flex-1 min-w-0">
-                        <CardTitle className="text-base font-semibold leading-snug">
-                          {agenda.title}
-                        </CardTitle>
-                        <div className="flex flex-col gap-0.5 text-xs text-slate-600 dark:text-slate-400">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">
-                            👨‍🏫 {agenda.teacherResponsible || agenda.instructorName}
-                          </span>
-                          <span className="text-[11px] text-brand-teal font-medium">
-                            🤖 Apoio: {agenda.tutorSupport || 'Tutora Lucy (Apoio IA)'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="pt-0">
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
-                      <div className="flex items-center gap-1.5 font-mono">
-                        <Clock className="h-3.5 w-3.5 text-brand-teal" />
-                        <span>Janela de 90 min</span>
-                      </div>
-
-                      <Link href={getAgendaLink(agenda.id, agenda.type)}>
-                        <Button
-                          size="sm"
-                          variant={isLive ? 'default' : 'outline'}
-                          className={cn(
-                            'text-xs h-8 cursor-pointer gap-1',
-                            isLive && 'bg-brand-teal hover:bg-brand-teal-dark text-white'
-                          )}
-                        >
-                          <span>Entrar</span>
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+          {agendasLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <Skeleton className="h-40 rounded-2xl" />
+              <Skeleton className="h-40 rounded-2xl" />
+              <Skeleton className="h-40 rounded-2xl" />
+            </div>
+          ) : agendasError ? (
+            <p className="text-sm text-red-600">{agendasError}</p>
+          ) : agendas.length === 0 ? (
+            <p className="text-sm text-slate-500">Nenhuma sessão agendada para você.</p>
+          ) : (
+            <div className="space-y-6">
+              <AgendaGroup title="Ao vivo agora" agendas={liveAgendas} />
+              <AgendaGroup title="Próximas" agendas={upcomingAgendas} />
+              <AgendaGroup title="Encerradas" agendas={closedAgendas} />
+            </div>
+          )}
         </div>
 
         {/* Section 2: Historical Pedagogical Minutes Table */}
@@ -315,7 +350,7 @@ export default function DashboardPage() {
       <PedagogicalMinutesModal
         open={Boolean(selectedMinuteAgenda)}
         onOpenChange={(open) => !open && setSelectedMinuteAgenda(null)}
-        agendaId={selectedMinuteAgenda || 'session-live-01'}
+        agendaId={selectedMinuteAgenda || ''}
       />
     </div>
   );

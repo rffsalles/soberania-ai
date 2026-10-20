@@ -7,7 +7,10 @@ import { SocraticChatPanel } from '@/components/classroom/socratic-chat-panel';
 import { DynamicFaqAccordion } from '@/components/classroom/dynamic-faq-accordion';
 import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minutes-modal';
 import { Badge } from '@/components/ui/badge';
-import { getMockAgendaById } from '@/lib/mocks-pending';
+import { AgendaNotFound } from '@/components/agendas/agenda-not-found';
+import { toAgendaSession } from '@/components/agendas/agenda-session';
+import { useAgenda } from '@/components/agendas/use-agenda';
+import { Skeleton } from '@/components/ui/skeleton';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 
@@ -18,22 +21,27 @@ interface ClassroomPageProps {
 export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   const [minutesModalOpen, setMinutesModalOpen] = React.useState(false);
 
-  const session = getMockAgendaById(sessionId) || {
-    id: sessionId,
-    title: 'Modelagem Conceitual e Álgebra Relacional (JOINs)',
-    subject: 'Banco de Dados I',
-    type: 'CLASSROOM' as const,
-    status: 'LIVE' as const,
-    startTime: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    endTime: new Date(Date.now() + 70 * 60 * 1000).toISOString(),
-    classId: 'class-ads-3a',
-    className: '3º Semestre · Análise e Desenv. de Sistemas',
-    teacherResponsible: 'Prof. Carlos Eduardo',
-    tutorSupport: 'Tutora Lucy',
-    instructorName: 'Prof. Carlos Eduardo',
-  };
+  const { agenda: session, isLoading, error, notFound } = useAgenda(sessionId);
 
-  const timeValidation = validateAgendaTimeWindow(session);
+  if (isLoading || !session) {
+    return (
+      <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
+        <AppHeader />
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+          {isLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-28 w-full rounded-2xl" />
+              <Skeleton className="h-[680px] w-full rounded-2xl" />
+            </div>
+          ) : (
+            <AgendaNotFound message={notFound ? undefined : (error ?? undefined)} />
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  const timeValidation = validateAgendaTimeWindow(toAgendaSession(session));
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
@@ -61,11 +69,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
             </h1>
             <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 pt-0.5 flex-wrap">
               <span className="font-semibold text-slate-700 dark:text-slate-200">
-                👨‍🏫 Professor Responsável: {session.teacherResponsible || session.instructorName}
-              </span>
-              <span>•</span>
-              <span className="text-brand-teal font-medium">
-                🤖 Apoio Pedagógico: {session.tutorSupport || 'Tutora Lucy (Apoio IA)'}
+                👨‍🏫 Professor Responsável: {session.teacherName}
               </span>
             </div>
           </div>
