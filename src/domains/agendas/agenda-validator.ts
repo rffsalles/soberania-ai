@@ -1,4 +1,4 @@
-import type { AgendaSession, AgendaTimeWindowValidation } from './types';
+import type { AgendaSession, AgendaStatus, AgendaTimeWindowValidation } from './types';
 
 /**
  * Valida se a requisição do aluno está dentro da janela de horário autorizada para a sessão
@@ -68,4 +68,19 @@ export function validateAgendaTimeWindow(
     timeUntilStartMinutes: 0,
     message: 'Sessão liberada para interação formativa.',
   };
+}
+
+/**
+ * Deriva o status efetivo da agenda a partir da janela de horário.
+ * CANCELLED e COMPLETED são terminais e permanecem.
+ */
+export function deriveAgendaStatus(
+  agenda: { status: AgendaStatus; startTime: Date | string; endTime: Date | string },
+  now: Date = new Date()
+): AgendaStatus {
+  if (agenda.status === 'CANCELLED' || agenda.status === 'COMPLETED') return agenda.status;
+  const t = now.getTime();
+  if (t < new Date(agenda.startTime).getTime()) return 'SCHEDULED';
+  if (t > new Date(agenda.endTime).getTime()) return 'COMPLETED';
+  return 'LIVE';
 }
