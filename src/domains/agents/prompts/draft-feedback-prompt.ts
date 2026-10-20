@@ -31,8 +31,8 @@ const feedbackSchema = z.object({
     .array(
       z.object({
         criterion: z.string().min(1),
-        score: z.number().min(0).max(DRAFT_MAX_SCORE),
-        comment: z.string(),
+        score: z.coerce.number(),
+        comment: z.string().default(''),
       })
     )
     .min(1),
@@ -49,6 +49,28 @@ export function parseDraftFeedback(raw: string): DraftFeedback | null {
   } catch {
     return null;
   }
+}
+
+const SCORE_DECIMALS = 10;
+const MISSING_COMMENT = 'Critério não avaliado pela IA; nota indicativa padrão.';
+const normalize = (s: string) => s.trim().toLowerCase();
+
+/** Monta as notas a partir da rubrica: limita 0..10, preenche faltantes e descarta critérios inventados. */
+export function reconcileRubricScores(rubric: DraftRubricItem[], scores: DraftRubricScore[]): DraftRubricScore[] {
+  const byCriterion = new Map<string, DraftRubricScore>();
+  for (const s of scores) if (!byCriterion.has(normalize(s.criterion))) byCriterion.set(normalize(s.criterion), s);
+  return rubric.map((r) => {
+    const found = byCriterion.get(normalize(r.criterion));
+    if (!found || !Number.isFinite(found.score)) {
+      return { criterion: r.criterion, score: DRAFT_FALLBACK_SCORE, comment: MISSING_COMMENT };
+    }
+    const clamped = Math.min(DRAFT_MAX_SCORE, Math.max(0, found.score));
+    return {
+      criterion: r.criterion,
+      score: Math.round(clamped * SCORE_DECIMALS) / SCORE_DECIMALS,
+      comment: found.comment,
+    };
+  });
 }
 
 /** Feedback determinístico por heurísticas simples, usado sem IA real. */

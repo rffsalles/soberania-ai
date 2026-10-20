@@ -12,18 +12,20 @@ import {
   buildDraftFeedbackMessages,
   buildFallbackDraftFeedback,
   parseDraftFeedback,
+  reconcileRubricScores,
   type DraftFeedback,
   type DraftRubricItem,
 } from '@/domains/agents/prompts/draft-feedback-prompt';
 import { parseDocumentFile } from '@/domains/rag/file-parser';
 import * as assessmentRepo from '@/domains/teaching/services/assessment-repository';
-import { DEFAULT_DRAFT_RUBRIC, DRAFT_MIN_CHARS } from '@/lib/constants/assessments';
+import { DEFAULT_DRAFT_RUBRIC, DRAFT_MAX_CHARS, DRAFT_MIN_CHARS } from '@/lib/constants/assessments';
 import { rubricSchema } from '../question-schema';
 import * as draftRepo from './draft-repository';
 
 const NOT_FOUND = 'Orientação de trabalho não encontrada.';
 const STUDENT_ONLY = 'Apenas alunos podem enviar rascunhos.';
 const TOO_SHORT = `O texto deve ter pelo menos ${DRAFT_MIN_CHARS} caracteres.`;
+const TOO_LONG = 'Texto excede o limite de 20.000 caracteres.';
 const EMPTY_FILE = 'Não foi possível extrair texto do arquivo enviado.';
 const FEEDBACK_TEMPERATURE = 0.3;
 const FEEDBACK_MAX_TOKENS = 2000;
@@ -107,9 +109,13 @@ export async function submitDraft(
   const content = raw.trim();
   if (input.file && !content) throw new DomainError(400, EMPTY_FILE);
   if (content.length < DRAFT_MIN_CHARS) throw new DomainError(400, TOO_SHORT);
+  if (content.length > DRAFT_MAX_CHARS) throw new DomainError(400, TOO_LONG);
 
   const rubric = await resolveRubric(agenda, deps);
-  const evaluation = (await askModel(content, rubric, deps)) ?? buildFallbackDraftFeedback(content, rubric);
+  const ai = await askModel(content, rubric, deps);
+  const evaluation = ai
+    ? { feedback: ai.feedback, rubricScores: reconcileRubricScores(rubric, ai.rubricScores) }
+    : buildFallbackDraftFeedback(content, rubric);
 
   const saved = await deps.createDraft({
     agendaId: agenda.id,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AgendaType, Role } from '@prisma/client';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
-import { DEFAULT_DRAFT_RUBRIC, DRAFT_MIN_CHARS } from '@/lib/constants/assessments';
+import { DEFAULT_DRAFT_RUBRIC, DRAFT_FALLBACK_SCORE, DRAFT_MAX_CHARS, DRAFT_MIN_CHARS } from '@/lib/constants/assessments';
 import { listMyDrafts, submitDraft, type DraftDeps } from '../draft-service';
 
 const student = { id: 's1', role: Role.STUDENT, classId: 'c1' };
@@ -95,6 +95,52 @@ describe('submitDraft', () => {
     const { deps } = makeDeps({ type: AgendaType.EXAM });
     await expect(submitDraft(student, { agendaId: 'ag1', content: LONG_TEXT }, deps)).rejects.toMatchObject({
       status: 404,
+    });
+  });
+});
+
+describe('submitDraft com IA', () => {
+  const aiReply = (json: string, fallback = false) =>
+    async function* () {
+      yield { token: json, isComplete: true, fallback };
+    };
+
+  it('limita nota a 10, descarta critério inventado e preenche faltante', async () => {
+    const { deps } = makeDeps();
+    const reply = `Segue:\n\`\`\`json\n${JSON.stringify({
+      feedback: 'Bom texto.',
+      rubricScores: [
+        { criterion: ' coesão ', score: 11, comment: 'Ótima' },
+        { criterion: 'Inventado', score: 9, comment: 'x' },
+        { criterion: 'Fontes', score: '7.26', comment: 'Ok' },
+      ],
+    })}\n\`\`\``;
+    const result = await submitDraft(student, { agendaId: 'ag1', content: LONG_TEXT }, {
+      ...deps,
+      streamChat: aiReply(reply),
+    });
+    expect(result.feedback).toBe('Bom texto.');
+    expect(result.rubricScores).toEqual([
+      { criterion: 'Coesão', score: 10, comment: 'Ótima' },
+      expect.objectContaining({ criterion: 'Coerência', score: DRAFT_FALLBACK_SCORE }),
+      { criterion: 'Fontes', score: 7.3, comment: 'Ok' },
+    ]);
+  });
+
+  it('usa o fallback quando o JSON é inválido', async () => {
+    const { deps } = makeDeps();
+    const result = await submitDraft(student, { agendaId: 'ag1', content: LONG_TEXT }, {
+      ...deps,
+      streamChat: aiReply('{ não é json }'),
+    });
+    expect(result.rubricScores.every((r) => r.score === DRAFT_FALLBACK_SCORE)).toBe(true);
+  });
+
+  it('rejeita texto acima do limite (400)', async () => {
+    const { deps } = makeDeps();
+    const huge = 'x'.repeat(DRAFT_MAX_CHARS + 1);
+    await expect(submitDraft(student, { agendaId: 'ag1', content: huge }, deps)).rejects.toMatchObject({
+      status: 400,
     });
   });
 });
