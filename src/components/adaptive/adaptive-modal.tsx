@@ -30,7 +30,7 @@ export function AdaptiveModal({
 }: AdaptiveModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn('max-h-[90vh] overflow-y-auto border-brand-orange/30', className)}>
+      <DialogContent data-print-root className={cn('max-h-[90vh] overflow-y-auto border-brand-orange/30', className)}>
         <DialogHeader>
           <DialogTitle className="text-xl font-bold font-heading text-slate-900 dark:text-white">
             {title}

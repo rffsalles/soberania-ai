@@ -142,17 +142,41 @@ h1, h2, h3, h4, .font-heading {
   box-shadow: 0 20px 30px -8px rgba(15, 23, 42, 0.07), 0 8px 12px -4px rgba(15, 23, 42, 0.03);
 }
 
-/* Impressão de relatórios e atas: oculta navegação e controles. */
+/* Impressão: classes escopadas; nada é oculto globalmente. */
+.print-only {
+  display: none;
+}
+
 @media print {
-  header,
-  nav,
-  button,
-  select,
-  input {
+  .print-hidden {
     display: none !important;
+  }
+
+  .print-only {
+    display: block;
   }
 
   body {
     background: #fff !important;
+  }
+
+  /* Modal aberto (html.print-modal): imprime apenas o conteúdo do diálogo. */
+  html.print-modal body > *:not([data-print-root]) {
+    display: none !important;
+  }
+
+  html.print-modal [data-print-root] {
+    position: static !important;
+    transform: none !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    animation: none !important;
+  }
+
+  html.print-modal [data-print-root] > button {
+    display: none !important;
   }
 }

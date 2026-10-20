@@ -17,6 +17,8 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGeneratedMinute } from '@/components/pedagogy/use-minutes';
 
+const PRINT_MODAL_CLASS = 'print-modal';
+
 interface PedagogicalMinutesModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -26,6 +28,13 @@ interface PedagogicalMinutesModalProps {
 export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: PedagogicalMinutesModalProps) {
   const { minute, isLoading, error } = useGeneratedMinute(agendaId, open);
 
+  React.useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    root.classList.add(PRINT_MODAL_CLASS);
+    return () => root.classList.remove(PRINT_MODAL_CLASS);
+  }, [open]);
+
   return (
     <AdaptiveModal
       open={open}
@@ -33,7 +42,7 @@ export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: Pedago
       title="Ata Pedagógica Individual"
       description="Parecer formativo e diagnóstico gerado pela Tutora Lucy para acompanhamento do Professor Responsável."
       footer={
-        <div className="flex items-center justify-between w-full">
+        <div className="print-hidden flex items-center justify-between w-full">
           <Button
             variant="outline"
             size="sm"

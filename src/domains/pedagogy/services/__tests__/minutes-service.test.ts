@@ -166,4 +166,18 @@ describe('listMinutes', () => {
       { studentId: 'stu9' },
     ]);
   });
+
+  it('filtra por turma via agenda.classId', async () => {
+    const { deps, listMinutesRepo } = makeDeps();
+    await listMinutes(teacher, { classId: 'class-1' }, deps);
+    const where = listMinutesRepo.mock.calls[0][0] as unknown as { AND: unknown[] };
+    expect(where.AND).toContainEqual({ agenda: { classId: 'class-1' } });
+  });
+
+  it('aluno mantém o escopo forçado ao filtrar por turma', async () => {
+    const { deps, listMinutesRepo } = makeDeps();
+    await listMinutes(student, { classId: 'class-1', studentId: 'other' }, deps);
+    const where = listMinutesRepo.mock.calls[0][0] as unknown as { AND: unknown[] };
+    expect(where.AND).toEqual([{ studentId: 'stu1' }, { agenda: { classId: 'class-1' } }]);
+  });
 });

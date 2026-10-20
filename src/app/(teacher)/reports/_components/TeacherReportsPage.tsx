@@ -48,6 +48,23 @@ function toApiFilter(f: FilterState): MinuteFilter {
   };
 }
 
+function describeFilters(
+  f: FilterState,
+  classes: SubjectOption[],
+  students: SubjectOption[],
+  subjects: SubjectOption[]
+): string {
+  const nameOf = (list: SubjectOption[], id: string, all: string) =>
+    id ? (list.find((o) => o.id === id)?.name ?? id) : all;
+  const period = f.from || f.to ? `${f.from || '…'} a ${f.to || '…'}` : 'Todo o período';
+  return [
+    `Turma: ${nameOf(classes, f.classId, 'Todas')}`,
+    `Aluno: ${nameOf(students, f.studentId, 'Todos')}`,
+    `Disciplina: ${nameOf(subjects, f.subjectId, 'Todas')}`,
+    `Período: ${period}`,
+  ].join(' | ');
+}
+
 function useSubjects(): SubjectOption[] {
   const [subjects, setSubjects] = React.useState<SubjectOption[]>([]);
   React.useEffect(() => {
@@ -140,7 +157,7 @@ export default function TeacherReportsPage() {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="print-hidden flex gap-2">
             <Button variant="outline" size="sm" className="gap-1.5 cursor-pointer" onClick={() => window.print()}>
               <Printer className="h-4 w-4" />
               <span>Imprimir Relatório</span>
@@ -156,7 +173,9 @@ export default function TeacherReportsPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <p className="print-only text-sm text-slate-700">{describeFilters(filters, classOptions, studentOptions, subjects)}</p>
+
+        <div className="print-hidden flex flex-wrap items-end gap-4 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           <FilterSelect
             label="Turma"
             value={filters.classId}
