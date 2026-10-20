@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getAllCorpusChunks, documentIngestionService } from '@/domains/rag';
 import type { RawDocumentPage } from '@/domains/rag';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 const rawPageSchema = z.object({
   pageNumber: z.number(),
@@ -39,6 +42,7 @@ export interface LibraryCategorySummary {
 
 export async function GET(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { searchParams } = new URL(req.url);
     const categoryFilter = searchParams.get('category');
     const searchQuery = searchParams.get('search')?.toLowerCase();
@@ -144,13 +148,13 @@ export async function GET(req: Request) {
       documents,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro ao listar acervo bibliográfico';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const body = await req.json();
     const parsed = ingestDocumentSchema.safeParse(body);
 
@@ -224,7 +228,6 @@ export async function POST(req: Request) {
       material: result,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro ao ingerir documento no acervo';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }

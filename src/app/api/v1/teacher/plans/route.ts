@@ -1,13 +1,20 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 export async function GET(req: Request) {
   try {
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { searchParams } = new URL(req.url);
     const subjectId = searchParams.get('subjectId');
 
     const plans = await db.teachingPlan.findMany({
-      where: subjectId ? { subjectId } : undefined,
+      where: {
+        ...(subjectId ? { subjectId } : {}),
+        ...(user.role === Role.TEACHER ? { teacherId: user.id } : {}),
+      },
       include: {
         subject: true,
         academicPeriod: true,
@@ -23,19 +30,16 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ success: true, plans });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, error: 'Falha ao buscar planos de ensino.' },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const body = await req.json();
     const {
       subjectId,
-      teacherId,
       academicPeriodId,
       syllabus,
       generalObjectives,
@@ -62,7 +66,7 @@ export async function POST(req: Request) {
     const plan = await db.teachingPlan.create({
       data: {
         subjectId,
-        teacherId: teacherId || 'PROF001',
+        teacherId: user.id,
         academicPeriodId: academicPeriodId || null,
         syllabus,
         generalObjectives: generalObjectives || '',
@@ -85,11 +89,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, plan });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Falha ao gerar plano de ensino.';
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return apiError(error);
   }
 }

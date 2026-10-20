@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { handleAgentOrchestration } from '@/domains/agents/agent-orchestrator';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
 
 const chatRequestSchema = z.object({
   message: z.string().min(1, 'Parâmetro message é obrigatório.'),
@@ -16,6 +18,7 @@ const chatRequestSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    await requireUser(req);
     const body = await req.json();
     const parsed = chatRequestSchema.safeParse(body);
 
@@ -47,10 +50,6 @@ export async function POST(req: NextRequest) {
       blockedByExamGuardrail: orchestrationResult.blockedByExamGuardrail,
     });
   } catch (error) {
-    console.error('Erro no orchestrator do agente:', error);
-    return NextResponse.json(
-      { error: 'Erro interno ao processar diálogo do agente.' },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }

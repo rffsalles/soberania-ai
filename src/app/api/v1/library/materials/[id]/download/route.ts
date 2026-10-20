@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { storageService } from '@/domains/storage';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 export async function GET(
   _req: Request,
   props: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireUser(_req, [Role.TEACHER, Role.ADMIN]);
     const { id } = await props.params;
 
     const material = await db.didacticMaterial.findUnique({
@@ -45,8 +49,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('[DownloadRoute] Erro ao baixar arquivo:', error);
-    const message = error instanceof Error ? error.message : 'Erro ao processar download';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }

@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { updateTeachingPlanSchema } from '@/lib/validators/teaching-plan.validator';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 
 
@@ -10,6 +13,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { id } = await params;
 
     if (!id) {
@@ -41,12 +45,8 @@ export async function GET(
     }
 
     return NextResponse.json({ success: true, plan });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Falha ao buscar plano de ensino.';
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return apiError(error);
   }
 }
 
@@ -55,6 +55,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { id } = await params;
     const body = await req.json();
 
@@ -102,12 +103,8 @@ export async function PUT(
     });
 
     return NextResponse.json({ success: true, plan: updatedPlan });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Falha ao atualizar plano de ensino.';
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return apiError(error);
   }
 }
 

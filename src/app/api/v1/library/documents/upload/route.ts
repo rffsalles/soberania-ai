@@ -6,9 +6,13 @@ import {
   parseDocumentFile,
   documentIngestionService,
 } from '@/domains/rag';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const title = (formData.get('title') as string | null) || '';
@@ -153,8 +157,6 @@ export async function POST(req: Request) {
       },
     }, { status: 201 });
   } catch (error) {
-    console.error('[UploadRoute] Erro no processamento de upload:', error);
-    const message = error instanceof Error ? error.message : 'Erro ao processar e ingerir arquivo.';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }

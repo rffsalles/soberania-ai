@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getAllCorpusChunks } from '@/domains/rag';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 const createCategorySchema = z.object({
   name: z.string().min(2, 'Nome da categoria deve ter pelo menos 2 caracteres'),
@@ -47,8 +50,9 @@ const DEFAULT_CATEGORIES = [
   },
 ];
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     let categories = await db.documentCategory.findMany({
       orderBy: { name: 'asc' },
     });
@@ -96,13 +100,13 @@ export async function GET() {
       categories: categoriesWithStats,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro ao listar categorias';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const json = await req.json();
     const parsed = createCategorySchema.safeParse(json);
 
@@ -151,7 +155,6 @@ export async function POST(req: Request) {
       { status: 201 }
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro ao cadastrar categoria';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }

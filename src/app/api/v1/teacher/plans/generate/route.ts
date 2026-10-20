@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { executeHybridSearch } from '@/domains/rag';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 interface GeneratePlanRequest {
   subjectName: string;
@@ -14,6 +17,7 @@ interface GeneratePlanRequest {
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const body: GeneratePlanRequest = await req.json();
     const {
       subjectName,
@@ -126,7 +130,6 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao gerar sugestão pedagógica com IA.';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 const createPeriodSchema = z.object({
   name: z.string().min(3, 'Nome do período deve ter no mínimo 3 caracteres'),
@@ -48,8 +51,9 @@ const DEFAULT_PERIODS = [
   },
 ];
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     let periods = await db.academicPeriod.findMany({
       where: { isActive: true },
       orderBy: [{ year: 'desc' }, { semester: 'desc' }, { createdAt: 'desc' }],
@@ -72,17 +76,14 @@ export async function GET() {
     }
 
     return NextResponse.json({ success: true, periods });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Falha ao buscar períodos letivos.';
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return apiError(error);
   }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.ADMIN]);
     const json = await req.json();
     const parsed = createPeriodSchema.safeParse(json);
 
@@ -116,11 +117,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, period }, { status: 201 });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Falha ao cadastrar período letivo.';
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return apiError(error);
   }
 }

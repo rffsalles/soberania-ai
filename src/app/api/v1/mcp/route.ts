@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Role } from '@prisma/client';
 import { localMcpServer } from '@/lib/mcp/mcp-server';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { DomainError } from '@/lib/api/domain-error';
 
 export async function POST(req: NextRequest) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const body = await req.json();
     const { toolName, args } = body;
 
     if (!toolName) {
-      return NextResponse.json(
-        { error: 'Parâmetro toolName é obrigatório.' },
-        { status: 400 }
-      );
+      throw new DomainError(400, 'Parâmetro toolName é obrigatório.');
     }
 
     const result = await localMcpServer.executeTool(toolName, args || {});
@@ -20,20 +22,21 @@ export async function POST(req: NextRequest) {
       result,
     });
   } catch (error) {
-    console.error('Erro na execução da MCP Tool:', error);
-    return NextResponse.json(
-      { error: (error as Error).message || 'Erro ao executar ferramenta MCP.' },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }
 
-export async function GET() {
-  const tools = localMcpServer.listTools();
-  return NextResponse.json({
-    status: 'online',
-    protocol: 'model-context-protocol/v1',
-    runtime: 'on-premises-appliance',
-    tools,
-  });
+export async function GET(req: NextRequest) {
+  try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    const tools = localMcpServer.listTools();
+    return NextResponse.json({
+      status: 'online',
+      protocol: 'model-context-protocol/v1',
+      runtime: 'on-premises-appliance',
+      tools,
+    });
+  } catch (error) {
+    return apiError(error);
+  }
 }

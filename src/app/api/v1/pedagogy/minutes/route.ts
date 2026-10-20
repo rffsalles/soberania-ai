@@ -1,26 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateClassMinute, getMockMinutesFeed } from '@/domains/pedagogy/minutes-generator';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const agendaId = searchParams.get('agendaId');
+  try {
+    await requireUser(req);
+    const { searchParams } = new URL(req.url);
+    const agendaId = searchParams.get('agendaId');
 
-  if (agendaId) {
-    const minute = generateClassMinute({
-      agendaId,
-      sessionTitle: 'Modelagem Conceitual e Álgebra Relacional (JOINs)',
-      studentId: 'student-lucas',
-      studentName: 'Lucas Ferreira',
-    });
-    return NextResponse.json({ success: true, minute });
+    if (agendaId) {
+      const minute = generateClassMinute({
+        agendaId,
+        sessionTitle: 'Modelagem Conceitual e Álgebra Relacional (JOINs)',
+        studentId: 'student-lucas',
+        studentName: 'Lucas Ferreira',
+      });
+      return NextResponse.json({ success: true, minute });
+    }
+
+    const feed = getMockMinutesFeed();
+    return NextResponse.json({ success: true, feed });
+  } catch (error) {
+    return apiError(error);
   }
-
-  const feed = getMockMinutesFeed();
-  return NextResponse.json({ success: true, feed });
 }
 
 export async function POST(req: NextRequest) {
   try {
+    await requireUser(req);
     const body = await req.json();
     const { agendaId, sessionTitle, studentId, studentName, questionsCount, challengesCount } = body;
 
@@ -35,10 +43,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, minute });
   } catch (error) {
-    console.error('Erro na emissão da ata:', error);
-    return NextResponse.json(
-      { error: 'Erro ao emitir ata pedagógica.' },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }

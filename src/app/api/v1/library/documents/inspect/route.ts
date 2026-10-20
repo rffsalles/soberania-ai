@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { validateFileSafety, documentInspectorService } from '@/domains/rag';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
 
@@ -44,8 +48,6 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    console.error('[DocumentInspectRoute] Erro na inspeção de documento:', error);
-    const message = error instanceof Error ? error.message : 'Erro ao inspecionar documento';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }

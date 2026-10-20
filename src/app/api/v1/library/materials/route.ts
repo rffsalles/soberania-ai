@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 export async function GET(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
     const search = searchParams.get('search')?.toLowerCase().trim();
@@ -88,8 +92,6 @@ export async function GET(req: Request) {
       categories,
     });
   } catch (error) {
-    console.error('[MaterialsRoute] Erro ao listar materiais:', error);
-    const message = error instanceof Error ? error.message : 'Erro ao listar materiais do acervo';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(error);
   }
 }

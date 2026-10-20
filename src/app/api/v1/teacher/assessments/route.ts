@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
+import { Role } from '@prisma/client';
 
 export async function GET(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { searchParams } = new URL(req.url);
     const planId = searchParams.get('planId');
 
@@ -18,15 +22,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ success: true, assessments });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, error: 'Falha ao buscar instrumentos de avaliação.' },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const body = await req.json();
     const { teachingPlanId, title, type, questions, rubrics, maxScore } = body;
 
@@ -49,11 +51,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, assessment });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar avaliação.';
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return apiError(error);
   }
 }

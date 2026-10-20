@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { Role } from '@prisma/client';
+import { requireUser } from '@/lib/auth/request-user';
+import { apiError } from '@/lib/api/api-error';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    await requireUser(req, [Role.ADMIN]);
     const teachers = await db.user.findMany({
       where: { role: Role.TEACHER },
       include: {
@@ -19,15 +22,13 @@ export async function GET() {
 
     return NextResponse.json({ success: true, teachers });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, error: 'Falha ao listar docentes.' },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireUser(req, [Role.ADMIN]);
     const body = await req.json();
     const { name, email, enrollment, passwordPlain } = body;
 
@@ -51,11 +52,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, teacher });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Falha ao cadastrar professor.';
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return apiError(error);
   }
 }
