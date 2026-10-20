@@ -28,3 +28,17 @@ export function createSchedule(data: Prisma.CourseScheduleUncheckedCreateInput) 
     include: { teachingPlan: { include: { subject: true } } },
   });
 }
+
+export function findScheduleForSync(id: string) {
+  return db.courseSchedule.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      holidays: true,
+      teachingPlan: { select: { teacherId: true } },
+      lessonPlans: { select: { classNumber: true } },
+    },
+  });
+}

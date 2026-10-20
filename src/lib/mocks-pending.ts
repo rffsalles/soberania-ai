@@ -30,45 +30,6 @@ export const LESSON_FAQS: Record<string, FAQItem[]> = {
   ],
 };
 
-// REMOVER: Task 22
-export const SCHEDULE_MEETINGS = [
-  {
-    num: 1,
-    date: '10/Fev - Seg',
-    type: 'Teórica',
-    title: 'Apresentação da Ementa e Arquitetura ANSI/SPARC de SGBD',
-    ragStatus: '✓ RAG Indexado',
-  },
-  {
-    num: 2,
-    date: '12/Fev - Qua',
-    type: 'Prática Lab',
-    title: 'Mapeamento Entidade-Relacionamento no PostgreSQL Local',
-    ragStatus: '✓ RAG Indexado',
-  },
-  {
-    num: 3,
-    date: '17/Fev - Seg',
-    type: 'Feriado',
-    title: 'Recesso de Carnaval (Compensação Automática Calculada pela IA)',
-    ragStatus: 'N/A',
-  },
-  {
-    num: 4,
-    date: '19/Fev - Qua',
-    type: 'Prática Lab',
-    title: 'Joins Avançados, Subqueries e Operações de Conjunto',
-    ragStatus: '✓ RAG Indexado',
-  },
-  {
-    num: 16,
-    date: '15/Abr - Ter',
-    type: 'Avaliação P1',
-    title: 'Prova Bimestral P1 Supervisionada com Anti-Fraude',
-    ragStatus: '✓ Matriz Homologada',
-  },
-];
-
 // REMOVER: Task 24
 export const DEFAULT_CHECKPOINTS: SocraticCheckpoint[] = [
   {

@@ -3,7 +3,6 @@ import { Role } from '@prisma/client';
 import {
   createAssessment,
   createLesson,
-  createSchedule,
   listAssessments,
   listLessons,
   listSchedules,
@@ -31,7 +30,6 @@ function makeDeps() {
             ? { courseSchedule: { teachingPlan: { teacherId: 't2' } } }
             : null,
       listSchedulesByPlan: async (f) => (rec('listSchedules', f), []),
-      createSchedule: async (d) => (rec('createSchedule', d), d),
       listLessonsBySchedule: async (f) => (rec('listLessons', f), []),
       createLesson: async (d) => (rec('createLesson', d), d),
       updateLesson: async (id, d) => (rec('updateLesson', { id, d }), d),
@@ -42,15 +40,12 @@ function makeDeps() {
   return { deps, calls };
 }
 
-const scheduleInput = (teachingPlanId: string) => ({ teachingPlanId, startDate: '2026-02-01', endDate: '2026-06-30' });
 
 describe('teaching-content-service ownership', () => {
   it('TEACHER cannot create schedule/lesson/assessment on foreign parents (403)', async () => {
     const { deps, calls } = makeDeps();
-    await expect(createSchedule(teacher, scheduleInput('foreign'), deps)).rejects.toMatchObject({ status: 403 });
     await expect(createLesson(teacher, { courseScheduleId: 'foreign', topicTitle: 'x' }, deps)).rejects.toMatchObject({ status: 403 });
     await expect(createAssessment(teacher, { teachingPlanId: 'foreign', title: 'x' }, deps)).rejects.toMatchObject({ status: 403 });
-    expect(calls.createSchedule).toBeUndefined();
     expect(calls.createLesson).toBeUndefined();
     expect(calls.createAssessment).toBeUndefined();
   });
@@ -66,7 +61,6 @@ describe('teaching-content-service ownership', () => {
 
   it('missing parents give 404', async () => {
     const { deps } = makeDeps();
-    await expect(createSchedule(teacher, scheduleInput('nope'), deps)).rejects.toMatchObject({ status: 404 });
     await expect(createLesson(teacher, { courseScheduleId: 'nope', topicTitle: 'x' }, deps)).rejects.toMatchObject({ status: 404 });
     await expect(createAssessment(teacher, { teachingPlanId: 'nope', title: 'x' }, deps)).rejects.toMatchObject({ status: 404 });
     await expect(updateLesson('nope', teacher, { topicTitle: 'y' }, deps)).rejects.toMatchObject({ status: 404 });
@@ -74,18 +68,14 @@ describe('teaching-content-service ownership', () => {
 
   it('invalid input gives 400', async () => {
     const { deps } = makeDeps();
-    await expect(createSchedule(teacher, { teachingPlanId: 'own' }, deps)).rejects.toMatchObject({ status: 400 });
     await expect(createLesson(teacher, { courseScheduleId: 'own' }, deps)).rejects.toMatchObject({ status: 400 });
     await expect(createAssessment(teacher, { teachingPlanId: 'own' }, deps)).rejects.toMatchObject({ status: 400 });
   });
 
   it('TEACHER creates on own parents; ADMIN bypasses ownership', async () => {
     const { deps, calls } = makeDeps();
-    await createSchedule(teacher, scheduleInput('own'), deps);
-    await createSchedule(admin, scheduleInput('foreign'), deps);
     await createLesson(admin, { courseScheduleId: 'foreign', topicTitle: 'x' }, deps);
     await createAssessment(admin, { teachingPlanId: 'foreign', title: 'x' }, deps);
-    expect(calls.createSchedule).toHaveLength(2);
     expect(calls.createLesson).toHaveLength(1);
     expect(calls.createAssessment).toHaveLength(1);
   });

@@ -17,7 +17,6 @@ export type TeachingContentDeps = {
     findScheduleOwner: OwnerLookup<{ teachingPlan: { teacherId: string } }>;
     findLessonOwner: OwnerLookup<{ courseSchedule: { teachingPlan: { teacherId: string } } }>;
     listSchedulesByPlan(filter: { planId?: string; teacherId?: string }): Promise<unknown[]>;
-    createSchedule(data: Prisma.CourseScheduleUncheckedCreateInput): Promise<unknown>;
     listLessonsBySchedule(filter: { scheduleId?: string; teacherId?: string }): Promise<unknown[]>;
     createLesson(data: Prisma.LessonPlanUncheckedCreateInput): Promise<unknown>;
     updateLesson(id: string, data: Prisma.LessonPlanUncheckedUpdateInput): Promise<unknown>;
@@ -32,7 +31,6 @@ const defaultDeps: TeachingContentDeps = {
     findScheduleOwner: scheduleRepo.findScheduleOwner,
     findLessonOwner: lessonRepo.findLessonOwner,
     listSchedulesByPlan: scheduleRepo.listSchedulesByPlan,
-    createSchedule: scheduleRepo.createSchedule,
     listLessonsBySchedule: lessonRepo.listLessonsBySchedule,
     createLesson: lessonRepo.createLesson,
     updateLesson: lessonRepo.updateLesson,
@@ -57,24 +55,6 @@ async function assertOwnsScheduleId(user: PlanActor, scheduleId: string, deps: T
 
 export function listSchedules(user: PlanActor, planId?: string, deps: TeachingContentDeps = defaultDeps) {
   return deps.repo.listSchedulesByPlan({ planId, ...ownerFilter(user) });
-}
-
-export async function createSchedule(
-  user: PlanActor,
-  input: { teachingPlanId?: string; startDate?: string; endDate?: string; holidays?: Prisma.InputJsonValue; totalClasses?: number | string },
-  deps: TeachingContentDeps = defaultDeps
-) {
-  if (!input.teachingPlanId || !input.startDate || !input.endDate) {
-    throw new DomainError(400, 'Plano de Ensino e período de datas são obrigatórios.');
-  }
-  await assertOwnsPlanId(user, input.teachingPlanId, deps);
-  return deps.repo.createSchedule({
-    teachingPlanId: input.teachingPlanId,
-    startDate: new Date(input.startDate),
-    endDate: new Date(input.endDate),
-    holidays: input.holidays || [],
-    totalClasses: Number(input.totalClasses) || 40,
-  });
 }
 
 export function listLessons(user: PlanActor, scheduleId?: string, deps: TeachingContentDeps = defaultDeps) {

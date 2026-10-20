@@ -50,6 +50,8 @@ export const API_ROUTES = {
   TEACHER: '/api/v1/teacher',
   TEACHER_PLANS: '/api/v1/teacher/plans',
   TEACHER_ASSESSMENTS: '/api/v1/teacher/assessments',
+  TEACHER_SCHEDULES: '/api/v1/teacher/schedules',
+  TEACHER_LESSONS: '/api/v1/teacher/lessons',
   LIBRARY: '/api/v1/library',
   MCP: '/api/v1/mcp',
   ADMIN: '/api/v1/admin',

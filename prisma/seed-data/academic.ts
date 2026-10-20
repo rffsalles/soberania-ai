@@ -41,6 +41,7 @@ export const DEMO_TEACHING_PLAN = {
 export const DEMO_SCHEDULE = {
   startDate: new Date('2026-02-01T00:00:00.000Z'),
   endDate: new Date('2026-06-30T00:00:00.000Z'),
+  holidays: { weekdays: [1, 3], holidays: [] as string[] },
 };
 
 export const DEMO_LESSON_PLANS = [
