@@ -50,3 +50,7 @@ lerna-debug.log*
 storage/*
 !storage/.gitkeep
 
+
+# Claude worktrees / SDD scratch
+.claude/worktrees/
+.superpowers/
