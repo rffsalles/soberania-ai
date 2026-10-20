@@ -47,6 +47,8 @@ export const API_ROUTES = {
   AUTH_ME: '/api/v1/auth/me',
   AUTH_LOGOUT: '/api/v1/auth/logout',
   TEACHER: '/api/v1/teacher',
+  TEACHER_PLANS: '/api/v1/teacher/plans',
+  TEACHER_ASSESSMENTS: '/api/v1/teacher/assessments',
   LIBRARY: '/api/v1/library',
   MCP: '/api/v1/mcp',
   ADMIN: '/api/v1/admin',

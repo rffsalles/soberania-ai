@@ -8,7 +8,10 @@ export function listAssessmentsByPlan(filter: { planId?: string; teacherId?: str
       ...(filter.planId ? { teachingPlanId: filter.planId } : {}),
       ...(filter.teacherId ? { teachingPlan: { teacherId: filter.teacherId } } : {}),
     },
-    include: { teachingPlan: { include: { subject: true } } },
+    include: {
+      teachingPlan: { include: { subject: true } },
+      agendas: { select: { id: true, classId: true, startTime: true, endTime: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -47,4 +50,9 @@ export async function claimAssessmentForPublish(id: string): Promise<boolean> {
     data: { status: ASSESSMENT_STATUS.PUBLISHED },
   });
   return count === 1;
+}
+
+export async function listAgendaIdsByAssessment(assessmentId: string): Promise<string[]> {
+  const agendas = await db.agenda.findMany({ where: { assessmentId }, select: { id: true } });
+  return agendas.map((a) => a.id);
 }

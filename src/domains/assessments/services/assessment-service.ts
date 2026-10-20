@@ -194,7 +194,7 @@ export async function generateQuestions(
   return { questions, rubrics: DEFAULT_RUBRICS, fallback: true };
 }
 
-async function loadOwnedAssessment(id: string, user: AssessmentActor, deps: AssessmentDeps) {
+export async function loadOwnedAssessment(id: string, user: AssessmentActor, deps: Pick<AssessmentDeps, 'findAssessment'>) {
   const assessment = await deps.findAssessment(id);
   if (!assessment) throw new DomainError(404, 'Avaliação não encontrada.');
   assertOwner(user, assessment.teachingPlan.teacherId);

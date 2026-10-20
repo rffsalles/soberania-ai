@@ -1,0 +1,304 @@
+'use client';
+
+import * as React from 'react';
+import { Plus, Save, Sparkles, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { OPTION_KEYS, type Question, type Rubric } from '@/domains/assessments/question-schema';
+import { ASSESSMENT_TYPE } from '@/lib/constants/teaching';
+import {
+  generateAssessment,
+  saveAssessment,
+  type AssessmentDraft,
+  type AssessmentItem,
+  type PlanOption,
+} from '@/components/assessments/use-assessments';
+
+const DEFAULT_DURATION_MINUTES = 60;
+const DEFAULT_MAX_SCORE = 10;
+const DEFAULT_QUESTION_COUNT = 5;
+const MAX_QUESTION_COUNT = 20;
+
+type Props = {
+  plan: PlanOption;
+  initial: AssessmentItem | null;
+  onSaved: () => void;
+  onCancel: () => void;
+};
+
+const blankQuestion = (n: number): Question => ({
+  id: `q${n}`,
+  enunciation: '',
+  options: OPTION_KEYS.map((key) => ({ key, text: '' })),
+  correctKey: OPTION_KEYS[0],
+  rationale: '',
+  topic: '',
+});
+
+function planUnits(plan: PlanOption): { unitNumber: number; title: string }[] {
+  if (!Array.isArray(plan.unitsContent)) return [];
+  return plan.unitsContent.filter(
+    (u): u is { unitNumber: number; title: string } => typeof u?.unitNumber === 'number' && typeof u?.title === 'string'
+  );
+}
+
+export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
+  const [draft, setDraft] = React.useState<AssessmentDraft>({
+    title: initial?.title ?? '',
+    type: initial?.type ?? ASSESSMENT_TYPE.EXAM,
+    questions: initial?.questions ?? [],
+    rubrics: initial?.rubrics ?? [],
+    maxScore: initial?.maxScore ?? DEFAULT_MAX_SCORE,
+    durationMinutes: initial?.durationMinutes ?? DEFAULT_DURATION_MINUTES,
+  });
+  const [units, setUnits] = React.useState<number[]>([]);
+  const [count, setCount] = React.useState(DEFAULT_QUESTION_COUNT);
+  const [offline, setOffline] = React.useState(false);
+  const [busy, setBusy] = React.useState<'generate' | 'save' | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const unitOptions = planUnits(plan);
+
+  const run = async (kind: 'generate' | 'save', action: () => Promise<void>) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await action();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const generate = () =>
+    run('generate', async () => {
+      const out = await generateAssessment({ teachingPlanId: plan.id, unitNumbers: units, questionCount: count, type: draft.type });
+      setDraft((d) => ({ ...d, questions: out.questions, rubrics: out.rubrics }));
+      setOffline(out.fallback);
+    });
+
+  const save = () =>
+    run('save', async () => {
+      await saveAssessment(plan.id, initial?.id ?? null, draft);
+      onSaved();
+    });
+
+  const patchQuestion = (index: number, patch: Partial<Question>) =>
+    setDraft((d) => ({ ...d, questions: d.questions.map((q, i) => (i === index ? { ...q, ...patch } : q)) }));
+
+  const patchOption = (index: number, key: string, text: string) =>
+    patchQuestion(index, {
+      options: draft.questions[index].options.map((o) => (o.key === key ? { ...o, text } : o)),
+    });
+
+  const patchRubric = (index: number, patch: Partial<Rubric>) =>
+    setDraft((d) => ({ ...d, rubrics: d.rubrics.map((r, i) => (i === index ? { ...r, ...patch } : r)) }));
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{initial ? 'Editar avaliação' : 'Nova avaliação'}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-1 md:col-span-3">
+            <Label htmlFor="as-title">Título</Label>
+            <Input id="as-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="as-type">Tipo</Label>
+            <Input id="as-type" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="as-duration">Duração (minutos)</Label>
+            <Input
+              id="as-duration"
+              type="number"
+              min={1}
+              value={draft.durationMinutes}
+              onChange={(e) => setDraft({ ...draft, durationMinutes: Number(e.target.value) })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="as-max">Nota máxima</Label>
+            <Input
+              id="as-max"
+              type="number"
+              min={1}
+              value={draft.maxScore}
+              onChange={(e) => setDraft({ ...draft, maxScore: Number(e.target.value) })}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">Gerar com IA</CardTitle>
+          {offline && <Badge variant="outline">Gerado em modo offline</Badge>}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-3">
+            {unitOptions.map((u) => (
+              <label key={u.unitNumber} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={units.includes(u.unitNumber)}
+                  onChange={(e) =>
+                    setUnits((cur) => (e.target.checked ? [...cur, u.unitNumber] : cur.filter((n) => n !== u.unitNumber)))
+                  }
+                />
+                Unidade {u.unitNumber}: {u.title}
+              </label>
+            ))}
+            {unitOptions.length === 0 && <p className="text-sm text-slate-500">O plano não possui unidades cadastradas.</p>}
+          </div>
+          <div className="flex items-end gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="as-count">Nº de questões</Label>
+              <Input
+                id="as-count"
+                type="number"
+                min={1}
+                max={MAX_QUESTION_COUNT}
+                className="w-28"
+                value={count}
+                onChange={(e) => setCount(Number(e.target.value))}
+              />
+            </div>
+            <Button onClick={generate} disabled={busy !== null || units.length === 0} className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              {busy === 'generate' ? 'Gerando...' : 'Gerar com IA'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">Questões ({draft.questions.length})</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() => setDraft((d) => ({ ...d, questions: [...d.questions, blankQuestion(d.questions.length + 1)] }))}
+          >
+            <Plus className="h-3.5 w-3.5" /> Questão
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {draft.questions.map((q, i) => (
+            <div key={q.id} className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Questão {i + 1}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remover questão ${i + 1}`}
+                  onClick={() => setDraft((d) => ({ ...d, questions: d.questions.filter((_, n) => n !== i) }))}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <Textarea
+                aria-label={`Enunciado da questão ${i + 1}`}
+                value={q.enunciation}
+                onChange={(e) => patchQuestion(i, { enunciation: e.target.value })}
+              />
+              {q.options.map((o) => (
+                <div key={o.key} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`correct-${q.id}`}
+                    aria-label={`Alternativa ${o.key} correta`}
+                    checked={q.correctKey === o.key}
+                    onChange={() => patchQuestion(i, { correctKey: o.key })}
+                  />
+                  <span className="w-5 text-sm font-semibold">{o.key}</span>
+                  <Input
+                    aria-label={`Alternativa ${o.key} da questão ${i + 1}`}
+                    value={o.text}
+                    onChange={(e) => patchOption(i, o.key, e.target.value)}
+                  />
+                </div>
+              ))}
+              <Input
+                aria-label={`Tópico da questão ${i + 1}`}
+                placeholder="Tópico"
+                value={q.topic}
+                onChange={(e) => patchQuestion(i, { topic: e.target.value })}
+              />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">Rubricas ({draft.rubrics.length})</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() =>
+              setDraft((d) => ({ ...d, rubrics: [...d.rubrics, { criterion: '', description: '', weight: 1 }] }))
+            }
+          >
+            <Plus className="h-3.5 w-3.5" /> Rubrica
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {draft.rubrics.map((r, i) => (
+            <div key={i} className="grid gap-2 md:grid-cols-[1fr_2fr_6rem_auto]">
+              <Input
+                aria-label={`Critério ${i + 1}`}
+                placeholder="Critério"
+                value={r.criterion}
+                onChange={(e) => patchRubric(i, { criterion: e.target.value })}
+              />
+              <Input
+                aria-label={`Descrição do critério ${i + 1}`}
+                placeholder="Descrição"
+                value={r.description}
+                onChange={(e) => patchRubric(i, { description: e.target.value })}
+              />
+              <Input
+                aria-label={`Peso do critério ${i + 1}`}
+                type="number"
+                value={r.weight}
+                onChange={(e) => patchRubric(i, { weight: Number(e.target.value) })}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Remover rubrica ${i + 1}`}
+                onClick={() => setDraft((d) => ({ ...d, rubrics: d.rubrics.filter((_, n) => n !== i) }))}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button onClick={save} disabled={busy !== null || draft.title.trim().length < 3} className="gap-2">
+          <Save className="h-4 w-4" />
+          {busy === 'save' ? 'Salvando...' : 'Salvar'}
+        </Button>
+        <Button variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}

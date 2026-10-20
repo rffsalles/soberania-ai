@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 
 const planFull = {
-  subject: true,
+  subject: { include: { class: { select: { id: true, name: true } } } },
   academicPeriod: true,
   schedules: { include: { lessonPlans: true } },
   assessments: true,

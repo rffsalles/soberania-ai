@@ -46,3 +46,8 @@ export function createUser(data: {
 export function setUserPasswordHash(id: string, passwordHash: string): Promise<User> {
   return db.user.update({ where: { id }, data: { passwordHash } });
 }
+
+export async function findUserNamesByIds(ids: string[]): Promise<Map<string, string>> {
+  const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+  return new Map(users.map((u) => [u.id, u.name]));
+}

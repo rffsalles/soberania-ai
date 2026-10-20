@@ -152,6 +152,7 @@ export async function createAssessment(
     questions?: Prisma.InputJsonValue;
     rubrics?: Prisma.InputJsonValue;
     maxScore?: number | string;
+    durationMinutes?: number;
   },
   deps: TeachingContentDeps = defaultDeps
 ) {
@@ -166,5 +167,6 @@ export async function createAssessment(
     questions: input.questions || [],
     rubrics: input.rubrics || {},
     maxScore: Number(input.maxScore) || 10.0,
+    ...(input.durationMinutes ? { durationMinutes: input.durationMinutes } : {}),
   });
 }
