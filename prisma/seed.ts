@@ -78,7 +78,7 @@ async function seedCorpus() {
     const categoryNames = [...new Set(chunks.map((c) => c.category).filter((c): c is string => Boolean(c)))];
     const categories = { set: categoryNames.map((name) => ({ name })) };
 
-    const existing = await prisma.didacticMaterial.findFirst({ where: { title: material.title } });
+    const existing = await prisma.didacticMaterial.findFirst({ where: { filePath: material.filePath } });
     const saved = existing
       ? await prisma.didacticMaterial.update({ where: { id: existing.id }, data: { ...material, categories } })
       : await prisma.didacticMaterial.create({

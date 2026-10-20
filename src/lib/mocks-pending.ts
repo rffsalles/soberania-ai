@@ -3,11 +3,10 @@ import type { ClassMinuteData, TeacherStruggleHeatmap } from '@/domains/pedagogy
 import type { FAQItem } from '@/lib/mcp/tools/faq-tool';
 import type { SocraticCheckpoint } from '@/components/classroom/interactive-video-player';
 
-export interface ExamQuestionMock {
+export interface PublicExamQuestion {
   id: number;
   enunciation: string;
   options: { key: string; text: string }[];
-  correctKey: string;
   selectedOption?: string;
 }
 
@@ -200,7 +199,7 @@ export const LESSON_FAQS: Record<string, FAQItem[]> = {
 };
 
 // REMOVER: Task 19
-export const EXAM_QUESTIONS: ExamQuestionMock[] = [
+export const EXAM_QUESTIONS: PublicExamQuestion[] = [
   {
     id: 1,
     enunciation:
@@ -211,7 +210,6 @@ export const EXAM_QUESTIONS: ExamQuestionMock[] = [
       { key: 'C', text: 'SELECT * FROM Estudantes RIGHT JOIN Matriculas ON Estudantes.id = Matriculas.estudante_id;' },
       { key: 'D', text: 'SELECT * FROM Estudantes CROSS JOIN Matriculas;' },
     ],
-    correctKey: 'B',
   },
   {
     id: 2,
@@ -223,7 +221,6 @@ export const EXAM_QUESTIONS: ExamQuestionMock[] = [
       { key: 'C', text: 'Possui chave primária composta e todas as colunas são dependentes parciais.' },
       { key: 'D', text: 'Todas as tuplas são duplicadas para garantir redundância e alta disponibilidade.' },
     ],
-    correctKey: 'B',
   },
   {
     id: 3,
@@ -235,7 +232,6 @@ export const EXAM_QUESTIONS: ExamQuestionMock[] = [
       { key: 'C', text: 'Isolamento' },
       { key: 'D', text: 'Durabilidade' },
     ],
-    correctKey: 'A',
   },
 ];
 
