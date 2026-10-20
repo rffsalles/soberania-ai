@@ -12,6 +12,7 @@
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
     "clean:next": "npm run clean",
     "test": "vitest run",
+    "test:ci": "npm run typecheck && npm run lint && npm test && npm run build",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

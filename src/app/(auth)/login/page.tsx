@@ -1,7 +1,12 @@
 'use client';
 
+import * as React from 'react';
 import LoginPage from './_components/LoginPage';
 
 export default function Page() {
-  return <LoginPage />;
+  return (
+    <React.Suspense fallback={null}>
+      <LoginPage />
+    </React.Suspense>
+  );
 }
