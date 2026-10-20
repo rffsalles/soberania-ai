@@ -37,6 +37,7 @@ export const ROUTES = {
 export const API_ROUTES = {
   ROOT: '/api/',
   AGENT: '/api/v1/agent',
+  AGENT_CHAT_STREAM: '/api/v1/agent/chat/stream',
   AGENDAS: '/api/v1/agendas',
   PEDAGOGY: '/api/v1/pedagogy',
   EXAMS: '/api/v1/exams',

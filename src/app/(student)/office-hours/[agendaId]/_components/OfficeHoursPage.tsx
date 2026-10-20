@@ -50,7 +50,7 @@ export default function OfficeHoursPage({ agendaId }: OfficeHoursPageProps) {
             </div>
 
             <div className="h-[680px]">
-              <UniversalSocraticChat agendaType="OFFICE_HOURS" sessionId={agenda.id} />
+              <UniversalSocraticChat agendaId={agenda.id} agendaType="OFFICE_HOURS" />
             </div>
           </>
         )}

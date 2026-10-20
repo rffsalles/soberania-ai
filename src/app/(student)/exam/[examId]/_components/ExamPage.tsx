@@ -222,7 +222,7 @@ export default function ExamPage({ examId }: ExamPageProps) {
           <div className="lg:col-span-5 h-[580px]">
             <SocraticChatPanel
               agendaType="EXAM"
-              sessionId={examId}
+              agendaId={examId}
             />
           </div>
         </div>

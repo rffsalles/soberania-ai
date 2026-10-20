@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { startChat } from '@/domains/agents/services/chat-service';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
+import { SSE_EVENT } from '@/lib/constants/chat';
 import { chatRequestSchema } from '@/lib/validators/chat.validator';
 
-const SSE_EVENT = { TOKEN: 'token', DONE: 'done', ERROR: 'error' } as const;
 
 function frame(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;

@@ -94,7 +94,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           <div className="lg:col-span-5 h-[680px]">
             <SocraticChatPanel
               agendaType="CLASSROOM"
-              sessionId={session.id}
+              agendaId={session.id}
               onOpenMinutesModal={() => setMinutesModalOpen(true)}
             />
           </div>
