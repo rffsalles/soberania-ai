@@ -36,3 +36,10 @@ export function updatePlanById(id: string, data: Prisma.TeachingPlanUncheckedUpd
 export function findPlanOwner(id: string) {
   return db.teachingPlan.findUnique({ where: { id }, select: { id: true, teacherId: true } });
 }
+
+export function findPlanForAssessment(id: string) {
+  return db.teachingPlan.findUnique({
+    where: { id },
+    select: { id: true, teacherId: true, subjectId: true, syllabus: true, unitsContent: true, subject: { select: { name: true } } },
+  });
+}

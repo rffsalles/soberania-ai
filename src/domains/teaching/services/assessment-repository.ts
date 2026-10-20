@@ -15,3 +15,19 @@ export function listAssessmentsByPlan(filter: { planId?: string; teacherId?: str
 export function createAssessment(data: Prisma.AssessmentUncheckedCreateInput) {
   return db.assessment.create({ data });
 }
+
+export function findAssessmentWithPlan(id: string) {
+  return db.assessment.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      durationMinutes: true,
+      teachingPlan: { select: { teacherId: true, subjectId: true } },
+    },
+  });
+}
+
+export function updateAssessmentById(id: string, data: Prisma.AssessmentUncheckedUpdateInput) {
+  return db.assessment.update({ where: { id }, data });
+}
