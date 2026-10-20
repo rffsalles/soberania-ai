@@ -37,6 +37,8 @@ export interface StreamChunk {
   isComplete: boolean;
   citation?: string;
   telemetry?: InferenceTelemetry;
+  /** true quando o stream veio do modo determinístico (provider mock/indisponível) */
+  fallback?: boolean;
 }
 
 export interface AICompletionOptions {
@@ -44,6 +46,8 @@ export interface AICompletionOptions {
   maxTokens?: number;
   citation?: string;
   loraAdapter?: string;
+  /** Chamado uma vez com a telemetria final (caminho real e fallback) */
+  onTelemetry?: (telemetry: InferenceTelemetry) => void;
 }
 
 export class AIProviderGateway {
@@ -205,21 +209,23 @@ export class AIProviderGateway {
 
           console.log(`[AIProvider Success] Sucesso Groq/Provider (${tokenCount} tokens gerados em ${totalLatencyMs}ms)`);
 
+          const realTelemetry: InferenceTelemetry = {
+            ttftMs: ttftMs || 450,
+            totalLatencyMs,
+            tokensPerSecond: tokensPerSec,
+            promptTokens: messages.reduce((acc, m) => acc + m.content.split(' ').length, 0),
+            completionTokens: tokenCount,
+            totalTokens: tokenCount + 50,
+            provider: currentProvider,
+            model: currentModel,
+            externalTrafficBytes: currentProvider === 'vllm' || currentProvider === 'ollama' ? 0 : tokenCount * 4,
+          };
+          options.onTelemetry?.(realTelemetry);
           yield {
             token: '',
             isComplete: true,
             citation: options.citation,
-            telemetry: {
-              ttftMs: ttftMs || 450,
-              totalLatencyMs,
-              tokensPerSecond: tokensPerSec,
-              promptTokens: messages.reduce((acc, m) => acc + m.content.split(' ').length, 0),
-              completionTokens: tokenCount,
-              totalTokens: tokenCount + 50,
-              provider: currentProvider,
-              model: currentModel,
-              externalTrafficBytes: currentProvider === 'vllm' || currentProvider === 'ollama' ? 0 : tokenCount * 4,
-            },
+            telemetry: realTelemetry,
           };
           return;
         }
@@ -243,27 +249,31 @@ export class AIProviderGateway {
       yield {
         token: word + (i === fallbackWords.length - 1 ? '' : ' '),
         isComplete: false,
+        fallback: true,
       };
     }
 
     const totalLatencyMs = Date.now() - startTime;
     const tokensPerSec = Number(((tokenCount / (totalLatencyMs / 1000)) || 62.5).toFixed(1));
 
+    const fallbackTelemetry: InferenceTelemetry = {
+      ttftMs,
+      totalLatencyMs,
+      tokensPerSecond: tokensPerSec,
+      promptTokens: promptMessage.split(' ').length,
+      completionTokens: tokenCount,
+      totalTokens: promptMessage.split(' ').length + tokenCount,
+      provider: this.provider === 'mock' ? 'vllm' : this.provider,
+      model: this.model,
+      externalTrafficBytes: 0, // 100% On-Premises
+    };
+    options.onTelemetry?.(fallbackTelemetry);
     yield {
       token: '',
       isComplete: true,
       citation: options.citation,
-      telemetry: {
-        ttftMs,
-        totalLatencyMs,
-        tokensPerSecond: tokensPerSec,
-        promptTokens: promptMessage.split(' ').length,
-        completionTokens: tokenCount,
-        totalTokens: promptMessage.split(' ').length + tokenCount,
-        provider: this.provider === 'mock' ? 'vllm' : this.provider,
-        model: this.model,
-        externalTrafficBytes: 0, // 100% On-Premises
-      },
+      telemetry: fallbackTelemetry,
+      fallback: true,
     };
   }
 

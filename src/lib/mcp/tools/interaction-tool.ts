@@ -1,15 +1,15 @@
-export interface InteractionRecord {
-  id: string;
+import { AgendaType, InteractionType } from '@prisma/client';
+import { createInteraction } from '@/domains/pedagogy/services/interaction-repository';
+
+export interface InteractionToolArgs {
   agendaId: string;
   studentId: string;
   questionText: string;
   responseText: string;
   timestampSeconds?: number;
-  isSocraticChallenge: boolean;
-  recordedAt: string;
+  isSocraticChallenge?: boolean;
+  agendaType?: AgendaType;
 }
-
-const IN_MEMORY_INTERACTIONS: InteractionRecord[] = [];
 
 export const registerInteractionTool = {
   name: 'register_student_interaction',
@@ -24,16 +24,22 @@ export const registerInteractionTool = {
       responseText: { type: 'string' },
       timestampSeconds: { type: 'number' },
       isSocraticChallenge: { type: 'boolean' },
+      agendaType: { type: 'string', enum: Object.values(AgendaType) },
     },
     required: ['agendaId', 'studentId', 'questionText', 'responseText'],
   },
-  execute: async (args: Omit<InteractionRecord, 'id' | 'recordedAt'>) => {
-    const record: InteractionRecord = {
-      id: `inter-${Date.now()}`,
-      ...args,
-      recordedAt: new Date().toISOString(),
-    };
-    IN_MEMORY_INTERACTIONS.push(record);
+  execute: async (args: InteractionToolArgs) => {
+    const isSocraticChallenge = args.isSocraticChallenge ?? false;
+    const record = await createInteraction({
+      agendaId: args.agendaId,
+      studentId: args.studentId,
+      type: isSocraticChallenge ? InteractionType.SOCRATIC_CHALLENGE : InteractionType.QUESTION,
+      agendaType: args.agendaType ?? AgendaType.CLASSROOM,
+      questionText: args.questionText,
+      responseText: args.responseText,
+      timestampInVideo: args.timestampSeconds === undefined ? null : Math.round(args.timestampSeconds),
+      isSocraticChallenge,
+    });
     return { success: true, recordId: record.id };
   },
 };
