@@ -1,5 +1,4 @@
 import { db } from '@/lib/db';
-import { DEFAULT_PERIODS } from '../default-periods';
 
 export function listPeriods() {
   return db.academicPeriod.findMany({
@@ -20,10 +19,4 @@ export function createPeriod(data: {
   type: string;
 }) {
   return db.academicPeriod.create({ data: { ...data, isActive: true } });
-}
-
-export async function ensureDefaultPeriods(): Promise<void> {
-  for (const p of DEFAULT_PERIODS) {
-    await db.academicPeriod.upsert({ where: { code: p.code }, update: {}, create: p });
-  }
 }

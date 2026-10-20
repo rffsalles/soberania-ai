@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { Role } from '@prisma/client';
-import { createPeriod, listPeriodsEnsuringDefaults } from '@/domains/academic/services/academic-period-service';
+import { createPeriod, listPeriods } from '@/domains/academic/services/academic-period-service';
 
 const createPeriodSchema = z.object({
   name: z.string().min(3, 'Nome do período deve ter no mínimo 3 caracteres'),
@@ -16,7 +16,7 @@ const createPeriodSchema = z.object({
 export async function GET(req: Request) {
   try {
     await requireUser(req, [Role.TEACHER, Role.ADMIN]);
-    const periods = await listPeriodsEnsuringDefaults();
+    const periods = await listPeriods();
     return NextResponse.json({ success: true, periods });
   } catch (error) {
     return apiError(error);

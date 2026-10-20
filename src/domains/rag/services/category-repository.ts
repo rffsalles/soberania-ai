@@ -1,6 +1,5 @@
 import { db } from '@/lib/db';
 import { DEFAULT_CATEGORY_COLOR } from '@/lib/constants/library';
-import { DEFAULT_CATEGORIES } from '../default-categories';
 
 export function listCategories() {
   return db.documentCategory.findMany({ orderBy: { name: 'asc' } });
@@ -27,12 +26,4 @@ export async function upsertCategoryByName(name: string) {
   const existing = await findCategoryByName(name);
   if (existing) return existing;
   return createCategory({ name }).catch(() => null);
-}
-
-export async function ensureDefaultCategories() {
-  await db.documentCategory.createMany({
-    data: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
-    skipDuplicates: true,
-  });
-  return listCategories();
 }

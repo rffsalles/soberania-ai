@@ -37,6 +37,7 @@ cp .env.example .env
 # 3. Banco de dados
 npx prisma generate
 npx prisma migrate deploy      # ou: npm run prisma:migrate (dev)
+npm run db:seed                # dados de demonstração (idempotente)
 
 # 4. Servidor de desenvolvimento
 npm run dev                    # http://localhost:3000
@@ -51,7 +52,7 @@ docker run -d --name soberania-pg -p 5432:5432 \
 
 ### Usuários de demonstração
 
-Criados automaticamente no primeiro login (ver [src/lib/auth/seed-users.ts](src/lib/auth/seed-users.ts)).
+Criados por `npm run db:seed` (ver [prisma/seed-data/users.ts](prisma/seed-data/users.ts)); o login não cria mais usuários.
 
 | Papel | Matrícula | E-mail | Senha | Rota inicial |
 | :-- | :-- | :-- | :-- | :-- |
@@ -115,7 +116,7 @@ src/
     storage/                Serviço de armazenamento (local / R2)
   lib/
     ai-provider.ts          Gateway de inferência multi-provedor com streaming e telemetria
-    auth/                   Tokens, sessões, senhas, RBAC e seed de usuários
+    auth/                   Tokens, sessões, senhas e RBAC
     mcp/                    Servidor MCP local e ferramentas
     validators/             Schemas Zod
   middleware.ts             Autenticação, RBAC e injeção de headers de contexto

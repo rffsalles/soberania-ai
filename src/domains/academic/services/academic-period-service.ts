@@ -2,14 +2,10 @@ import { DomainError } from '@/lib/api/domain-error';
 import * as realRepo from './academic-period-repository';
 
 export type PeriodDeps = {
-  repo: Pick<typeof realRepo, 'listPeriods' | 'ensureDefaultPeriods' | 'findPeriodByCode' | 'createPeriod'>;
+  repo: Pick<typeof realRepo, 'listPeriods' | 'findPeriodByCode' | 'createPeriod'>;
 };
 
-/** Lists active periods, seeding the defaults when none exist (temporary until the seed script owns it). */
-export async function listPeriodsEnsuringDefaults(deps: PeriodDeps = { repo: realRepo }) {
-  const periods = await deps.repo.listPeriods();
-  if (periods.length > 0) return periods;
-  await deps.repo.ensureDefaultPeriods();
+export function listPeriods(deps: PeriodDeps = { repo: realRepo }) {
   return deps.repo.listPeriods();
 }
 

@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { DEFAULT_CHECKPOINTS } from '@/lib/mocks-pending';
 
 export interface SocraticCheckpoint {
   timeSeconds: number;
@@ -27,20 +28,6 @@ interface InteractiveVideoPlayerProps {
   className?: string;
 }
 
-const DEFAULT_CHECKPOINTS: SocraticCheckpoint[] = [
-  {
-    timeSeconds: 45,
-    label: 'Pausa Socrática 01',
-    prompt:
-      'A Tutora Lucy pausou o vídeo sob coordenação docente: "Se uma tabela Alunos não tiver correspondência na tabela Notas, o que o INNER JOIN fará com esse aluno?"',
-  },
-  {
-    timeSeconds: 120,
-    label: 'Pausa Socrática 02',
-    prompt:
-      'Reflexão em grupo: "Qual a diferença prática de performance entre um LEFT JOIN indexado e um produto cartesiano?"',
-  },
-];
 
 export function InteractiveVideoPlayer({
   checkpoints = DEFAULT_CHECKPOINTS,

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { DEMO_USERS } from '@/lib/auth/seed-users';
+import { DEMO_CREDENTIALS } from '@/lib/constants/demo-credentials';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,10 +30,10 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   const handleQuickFill = (userType: 'STUDENT' | 'TEACHER' | 'ADMIN') => {
-    const demo = DEMO_USERS.find((u) => u.role === userType);
+    const demo = DEMO_CREDENTIALS.find((u) => u.role === userType);
     if (demo) {
       setIdentifier(demo.enrollment);
-      setPassword(demo.passwordPlain);
+      setPassword(demo.password);
       setErrorMessage(null);
     }
   };

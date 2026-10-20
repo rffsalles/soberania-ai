@@ -17,6 +17,7 @@ import {
   Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EXAM_QUESTIONS } from '@/lib/mocks-pending';
 
 interface ExamPageProps {
   examId: string;
@@ -29,41 +30,6 @@ interface Question {
   selectedOption?: string;
 }
 
-const EXAM_QUESTIONS: Question[] = [
-  {
-    id: 1,
-    enunciation:
-      'Considere duas relações: Estudantes(id, nome) e Matriculas(id, estudante_id, disciplina). Qual consulta SQL retorna todos os estudantes, independentemente de estarem ou não matriculados em alguma disciplina?',
-    options: [
-      { key: 'A', text: 'SELECT * FROM Estudantes INNER JOIN Matriculas ON Estudantes.id = Matriculas.estudante_id;' },
-      { key: 'B', text: 'SELECT * FROM Estudantes LEFT OUTER JOIN Matriculas ON Estudantes.id = Matriculas.estudante_id;' },
-      { key: 'C', text: 'SELECT * FROM Estudantes RIGHT JOIN Matriculas ON Estudantes.id = Matriculas.estudante_id;' },
-      { key: 'D', text: 'SELECT * FROM Estudantes CROSS JOIN Matriculas;' },
-    ],
-  },
-  {
-    id: 2,
-    enunciation:
-      'Uma relação está na 3ª Forma Normal (3FN) quando:',
-    options: [
-      { key: 'A', text: 'Não possui atributos multivalorados e está na 1FN.' },
-      { key: 'B', text: 'Está na 2FN e nenhum atributo não-chave depende transitivamente de uma chave primária.' },
-      { key: 'C', text: 'Possui chave primária composta e todas as colunas são dependentes parciais.' },
-      { key: 'D', text: 'Todas as tuplas são duplicadas para garantir redundância e alta disponibilidade.' },
-    ],
-  },
-  {
-    id: 3,
-    enunciation:
-      'Qual propriedade ACID assegura que, em caso de falha de energia durante uma transação financeira, nenhuma alteração parcial permaneça no banco de dados?',
-    options: [
-      { key: 'A', text: 'Atomicidade' },
-      { key: 'B', text: 'Consistência' },
-      { key: 'C', text: 'Isolamento' },
-      { key: 'D', text: 'Durabilidade' },
-    ],
-  },
-];
 
 export default function ExamPage({ examId }: ExamPageProps) {
   const [questions, setQuestions] = React.useState<Question[]>(EXAM_QUESTIONS);

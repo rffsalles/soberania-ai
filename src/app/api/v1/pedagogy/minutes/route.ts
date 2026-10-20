@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateClassMinute, getMockMinutesFeed } from '@/domains/pedagogy/minutes-generator';
+import { generateClassMinute } from '@/domains/pedagogy/minutes-generator';
+import { getMockMinutesFeed } from '@/lib/mocks-pending';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 

@@ -9,8 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minutes-modal';
-import { getMockAgendas } from '@/domains/agendas/agenda-service';
-import { getMockMinutesFeed } from '@/domains/pedagogy/minutes-generator';
+import { getMockAgendas } from '@/lib/mocks-pending';
+import { getMockMinutesFeed } from '@/lib/mocks-pending';
 import {
   Calendar,
   Video,

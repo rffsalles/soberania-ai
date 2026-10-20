@@ -4,7 +4,6 @@ import { loginSchema } from '@/lib/validators/auth.validator';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
 import { getSessionCookieConfig } from '@/lib/auth/token';
-import { ensureDemoUsersExist } from '@/lib/auth/seed-users';
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,9 +22,6 @@ export async function POST(req: NextRequest) {
 
     const { identifier, password } = parseResult.data;
     const cleanIdentifier = identifier.trim();
-
-    // Garante usuários de demonstração se banco estiver vazio
-    await ensureDemoUsersExist();
 
     const user = await findUserByIdentifier(cleanIdentifier);
 

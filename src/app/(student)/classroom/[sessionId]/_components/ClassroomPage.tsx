@@ -7,7 +7,7 @@ import { SocraticChatPanel } from '@/components/classroom/socratic-chat-panel';
 import { DynamicFaqAccordion } from '@/components/classroom/dynamic-faq-accordion';
 import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minutes-modal';
 import { Badge } from '@/components/ui/badge';
-import { getMockAgendaById } from '@/domains/agendas/agenda-service';
+import { getMockAgendaById } from '@/lib/mocks-pending';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 

@@ -272,11 +272,7 @@ export async function getLibraryOverview(filter: { category?: string | null; sea
 }
 
 export async function listCategoriesWithStats() {
-  let categories = await categoryRepo.listCategories();
-  // Auto-seed canonical categories if database is empty (Task 11 moves this into the seed)
-  if (categories.length === 0) {
-    categories = await categoryRepo.ensureDefaultCategories();
-  }
+  const categories = await categoryRepo.listCategories();
 
   const statsMap = new Map<string, CategoryStat>();
   for (const chunk of getAllCorpusChunks()) {

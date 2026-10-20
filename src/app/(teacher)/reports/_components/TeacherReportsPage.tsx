@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getTeacherStruggleHeatmap } from '@/domains/pedagogy/struggle-analyzer';
-import { getMockMinutesFeed } from '@/domains/pedagogy/minutes-generator';
+import { getTeacherStruggleHeatmap } from '@/lib/mocks-pending';
+import { getMockMinutesFeed } from '@/lib/mocks-pending';
 import {
   BarChart3,
   Flame,
