@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { OPTION_KEYS } from '@/domains/assessments/question-schema';
 
 export const submitExamSchema = z.object({
   answers: z.array(
     z.object({
       questionId: z.string().min(1),
-      chosenKey: z.string().min(1),
+      chosenKey: z.enum(OPTION_KEYS),
       timeSpentSeconds: z.number().int().min(0),
     })
   ),

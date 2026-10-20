@@ -49,8 +49,9 @@ function makeDeps(opts: { now: Date; type?: AgendaType; assessmentId?: string | 
   return { deps, createSubmission };
 }
 
+type Key = 'A' | 'B' | 'C' | 'D';
 const answers = (keys: string[]) =>
-  keys.map((chosenKey, i) => ({ questionId: `q${i + 1}`, chosenKey, timeSpentSeconds: 10 }));
+  keys.map((chosenKey, i) => ({ questionId: `q${i + 1}`, chosenKey: chosenKey as Key, timeSpentSeconds: 10 }));
 const log = { blurEvents: 1, guardrailBlocks: 0 };
 
 describe('getExamForStudent', () => {
@@ -61,6 +62,7 @@ describe('getExamForStudent', () => {
     expect(JSON.stringify(exam.questions)).not.toMatch(/correctKey|rationale/);
     expect(exam.alreadySubmitted).toBe(false);
     expect(exam.durationMinutes).toBe(60);
+    expect(exam.serverNow).toBe('2026-10-20T10:10:00.000Z');
   });
 
   it('retorna 422 fora da janela', async () => {
@@ -127,6 +129,28 @@ describe('submitExam', () => {
     await expect(
       submitExam(student, 'ag1', { answers: answers(['A']), integrityLog: log }, deps)
     ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('várias respostas para a mesma questão: vale a última', async () => {
+    const mk = () => makeDeps({ now: new Date('2026-10-20T10:50:00Z') });
+    const gamed = ['A', 'B', 'C', 'D'].map((k) => ({ questionId: 'q1', chosenKey: k as Key, timeSpentSeconds: 1 }));
+    const first = mk();
+    expect(
+      await submitExam(student, 'ag1', { answers: gamed, integrityLog: log }, first.deps)
+    ).toMatchObject({ correct: 0 });
+    const saved = first.createSubmission.mock.calls[0][0] as unknown as { answers: unknown[] };
+    expect(saved.answers).toHaveLength(1);
+    const lastCorrect = mk();
+    expect(
+      await submitExam(student, 'ag1', { answers: [...gamed.slice(1), gamed[0]], integrityLog: log }, lastCorrect.deps)
+    ).toMatchObject({ correct: 1 });
+  });
+
+  it('alternativa fora das opções da questão retorna 422', async () => {
+    const { deps } = makeDeps({ now: new Date('2026-10-20T10:50:00Z') });
+    await expect(
+      submitExam(student, 'ag1', { answers: answers(['Z']), integrityLog: log }, deps)
+    ).rejects.toMatchObject({ status: 422 });
   });
 
   it('professor não pode submeter (403)', async () => {

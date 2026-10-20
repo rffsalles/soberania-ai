@@ -20,6 +20,7 @@ const NOT_FOUND = 'Prova não encontrada.';
 const STUDENT_ONLY = 'Apenas alunos podem enviar a prova.';
 const ALREADY_SUBMITTED = 'Você já enviou esta prova.';
 const SUBMISSION_CLOSED = 'O prazo para envio desta prova foi encerrado.';
+const INVALID_OPTION = 'Alternativa inválida para a questão.';
 const INVALID_QUESTIONS = 'A prova publicada possui questões inválidas.';
 
 export type PublicQuestion = Omit<Question, 'correctKey' | 'rationale'>;
@@ -75,6 +76,7 @@ export async function getExamForStudent(user: AgendaActor, agendaId: string, dep
   return {
     agenda,
     questions: publicQuestions,
+    serverNow: deps.now().toISOString(),
     durationMinutes: assessment.durationMinutes,
     maxScore: assessment.maxScore,
     alreadySubmitted: Boolean(submission),
@@ -104,10 +106,15 @@ export async function submitExam(
   if (await deps.findSubmission(agendaId, user.id)) throw new DomainError(409, ALREADY_SUBMITTED);
 
   const byId = new Map(questions.map((q) => [q.id, q]));
-  const valid = input.answers.filter((a) => byId.has(a.questionId));
-  const correct = questions.filter((q) =>
-    valid.some((a) => a.questionId === q.id && a.chosenKey === q.correctKey)
-  ).length;
+  const lastAnswers = new Map<string, SubmitExamInput['answers'][number]>();
+  for (const answer of input.answers) {
+    const question = byId.get(answer.questionId);
+    if (!question) continue;
+    if (!question.options.some((o) => o.key === answer.chosenKey)) throw new DomainError(422, INVALID_OPTION);
+    lastAnswers.set(answer.questionId, answer);
+  }
+  const valid = [...lastAnswers.values()];
+  const correct = valid.filter((a) => byId.get(a.questionId)!.correctKey === a.chosenKey).length;
   const total = questions.length;
   const score = total === 0 ? 0 : round2((assessment.maxScore * correct) / total);
 

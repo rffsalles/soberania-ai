@@ -28,6 +28,7 @@ interface ExamPageProps {
 interface ExamPayload {
   agenda: AgendaDTO;
   questions: PublicQuestion[];
+  serverNow: string;
   durationMinutes: number;
   maxScore: number;
   alreadySubmitted: boolean;
@@ -115,7 +116,11 @@ function ExamRunner({ examId, exam }: { examId: string; exam: ExamPayload }) {
   const [selected, setSelected] = React.useState<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const endMs = React.useMemo(() => new Date(exam.agenda.endTime).getTime(), [exam.agenda.endTime]);
-  const remaining = React.useCallback(() => Math.max(0, Math.ceil((endMs - Date.now()) / MS_PER_SECOND)), [endMs]);
+  const clockOffsetRef = React.useRef(new Date(exam.serverNow).getTime() - Date.now());
+  const remaining = React.useCallback(
+    () => Math.max(0, Math.ceil((endMs - (Date.now() + clockOffsetRef.current)) / MS_PER_SECOND)),
+    [endMs]
+  );
   const [secondsRemaining, setSecondsRemaining] = React.useState(remaining);
   const [tabBlurCount, setTabBlurCount] = React.useState(0);
   const [guardrailBlocks, setGuardrailBlocks] = React.useState(0);
@@ -326,6 +331,18 @@ function ExamRunner({ examId, exam }: { examId: string; exam: ExamPayload }) {
                   <p role="alert" className="text-sm text-red-600">
                     {submitError}
                   </p>
+                )}
+
+                {(submitError || secondsRemaining === 0) && (
+                  <Button
+                    size="sm"
+                    disabled={isSubmitting}
+                    onClick={() => void submit()}
+                    className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                  >
+                    <Send className="h-4 w-4" />
+                    <span>Tentar enviar novamente</span>
+                  </Button>
                 )}
 
                 {/* Navigation Buttons */}
