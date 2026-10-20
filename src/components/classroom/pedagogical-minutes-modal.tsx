@@ -14,7 +14,7 @@ import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { generateClassMinute } from '@/domains/pedagogy/minutes-generator';
+import { generateClassMinute } from '@/lib/mocks-pending';
 import type { ClassMinuteData } from '@/domains/pedagogy/types';
 
 interface PedagogicalMinutesModalProps {

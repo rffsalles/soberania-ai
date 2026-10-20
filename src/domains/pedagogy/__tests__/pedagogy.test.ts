@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateClassMinute } from '../minutes-generator';
-import { getTeacherStruggleHeatmap } from '@/lib/mocks-pending';
+import { generateClassMinute, getTeacherStruggleHeatmap } from '@/lib/mocks-pending';
 
 describe('Pedagogy Domain - Minutes and Struggle Heatmap', () => {
   it('deve gerar Ata Pedagógica com engajamento e recomendações formativas', () => {

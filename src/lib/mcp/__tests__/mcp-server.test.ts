@@ -12,6 +12,12 @@ describe('Local MCP Server', () => {
     expect(names).toContain('generate_class_minutes');
   });
 
+  it('generate_class_minutes exige o contexto do usuário autenticado', async () => {
+    await expect(
+      localMcpServer.executeTool('generate_class_minutes', { agendaId: 'ag1' })
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
   it('deve executar a tool search_didactic_material com sucesso', async () => {
     const res = await localMcpServer.executeTool<{ chunks: unknown[] }>(
       'search_didactic_material',

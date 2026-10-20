@@ -7,7 +7,7 @@ import { DomainError } from '@/lib/api/domain-error';
 
 export async function POST(req: NextRequest) {
   try {
-    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const body = await req.json();
     const { toolName, args } = body;
 
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       throw new DomainError(400, 'Parâmetro toolName é obrigatório.');
     }
 
-    const result = await localMcpServer.executeTool(toolName, args || {});
+    const result = await localMcpServer.executeTool(toolName, args || {}, { user });
     return NextResponse.json({
       success: true,
       toolName,

@@ -1,29 +1,21 @@
-import { generateClassMinute } from '@/domains/pedagogy/minutes-generator';
+import { DomainError } from '@/lib/api/domain-error';
+import { generateMinute } from '@/domains/pedagogy/services/minutes-service';
+import type { McpContext } from '../mcp-context';
 
 export const generateMinutesTool = {
   name: 'generate_class_minutes',
   description:
-    'Gera a Ata Pedagógica estruturada ao final da aula com métricas de engajamento, dúvidas sanadas e pontos de atenção.',
+    'Gera a Ata Pedagógica estruturada ao final da aula com métricas de engajamento, dúvidas sanadas e pontos de atenção, calculadas das interações registradas.',
   parameters: {
     type: 'object',
     properties: {
       agendaId: { type: 'string' },
-      sessionTitle: { type: 'string' },
       studentId: { type: 'string' },
-      studentName: { type: 'string' },
-      questionsCount: { type: 'number' },
-      challengesCount: { type: 'number' },
     },
-    required: ['agendaId', 'sessionTitle', 'studentId', 'studentName'],
+    required: ['agendaId'],
   },
-  execute: async (args: {
-    agendaId: string;
-    sessionTitle: string;
-    studentId: string;
-    studentName: string;
-    questionsCount?: number;
-    challengesCount?: number;
-  }) => {
-    return generateClassMinute(args);
+  execute: async (args: { agendaId: string; studentId?: string }, ctx?: McpContext) => {
+    if (!ctx?.user) throw new DomainError(401, 'Contexto de usuário ausente para a ferramenta MCP.');
+    return generateMinute(ctx.user, args);
   },
 };

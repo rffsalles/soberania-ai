@@ -8,6 +8,19 @@ export function createInteraction(data: InteractionInput): Promise<InteractionRe
   return db.studentInteraction.create({ data });
 }
 
+export function listInteractionsByAgendaAndStudent(agendaId: string, studentId: string): Promise<InteractionRecord[]> {
+  return db.studentInteraction.findMany({ where: { agendaId, studentId }, orderBy: { createdAt: 'asc' } });
+}
+
+export async function listStudentIdsWithInteractions(agendaId: string): Promise<string[]> {
+  const rows = await db.studentInteraction.findMany({
+    where: { agendaId },
+    select: { studentId: true },
+    distinct: ['studentId'],
+  });
+  return rows.map((r) => r.studentId);
+}
+
 export function listInteractionsByAgenda(agendaId: string): Promise<InteractionRecord[]> {
   return db.studentInteraction.findMany({ where: { agendaId }, orderBy: { createdAt: 'asc' } });
 }
