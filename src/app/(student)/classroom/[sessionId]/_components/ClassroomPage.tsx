@@ -102,12 +102,14 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
       </main>
 
       {/* Pedagogical Minutes Output Modal */}
-      <PedagogicalMinutesModal
-        open={minutesModalOpen}
-        onOpenChange={setMinutesModalOpen}
-        agendaId={session.id}
-        sessionTitle={session.title}
-      />
+      {minutesModalOpen && (
+        <PedagogicalMinutesModal
+          open={minutesModalOpen}
+          onOpenChange={setMinutesModalOpen}
+          agendaId={session.id}
+          sessionTitle={session.title}
+        />
+      )}
     </div>
   );
 }

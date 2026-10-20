@@ -18,6 +18,14 @@ export function validateAgendaTimeWindow(
 
   if (session.status === 'LIVE') {
     const liveEnd = new Date(session.endTime).getTime();
+    if (!isNaN(liveEnd) && currentTime.getTime() > liveEnd) {
+      return {
+        isWithinWindow: false,
+        minutesRemaining: 0,
+        timeUntilStartMinutes: 0,
+        message: `Esta sessão foi encerrada às ${new Date(liveEnd).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. As interações ativas foram finalizadas e a Ata Pedagógica foi emitida.`,
+      };
+    }
     if (!isNaN(liveEnd)) {
       const remaining = Math.max(0, Math.ceil((liveEnd - currentTime.getTime()) / (1000 * 60)));
       return {

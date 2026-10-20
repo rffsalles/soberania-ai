@@ -23,6 +23,26 @@ describe('Agendas Domain - Time Window Validation', () => {
     expect(validation.message).toContain('5 minuto(s)');
   });
 
+  it('nega acesso quando a sessão LIVE já passou do endTime', () => {
+    const now = new Date('2026-10-20T12:00:00Z');
+    const validation = validateAgendaTimeWindow(
+      {
+        id: 'live-expired',
+        title: 'Aula',
+        subject: 'BD',
+        type: 'CLASSROOM',
+        status: 'LIVE',
+        instructorName: 'Prof.',
+        startTime: '2026-10-20T11:00:00Z',
+        endTime: '2026-10-20T11:59:00Z',
+      },
+      now
+    );
+    expect(validation.isWithinWindow).toBe(false);
+    expect(validation.minutesRemaining).toBe(0);
+    expect(validation.message).toContain('encerrada');
+  });
+
   it('deve autorizar acesso quando a sessão está LIVE e dentro da janela', () => {
     const session: AgendaSession = {
       id: 'test-1',
