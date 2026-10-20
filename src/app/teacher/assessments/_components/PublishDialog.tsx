@@ -5,14 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
-import { publishAssessment } from '@/components/assessments/use-assessments';
+import { HTTP_CONFLICT, RequestError, publishAssessment } from '@/components/assessments/use-assessments';
 
 type Props = {
   assessmentId: string;
   classOptions: { id: string; name: string }[];
   onClose: () => void;
-  onPublished: () => void;
+  onPublished: (notice?: string) => void;
 };
+
+const ALREADY_PUBLISHED = 'Esta avaliação já foi publicada.';
 
 export function PublishDialog({ assessmentId, classOptions, onClose, onPublished }: Props) {
   const [classId, setClassId] = React.useState(classOptions[0]?.id ?? '');
@@ -27,6 +29,11 @@ export function PublishDialog({ assessmentId, classOptions, onClose, onPublished
       await publishAssessment(assessmentId, { classId, startTime: new Date(startLocal).toISOString() });
       onPublished();
     } catch (err) {
+      if (err instanceof RequestError && err.status === HTTP_CONFLICT) {
+        // Já publicada em outra sessão: atualiza a lista e fecha o diálogo.
+        onPublished(ALREADY_PUBLISHED);
+        return;
+      }
       setError((err as Error).message);
     } finally {
       setBusy(false);

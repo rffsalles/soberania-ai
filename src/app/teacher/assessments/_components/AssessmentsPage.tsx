@@ -29,6 +29,7 @@ export function AssessmentsPage() {
   const [planId, setPlanId] = React.useState<string | null>(null);
   const [view, setView] = React.useState<View>({ kind: 'list' });
   const [publishing, setPublishing] = React.useState<AssessmentItem | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
   const { assessments, isLoading, error, reload } = useAssessments(planId);
 
   const plan = plans.find((p) => p.id === planId) ?? null;
@@ -101,6 +102,7 @@ export function AssessmentsPage() {
               <Plus className="h-4 w-4" /> Nova avaliação
             </Button>
           </div>
+          {notice && <p role="status" className="text-sm text-amber-600">{notice}</p>}
           {isLoading && <p className="text-sm text-slate-500">Carregando avaliações...</p>}
           {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           {!isLoading && !error && assessments.length === 0 && (
@@ -153,8 +155,9 @@ export function AssessmentsPage() {
           assessmentId={publishing.id}
           classOptions={classOptions}
           onClose={() => setPublishing(null)}
-          onPublished={() => {
+          onPublished={(message) => {
             setPublishing(null);
+            setNotice(message ?? null);
             reload();
           }}
         />

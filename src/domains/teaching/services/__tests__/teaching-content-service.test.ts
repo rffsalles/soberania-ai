@@ -55,6 +55,15 @@ describe('teaching-content-service ownership', () => {
     expect(calls.createAssessment).toBeUndefined();
   });
 
+  it('createAssessment persists a valid durationMinutes and rejects out-of-range values', async () => {
+    const { deps, calls } = makeDeps();
+    await createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', durationMinutes: 90 }, deps);
+    expect(calls.createAssessment[0]).toMatchObject({ durationMinutes: 90 });
+    await expect(
+      createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', durationMinutes: 1 }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   it('missing parents give 404', async () => {
     const { deps } = makeDeps();
     await expect(createSchedule(teacher, scheduleInput('nope'), deps)).rejects.toMatchObject({ status: 404 });

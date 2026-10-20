@@ -51,6 +51,17 @@ export type AssessmentDraft = {
 export type GenerateInput = { teachingPlanId: string; unitNumbers: number[]; questionCount: number; type: string };
 export type GeneratedAssessment = { questions: Question[]; rubrics: Rubric[]; fallback: boolean };
 
+export const HTTP_CONFLICT = 409;
+
+export class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
+
 /** Chamada JSON que lança Error com a mensagem do servidor em caso de falha. */
 export async function requestJson<T>(url: string, method: 'GET' | 'POST' | 'PUT', payload?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -60,7 +71,9 @@ export async function requestJson<T>(url: string, method: 'GET' | 'POST' | 'PUT'
       : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok || !body?.success) throw new Error(typeof body?.error === 'string' ? body.error : GENERIC_ERROR);
+  if (!res.ok || !body?.success) {
+    throw new RequestError(typeof body?.error === 'string' ? body.error : GENERIC_ERROR, res.status);
+  }
   return body as T;
 }
 
@@ -82,7 +95,7 @@ function useRemote<T>(url: string | null, pick: (body: never) => T, empty: T) {
     return () => {
       cancelled = true;
     };
-  }, [url, version]);
+  }, [url, version, empty]);
 
   const reload = React.useCallback(() => setVersion((v) => v + 1), []);
   return { ...state, reload };

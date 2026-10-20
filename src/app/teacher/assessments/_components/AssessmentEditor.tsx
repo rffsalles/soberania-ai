@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OPTION_KEYS, type Question, type Rubric } from '@/domains/assessments/question-schema';
 import { ASSESSMENT_TYPE } from '@/lib/constants/teaching';
+import { validateAssessmentDraft } from '@/components/assessments/assessment-draft';
 import {
   generateAssessment,
   saveAssessment,
@@ -18,6 +19,7 @@ import {
   type PlanOption,
 } from '@/components/assessments/use-assessments';
 
+const ASSESSMENT_TYPE_LABEL: Record<string, string> = { [ASSESSMENT_TYPE.EXAM]: 'Prova' };
 const DEFAULT_DURATION_MINUTES = 60;
 const DEFAULT_MAX_SCORE = 10;
 const DEFAULT_QUESTION_COUNT = 5;
@@ -61,6 +63,7 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
   const [busy, setBusy] = React.useState<'generate' | 'save' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const unitOptions = planUnits(plan);
+  const problems = validateAssessmentDraft(draft);
 
   const run = async (kind: 'generate' | 'save', action: () => Promise<void>) => {
     setBusy(kind);
@@ -111,7 +114,18 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
           </div>
           <div className="space-y-1">
             <Label htmlFor="as-type">Tipo</Label>
-            <Input id="as-type" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} />
+            <select
+              id="as-type"
+              value={draft.type}
+              onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+            >
+              {Object.values(ASSESSMENT_TYPE).map((t) => (
+                <option key={t} value={t}>
+                  {ASSESSMENT_TYPE_LABEL[t]}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="as-duration">Duração (minutos)</Label>
@@ -285,13 +299,17 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
         </CardContent>
       </Card>
 
-      {error && (
+      {(error ?? problems[0]) && (
         <p role="alert" className="text-sm text-red-600">
-          {error}
+          {error ?? problems[0]}
         </p>
       )}
       <div className="flex gap-2">
-        <Button onClick={save} disabled={busy !== null || draft.title.trim().length < 3} className="gap-2">
+        <Button
+          onClick={save}
+          disabled={busy !== null || draft.title.trim().length < 3 || problems.length > 0}
+          className="gap-2"
+        >
           <Save className="h-4 w-4" />
           {busy === 'save' ? 'Salvando...' : 'Salvar'}
         </Button>

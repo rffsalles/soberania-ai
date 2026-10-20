@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { questionSchema, rubricSchema } from '@/domains/assessments/question-schema';
 
 export const MAX_QUESTION_COUNT = 20;
+export const MIN_DURATION_MINUTES = 5;
+export const MAX_DURATION_MINUTES = 300;
 
 export const generateAssessmentSchema = z.object({
   teachingPlanId: z.string().min(1),
@@ -15,7 +17,7 @@ export const updateAssessmentSchema = z.object({
   type: z.string().min(1).optional(),
   questions: z.array(questionSchema).optional(),
   rubrics: z.array(rubricSchema).optional(),
-  durationMinutes: z.number().int().positive().optional(),
+  durationMinutes: z.number().int().min(MIN_DURATION_MINUTES).max(MAX_DURATION_MINUTES).optional(),
   maxScore: z.number().positive().optional(),
 });
 

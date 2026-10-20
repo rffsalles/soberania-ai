@@ -1,6 +1,7 @@
 import { Prisma, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { ASSESSMENT_TYPE, LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
+import { MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from '@/lib/validators/assessment.validator';
 import { assertOwner } from '../ownership';
 import * as planRepo from './teaching-plan-repository';
 import * as scheduleRepo from './course-schedule-repository';
@@ -158,6 +159,14 @@ export async function createAssessment(
 ) {
   if (!input.teachingPlanId || !input.title) {
     throw new DomainError(400, 'Plano de ensino e título da avaliação são obrigatórios.');
+  }
+  if (
+    input.durationMinutes !== undefined &&
+    !(Number.isInteger(input.durationMinutes) &&
+      input.durationMinutes >= MIN_DURATION_MINUTES &&
+      input.durationMinutes <= MAX_DURATION_MINUTES)
+  ) {
+    throw new DomainError(400, `A duração deve estar entre ${MIN_DURATION_MINUTES} e ${MAX_DURATION_MINUTES} minutos.`);
   }
   await assertOwnsPlanId(user, input.teachingPlanId, deps);
   return deps.repo.createAssessment({
