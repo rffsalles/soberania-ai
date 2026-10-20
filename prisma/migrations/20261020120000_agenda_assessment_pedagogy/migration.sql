@@ -1,3 +1,9 @@
+-- AddColumn (early so the backfill can run before lesson_plans.agendaId is dropped)
+ALTER TABLE "agendas" ADD COLUMN "lessonPlanId" TEXT;
+
+-- Backfill: link ownership moves from lesson_plans.agendaId to agendas.lessonPlanId
+UPDATE "agendas" a SET "lessonPlanId" = lp."id" FROM "lesson_plans" lp WHERE lp."agendaId" = a."id";
+
 -- DropForeignKey
 ALTER TABLE "lesson_plans" DROP CONSTRAINT "lesson_plans_agendaId_fkey";
 
@@ -6,7 +12,6 @@ DROP INDEX "lesson_plans_agendaId_key";
 
 -- AlterTable
 ALTER TABLE "agendas" ADD COLUMN     "assessmentId" TEXT,
-ADD COLUMN     "lessonPlanId" TEXT,
 ADD COLUMN     "subjectId" TEXT,
 ADD COLUMN     "teacherId" TEXT;
 
@@ -26,6 +31,9 @@ ADD COLUMN     "totalQuestionsAsked" INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE "student_interactions" ADD COLUMN     "agendaType" "AgendaType" NOT NULL DEFAULT 'CLASSROOM',
 ADD COLUMN     "guardrailBlocked" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "latencyMs" INTEGER;
+
+-- Backfill interaction type from the owning agenda
+UPDATE "student_interactions" si SET "agendaType" = a."type" FROM "agendas" a WHERE a."id" = si."agendaId";
 
 -- CreateTable
 CREATE TABLE "study_group_messages" (
@@ -103,6 +111,11 @@ CREATE INDEX "agendas_subjectId_idx" ON "agendas"("subjectId");
 
 -- CreateIndex
 CREATE INDEX "agendas_assessmentId_idx" ON "agendas"("assessmentId");
+
+-- De-duplicate existing rows, keeping the latest per (agendaId, studentId)
+DELETE FROM "pedagogical_minutes" p USING "pedagogical_minutes" q
+WHERE p."agendaId" = q."agendaId" AND p."studentId" = q."studentId"
+  AND (p."createdAt" < q."createdAt" OR (p."createdAt" = q."createdAt" AND p."id" < q."id"));
 
 -- CreateIndex
 CREATE UNIQUE INDEX "pedagogical_minutes_agendaId_studentId_key" ON "pedagogical_minutes"("agendaId", "studentId");
