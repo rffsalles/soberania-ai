@@ -43,8 +43,22 @@ function makeDeps(aiText: string, fallback = false) {
         : null,
     findAssessment: async (id) =>
       id === 'as1'
-        ? { id: 'as1', title: 'Prova 1', durationMinutes: 60, teachingPlan: { teacherId: 't1', subjectId: 's1' } }
-        : null,
+        ? {
+            id: 'as1',
+            title: 'Prova 1',
+            durationMinutes: 60,
+            status: 'DRAFT',
+            teachingPlan: { teacherId: 't1', subjectId: 's1' },
+          }
+        : id === 'pub1'
+          ? {
+              id: 'pub1',
+              title: 'Prova 2',
+              durationMinutes: 60,
+              status: 'PUBLISHED',
+              teachingPlan: { teacherId: 't1', subjectId: 's1' },
+            }
+          : null,
     updateAssessmentById,
     search: async () => ({ chunks: [chunk(1), chunk(2), chunk(3)] }),
     streamChat: async function* (): AsyncGenerator<StreamChunk> {
@@ -74,6 +88,28 @@ describe('generateQuestions', () => {
     expect(out.questions).toHaveLength(5);
     for (const q of out.questions) expect(questionSchema.safeParse(q).success).toBe(true);
     expect(out.questions.map((q) => q.id)).toEqual(['q1', 'q2', 'q3', 'q4', 'q5']);
+  });
+
+  it('builds valid questions with 4 distinct options from a single chunk', async () => {
+    const { deps } = makeDeps('não é json');
+    deps.search = async () => ({ chunks: [chunk(1)] });
+    const out = await generateQuestions(teacher, input, deps);
+    expect(out.questions).toHaveLength(5);
+    for (const q of out.questions) {
+      expect(questionSchema.safeParse(q).success).toBe(true);
+      expect(new Set(q.options.map((o) => o.text)).size).toBe(4);
+    }
+  });
+
+  it('dedupes options when chunks have identical content', async () => {
+    const { deps } = makeDeps('não é json');
+    const same = (n: number) => ({ ...chunk(1), id: `same${n}` });
+    deps.search = async () => ({ chunks: [same(1), same(2), same(3)] });
+    const out = await generateQuestions(teacher, input, deps);
+    for (const q of out.questions) {
+      expect(questionSchema.safeParse(q).success).toBe(true);
+      expect(new Set(q.options.map((o) => o.text)).size).toBe(4);
+    }
   });
 
   it('falls back when the provider chunks are flagged as fallback', async () => {
@@ -115,6 +151,21 @@ describe('publishAssessment', () => {
       })
     );
     expect(updateAssessmentById).toHaveBeenCalledWith('as1', { status: 'PUBLISHED' });
+  });
+
+  it('rejects publishing an already published assessment with 409', async () => {
+    const { deps, createAgenda } = makeDeps('x');
+    await expect(publishAssessment('pub1', teacher, body, deps)).rejects.toMatchObject({ status: 409 });
+    expect(createAgenda).not.toHaveBeenCalled();
+  });
+
+  it('reverts the status to DRAFT when agenda creation fails', async () => {
+    const { deps, updateAssessmentById } = makeDeps('x');
+    deps.createAgenda = async () => {
+      throw new Error('boom');
+    };
+    await expect(publishAssessment('as1', teacher, body, deps)).rejects.toThrow('boom');
+    expect(updateAssessmentById).toHaveBeenLastCalledWith('as1', { status: 'DRAFT' });
   });
 
   it('rejects a teacher who does not own the plan', async () => {

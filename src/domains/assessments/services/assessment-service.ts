@@ -1,4 +1,5 @@
-import { AgendaType, Role, type Prisma } from '@prisma/client';
+import { AgendaType, type Prisma } from '@prisma/client';
+import { assertOwner } from '@/domains/teaching/ownership';
 import { z } from 'zod';
 import { DomainError } from '@/lib/api/domain-error';
 import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
@@ -35,6 +36,7 @@ type AssessmentWithPlan = {
   id: string;
   title: string;
   durationMinutes: number;
+  status: string;
   teachingPlan: { teacherId: string; subjectId: string };
 };
 
@@ -71,12 +73,6 @@ const DEFAULT_RUBRICS: Rubric[] = [
   { criterion: 'Acerto', description: 'Alternativa correta assinalada.', weight: 1 },
 ];
 
-function assertOwner(user: AssessmentActor, teacherId: string) {
-  if (user.role === Role.TEACHER && teacherId !== user.id) {
-    throw new DomainError(403, 'Você não tem acesso a este recurso.');
-  }
-}
-
 const sentences = (text: string) =>
   text
     .split(/(?<=[.!?])\s+/)
@@ -89,12 +85,14 @@ const clip = (text: string) => (text.length > SNIPPET_MAX_CHARS ? `${text.slice(
 export function buildFallbackQuestions(chunks: DidacticChunk[], count: number): Question[] {
   return Array.from({ length: count }, (_, i) => {
     const chunk = chunks[i % chunks.length];
-    const correct = clip(sentences(chunk.content)[0] ?? chunk.content);
-    const others = chunks
-      .filter((c) => c.id !== chunk.id)
-      .map((c) => clip(sentences(c.content)[0] ?? c.content))
-      .filter((text) => text !== correct);
-    const distractors = [...others, ...GENERIC_DISTRACTORS].slice(0, DISTRACTOR_COUNT);
+    const snippet = (c: DidacticChunk) => clip(sentences(c.content)[0] ?? c.content) || c.chapter || c.bookTitle;
+    const correct = snippet(chunk);
+    const pool = [...chunks.filter((c) => c.id !== chunk.id).map(snippet), ...GENERIC_DISTRACTORS];
+    const distractors = [...new Set(pool)].filter((text) => text && text !== correct);
+    for (let n = 1; distractors.length < DISTRACTOR_COUNT; n++) {
+      const padding = `Nenhuma das afirmações anteriores se aplica (${n}).`;
+      if (padding !== correct) distractors.push(padding);
+    }
     const correctKey = OPTION_KEYS[i % OPTION_KEYS.length];
     let next = 0;
     const options = OPTION_KEYS.map((key) => ({ key, text: key === correctKey ? correct : distractors[next++] }));
@@ -187,7 +185,11 @@ export async function generateQuestions(
           content: plan.syllabus,
         },
       ];
-  return { questions: buildFallbackQuestions(base, input.questionCount), rubrics: DEFAULT_RUBRICS, fallback: true };
+  const questions = buildFallbackQuestions(base, input.questionCount);
+  if (!z.array(questionSchema).length(input.questionCount).safeParse(questions).success) {
+    throw new DomainError(500, 'Falha ao montar as questões de contingência.');
+  }
+  return { questions, rubrics: DEFAULT_RUBRICS, fallback: true };
 }
 
 async function loadOwnedAssessment(id: string, user: AssessmentActor, deps: AssessmentDeps) {
@@ -229,16 +231,22 @@ export async function publishAssessment(
   const assessment = await loadOwnedAssessment(id, user, deps);
   const start = new Date(input.startTime);
   const end = new Date(start.getTime() + assessment.durationMinutes * MS_PER_MINUTE);
+  if (assessment.status === ASSESSMENT_STATUS.PUBLISHED) throw new DomainError(409, 'Avaliação já publicada.');
 
-  const agenda = await deps.createAgenda(user, {
-    title: assessment.title,
-    type: AgendaType.EXAM,
-    classId: input.classId,
-    subjectId: assessment.teachingPlan.subjectId,
-    startTime: start.toISOString(),
-    endTime: end.toISOString(),
-    assessmentId: id,
-  });
+  // Claim the PUBLISHED status first so a second publish is rejected; revert on failure so a retry works.
   await deps.updateAssessmentById(id, { status: ASSESSMENT_STATUS.PUBLISHED });
-  return agenda;
+  try {
+    return await deps.createAgenda(user, {
+      title: assessment.title,
+      type: AgendaType.EXAM,
+      classId: input.classId,
+      subjectId: assessment.teachingPlan.subjectId,
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      assessmentId: id,
+    });
+  } catch (err) {
+    await deps.updateAssessmentById(id, { status: ASSESSMENT_STATUS.DRAFT });
+    throw err;
+  }
 }

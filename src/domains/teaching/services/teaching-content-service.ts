@@ -1,6 +1,7 @@
 import { Prisma, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { ASSESSMENT_TYPE, LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
+import { assertOwner } from '../ownership';
 import * as planRepo from './teaching-plan-repository';
 import * as scheduleRepo from './course-schedule-repository';
 import * as lessonRepo from './lesson-plan-repository';
@@ -40,12 +41,6 @@ const defaultDeps: TeachingContentDeps = {
 };
 
 const ownerFilter = (user: PlanActor) => (user.role === Role.TEACHER ? { teacherId: user.id } : {});
-
-function assertOwner(user: PlanActor, teacherId: string) {
-  if (user.role === Role.TEACHER && teacherId !== user.id) {
-    throw new DomainError(403, 'Você não tem acesso a este recurso.');
-  }
-}
 
 async function assertOwnsPlanId(user: PlanActor, planId: string, deps: TeachingContentDeps) {
   const plan = await deps.repo.findPlanOwner(planId);

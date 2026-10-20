@@ -23,6 +23,7 @@ export function findAssessmentWithPlan(id: string) {
       id: true,
       title: true,
       durationMinutes: true,
+      status: true,
       teachingPlan: { select: { teacherId: true, subjectId: true } },
     },
   });
