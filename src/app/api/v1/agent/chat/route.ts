@@ -6,10 +6,9 @@ import { apiError } from '@/lib/api/api-error';
 
 const chatRequestSchema = z.object({
   message: z.string().min(1, 'Parâmetro message é obrigatório.'),
-  agendaType: z
-    .enum(['CLASSROOM', 'STUDY_GROUP', 'DRAFT_REVIEW', 'OFFICE_HOURS', 'EXAM'])
-    .optional()
-    .default('CLASSROOM'),
+  agendaType: z.enum(['CLASSROOM', 'STUDY_GROUP', 'DRAFT_REVIEW', 'OFFICE_HOURS', 'EXAM'], {
+    message: 'Parâmetro agendaType é obrigatório e deve ser válido.',
+  }),
   sessionId: z.string().optional().default('session-live-01'),
   videoTimestampSeconds: z.number().optional(),
 });
