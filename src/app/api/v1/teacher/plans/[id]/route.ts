@@ -1,19 +1,16 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { Prisma } from '@prisma/client';
 import { updateTeachingPlanSchema } from '@/lib/validators/teaching-plan.validator';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { Role } from '@prisma/client';
-
-
+import { getPlan, updatePlan } from '@/domains/teaching/services/teaching-plan-service';
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { id } = await params;
 
     if (!id) {
@@ -23,27 +20,7 @@ export async function GET(
       );
     }
 
-    const plan = await db.teachingPlan.findUnique({
-      where: { id },
-      include: {
-        subject: true,
-        academicPeriod: true,
-        schedules: {
-          include: {
-            lessonPlans: true,
-          },
-        },
-        assessments: true,
-      },
-    });
-
-    if (!plan) {
-      return NextResponse.json(
-        { success: false, error: 'Plano de ensino não encontrado.' },
-        { status: 404 }
-      );
-    }
-
+    const plan = await getPlan(id, user);
     return NextResponse.json({ success: true, plan });
   } catch (error) {
     return apiError(error);
@@ -55,7 +32,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { id } = await params;
     const body = await req.json();
 
@@ -67,44 +44,9 @@ export async function PUT(
       );
     }
 
-    const existingPlan = await db.teachingPlan.findUnique({ where: { id } });
-    if (!existingPlan) {
-      return NextResponse.json(
-        { success: false, error: 'Plano de ensino não encontrado para atualização.' },
-        { status: 404 }
-      );
-    }
-
-    const dataToUpdate = parsed.data;
-
-    const updatedPlan = await db.teachingPlan.update({
-      where: { id },
-      data: {
-        subjectId: dataToUpdate.subjectId ?? existingPlan.subjectId,
-        academicPeriodId: dataToUpdate.academicPeriodId !== undefined ? dataToUpdate.academicPeriodId : existingPlan.academicPeriodId,
-        syllabus: dataToUpdate.syllabus !== undefined ? dataToUpdate.syllabus : existingPlan.syllabus,
-        generalObjectives: dataToUpdate.generalObjectives !== undefined ? dataToUpdate.generalObjectives : existingPlan.generalObjectives,
-        specificObjectives: dataToUpdate.specificObjectives !== undefined ? dataToUpdate.specificObjectives : existingPlan.specificObjectives,
-        unitsContent: dataToUpdate.unitsContent !== undefined ? (dataToUpdate.unitsContent as unknown as Prisma.InputJsonValue) : (existingPlan.unitsContent as unknown as Prisma.InputJsonValue),
-        methodology: dataToUpdate.methodology !== undefined ? dataToUpdate.methodology : existingPlan.methodology,
-        assessmentCriteria: dataToUpdate.assessmentCriteria !== undefined ? dataToUpdate.assessmentCriteria : existingPlan.assessmentCriteria,
-        basicBibliography: dataToUpdate.basicBibliography !== undefined ? dataToUpdate.basicBibliography : existingPlan.basicBibliography,
-        complementaryBiblio: dataToUpdate.complementaryBiblio !== undefined ? dataToUpdate.complementaryBiblio : existingPlan.complementaryBiblio,
-        status: dataToUpdate.status ?? existingPlan.status,
-        totalHours: dataToUpdate.totalHours !== undefined ? dataToUpdate.totalHours : existingPlan.totalHours,
-        theoryHours: dataToUpdate.theoryHours !== undefined ? dataToUpdate.theoryHours : existingPlan.theoryHours,
-        practiceHours: dataToUpdate.practiceHours !== undefined ? dataToUpdate.practiceHours : existingPlan.practiceHours,
-        ndeComplianceStatus: dataToUpdate.ndeComplianceStatus ?? existingPlan.ndeComplianceStatus,
-      },
-      include: {
-        subject: true,
-        academicPeriod: true,
-      },
-    });
-
-    return NextResponse.json({ success: true, plan: updatedPlan });
+    const plan = await updatePlan(id, user, parsed.data);
+    return NextResponse.json({ success: true, plan });
   } catch (error) {
     return apiError(error);
   }
 }
-

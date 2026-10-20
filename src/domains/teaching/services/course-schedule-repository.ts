@@ -1,0 +1,30 @@
+import type { Prisma } from '@prisma/client';
+import { db } from '@/lib/db';
+
+export function listSchedulesByPlan(filter: { planId?: string; teacherId?: string }) {
+  return db.courseSchedule.findMany({
+    where: {
+      ...(filter.planId ? { teachingPlanId: filter.planId } : {}),
+      ...(filter.teacherId ? { teachingPlan: { teacherId: filter.teacherId } } : {}),
+    },
+    include: {
+      teachingPlan: { include: { subject: true } },
+      lessonPlans: { orderBy: { classNumber: 'asc' } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export function findScheduleOwner(id: string) {
+  return db.courseSchedule.findUnique({
+    where: { id },
+    select: { id: true, teachingPlan: { select: { teacherId: true } } },
+  });
+}
+
+export function createSchedule(data: Prisma.CourseScheduleUncheckedCreateInput) {
+  return db.courseSchedule.create({
+    data,
+    include: { teachingPlan: { include: { subject: true } } },
+  });
+}
