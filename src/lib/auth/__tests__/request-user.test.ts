@@ -38,6 +38,13 @@ describe('requireUser', () => {
     expect(getSessionUser).not.toHaveBeenCalled();
   });
 
+  it('401 (não 500) quando o cookie tem encoding malformado', async () => {
+    const getSessionUser = vi.fn();
+    const { requireUser } = createRequestUserReader({ getSessionUser });
+    expect(await status(requireUser(reqWith(`${AUTH_COOKIE_NAME}=%E0%A4%A`)))).toBe(401);
+    expect(getSessionUser).not.toHaveBeenCalled();
+  });
+
   it('401 quando a sessão foi revogada', async () => {
     const { requireUser } = createRequestUserReader({ getSessionUser: async () => null });
     expect(await status(requireUser(reqWith(`${AUTH_COOKIE_NAME}=tok`)))).toBe(401);

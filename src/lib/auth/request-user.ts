@@ -25,7 +25,12 @@ function readCookie(req: Request, name: string): string | null {
     if (idx === -1) continue;
     if (part.slice(0, idx).trim() === name) {
       const value = part.slice(idx + 1).trim();
-      return value ? decodeURIComponent(value) : null;
+      if (!value) return null;
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return null;
+      }
     }
   }
   return null;
