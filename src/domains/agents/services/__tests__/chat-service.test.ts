@@ -50,14 +50,16 @@ function makeDeps(opts: { agenda?: AgendaDTO | Error; reply?: string; fallback?:
   });
   const createInteraction = vi.fn(async () => ({ id: 'int1' }));
   const createInferenceLog = vi.fn(async () => ({ id: 'log1' }));
+  const search = vi.fn(async (q: { query: string }) => ({ query: q.query, chunks: [], latencyMs: 1 }));
   const deps = {
+    search,
     getAgenda,
     createInteraction,
     createInferenceLog,
     streamChat,
     now: () => NOW,
   } as unknown as ChatDeps;
-  return { deps, getAgenda, createInteraction, createInferenceLog, streamChat, sent };
+  return { deps, search, getAgenda, createInteraction, createInferenceLog, streamChat, sent };
 }
 
 describe('chatWithTutor', () => {
@@ -103,6 +105,7 @@ describe('chatWithTutor', () => {
     expect(res.blockedByExamGuardrail).toBe(true);
     expect(res.isSocraticChallenge).toBe(false);
     expect(f.streamChat).not.toHaveBeenCalled();
+    expect(f.search).not.toHaveBeenCalled();
     expect(f.createInferenceLog).not.toHaveBeenCalled();
     expect(f.createInteraction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -185,5 +188,17 @@ describe('chatWithTutor', () => {
     const hist = f.sent[0]!.filter((m) => m.role !== 'system').slice(0, -1);
     expect(hist.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(4000);
     expect(hist.at(-1)!.content.startsWith('5')).toBe(true);
+  });
+
+  it('falha ao gravar o InferenceLog não derruba o chat', async () => {
+    const f = makeDeps();
+    f.createInferenceLog.mockRejectedValue(new Error('db down'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'oi' }, f.deps);
+    expect(res.reply).toBe('Qual a diferença entre INNER e LEFT JOIN?');
+    expect(res.interactionId).toBe('int1');
+    expect(f.createInteraction).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

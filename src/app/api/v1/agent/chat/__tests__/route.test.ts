@@ -104,6 +104,19 @@ describe('POST /api/v1/agent/chat/stream', () => {
     expect(result.reply.length).toBeGreaterThan(0);
   });
 
+  it('falha após o início do stream termina com frame error sem rejeitar o handler', async () => {
+    getAgendaForUser.mockResolvedValue(agendaOf(AgendaType.CLASSROOM));
+    createInteraction.mockRejectedValueOnce(new Error('db down'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await STREAM_POST(chatRequest({ agendaId: 'ag1', message: 'explique join' }, 'chat/stream'));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('event: token');
+    expect(text).toContain('event: error\ndata: {"error":');
+    expect(text).not.toContain('event: done');
+    errSpy.mockRestore();
+  });
+
   it('erros antes do stream saem como JSON via apiError', async () => {
     getAgendaForUser.mockRejectedValue(new DomainError(404, 'Agenda não encontrada.'));
     const res = await STREAM_POST(chatRequest({ agendaId: 'x', message: 'oi' }, 'chat/stream'));

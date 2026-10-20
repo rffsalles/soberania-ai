@@ -1,16 +1,15 @@
-import { AgendaStatus, AgendaType, InteractionType } from '@prisma/client';
+import { AgendaStatus, InteractionType } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import type { AgendaSession } from '@/domains/agendas/types';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
-import { executeHybridSearch } from '@/domains/rag/hybrid-search';
+import type { RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
 import { createInteraction } from '@/domains/pedagogy/services/interaction-repository';
 import type { InteractionInput } from '@/domains/pedagogy/services/interaction-repository';
 import { createInferenceLog } from '@/domains/telemetry/services/inference-log-repository';
 import type { InferenceLogInput } from '@/domains/telemetry/services/inference-log-repository';
 import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
-import { checkExamGuardrail } from '../prompts/exam-guardrails';
-import { getSystemPromptForAgenda } from '../agent-orchestrator';
+import { startTutorPipeline } from '../tutor-pipeline';
 
 export const MAX_HISTORY_MESSAGES = 10;
 export const MAX_HISTORY_CHARS = 4000;
@@ -39,6 +38,7 @@ export type ChatDeps = {
   createInteraction(data: InteractionInput): Promise<{ id: string }>;
   createInferenceLog(data: InferenceLogInput): Promise<unknown>;
   streamChat(messages: AIMessage[], options?: AICompletionOptions): AsyncGenerator<StreamChunk, void, unknown>;
+  search?(query: RAGSearchQuery): Promise<RAGSearchResult>;
   now?: () => Date;
 };
 
@@ -107,46 +107,37 @@ async function runChat(
       input.videoTimestampSeconds === undefined ? null : Math.round(input.videoTimestampSeconds),
   };
 
-  if (agenda.type === AgendaType.EXAM) {
-    const guardrail = checkExamGuardrail(input.message);
-    if (guardrail.isViolation) {
-      const reply = guardrail.refusalMessage ?? '';
-      onToken?.(reply);
-      const latencyMs = Date.now() - startedAt;
-      const interaction = await deps.createInteraction({
-        ...base,
-        type: InteractionType.QUESTION,
-        responseText: reply,
-        isSocraticChallenge: false,
-        guardrailBlocked: true,
-        latencyMs,
-      });
-      return {
-        reply,
-        citations: [],
-        isSocraticChallenge: false,
-        blockedByExamGuardrail: true,
-        latencyMs,
-        fallback: false,
-        interactionId: interaction.id,
-      };
-    }
-  }
+  const start = await startTutorPipeline(
+    { message: input.message, agendaType: agenda.type, history },
+    { search: deps.search, streamChat: deps.streamChat }
+  );
 
-  const rag = await executeHybridSearch({ query: input.message, topK: 2 });
-  const ragContext = rag.chunks
-    .map((c) => `[FONTE: ${c.bookTitle} - ${c.chapter}, pág. ${c.pageNumber}]\n${c.content}`)
-    .join('\n\n');
-  const systemPrompt = `${getSystemPromptForAgenda(agenda.type)}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
+  if (start.kind === 'blocked') {
+    onToken?.(start.refusalMessage);
+    const latencyMs = Date.now() - startedAt;
+    const interaction = await deps.createInteraction({
+      ...base,
+      type: InteractionType.QUESTION,
+      responseText: start.refusalMessage,
+      isSocraticChallenge: false,
+      guardrailBlocked: true,
+      latencyMs,
+    });
+    return {
+      reply: start.refusalMessage,
+      citations: [],
+      isSocraticChallenge: false,
+      blockedByExamGuardrail: true,
+      latencyMs,
+      fallback: false,
+      interactionId: interaction.id,
+    };
+  }
 
   let reply = '';
   let fallback = false;
   let telemetry: StreamChunk['telemetry'];
-  const stream = deps.streamChat(
-    [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: input.message }],
-    { citation: rag.primaryCitation }
-  );
-  for await (const chunk of stream) {
+  for await (const chunk of start.stream) {
     if (chunk.token) {
       reply += chunk.token;
       onToken?.(chunk.token);
@@ -157,7 +148,7 @@ async function runChat(
   reply = reply.trim();
 
   const isSocraticChallenge = reply.endsWith('?');
-  const topChunk = rag.chunks[0];
+  const topChunk = start.topChunk;
   const latencyMs = Date.now() - startedAt;
   const interaction = await deps.createInteraction({
     ...base,
@@ -170,22 +161,27 @@ async function runChat(
     latencyMs,
   });
   if (telemetry) {
-    await deps.createInferenceLog({
-      provider: telemetry.provider,
-      model: telemetry.model,
-      ttftMs: Math.round(telemetry.ttftMs),
-      totalLatencyMs: Math.round(telemetry.totalLatencyMs),
-      tokensPerSecond: telemetry.tokensPerSecond,
-      promptTokens: telemetry.promptTokens,
-      completionTokens: telemetry.completionTokens,
-      externalTrafficBytes: Math.round(telemetry.externalTrafficBytes),
-      agendaType: agenda.type,
-    });
+    // Interação já salva: falha no log de inferência não pode derrubar o chat.
+    try {
+      await deps.createInferenceLog({
+        provider: telemetry.provider,
+        model: telemetry.model,
+        ttftMs: Math.round(telemetry.ttftMs),
+        totalLatencyMs: Math.round(telemetry.totalLatencyMs),
+        tokensPerSecond: telemetry.tokensPerSecond,
+        promptTokens: telemetry.promptTokens,
+        completionTokens: telemetry.completionTokens,
+        externalTrafficBytes: Math.round(telemetry.externalTrafficBytes),
+        agendaType: agenda.type,
+      });
+    } catch (err) {
+      console.warn('[chat] falha ao gravar InferenceLog', err);
+    }
   }
 
   return {
     reply,
-    citations: rag.primaryCitation ? [rag.primaryCitation] : [],
+    citations: start.citation ? [start.citation] : [],
     isSocraticChallenge,
     blockedByExamGuardrail: false,
     latencyMs,

@@ -33,11 +33,19 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(frame(SSE_EVENT.DONE, result)));
         } catch (err) {
           console.error('[chat/stream] erro durante o stream', err);
-          controller.enqueue(
-            encoder.encode(frame(SSE_EVENT.ERROR, { error: 'Falha ao gerar a resposta.' }))
-          );
+          try {
+            controller.enqueue(
+              encoder.encode(frame(SSE_EVENT.ERROR, { error: 'Falha ao gerar a resposta.' }))
+            );
+          } catch {
+            // cliente desconectou: nada a enviar
+          }
         } finally {
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            // stream já encerrado pelo cliente
+          }
         }
       },
     });
