@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
-    const status = await getApplianceStatus();
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    const status = await getApplianceStatus({ includeBaseUrl: user.role === Role.ADMIN });
     return NextResponse.json({ success: true, status });
   } catch (error) {
     return apiError(error);
