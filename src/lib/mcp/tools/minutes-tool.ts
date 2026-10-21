@@ -1,11 +1,20 @@
-import { DomainError } from '@/lib/api/domain-error';
+import { z } from 'zod';
 import { generateMinute } from '@/domains/pedagogy/services/minutes-service';
-import type { McpContext } from '../mcp-context';
+import { defineMcpTool } from '../mcp-tool';
 
-export const generateMinutesTool = {
+/** `questionsCount`/`challengesCount` são aceitos por compatibilidade, mas ignorados: as métricas vêm das interações registradas. */
+const schema = z.object({
+  agendaId: z.string().min(1),
+  studentId: z.string().min(1).optional(),
+  questionsCount: z.number().int().min(0).optional(),
+  challengesCount: z.number().int().min(0).optional(),
+});
+
+export const generateMinutesTool = defineMcpTool({
   name: 'generate_class_minutes',
   description:
     'Gera a Ata Pedagógica estruturada ao final da aula com métricas de engajamento, dúvidas sanadas e pontos de atenção, calculadas das interações registradas.',
+  schema,
   parameters: {
     type: 'object',
     properties: {
@@ -14,8 +23,5 @@ export const generateMinutesTool = {
     },
     required: ['agendaId'],
   },
-  execute: async (args: { agendaId: string; studentId?: string }, ctx?: McpContext) => {
-    if (!ctx?.user) throw new DomainError(401, 'Contexto de usuário ausente para a ferramenta MCP.');
-    return generateMinute(ctx.user, args);
-  },
-};
+  execute: (input, ctx) => generateMinute(ctx.user, { agendaId: input.agendaId, studentId: input.studentId }),
+});
