@@ -316,7 +316,7 @@ model DidacticMaterial {
   fileSize         Int?
   mimeType         String?
   isOcrApplied     Boolean  @default(false)
-  status           String   @default("INDEXED") // UPLOADING, PARSING, OCR_PROCESSING, INDEXED, ERROR
+  status           String   @default("INDEXED") // UPLOADING, PARSING, OCR_PROCESSING, INDEXED, INDEXED_LEXICAL_ONLY (sem embeddings, só busca lexical), ERROR
   errorMessage     String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -335,6 +335,10 @@ model MaterialChunk {
   pageNumber Int
   content    String   @db.Text
   createdAt  DateTime @default(now())
+
+  // Colunas gerenciadas via SQL (migration pgvector_fulltext): embedding vetorial e tsvector gerado
+  embedding  Unsupported("vector(1024)")?
+  contentTsv Unsupported("tsvector")?     @map("content_tsv")
 
   material DidacticMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
