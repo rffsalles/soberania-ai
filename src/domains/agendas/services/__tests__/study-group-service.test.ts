@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AgendaStatus, AgendaType, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
-import { STUDY_GROUP_STALEMATE_MINUTES } from '@/lib/constants/tutor';
+import { STUDY_GROUP_STALEMATE_MINUTES, STUDY_GROUP_STALEMATE_RETRY_MS } from '@/lib/constants/tutor';
 import type { AgendaActor, AgendaDTO } from '../agenda-service';
 import type { StudyGroupMessageRecord } from '../study-group-repository';
 import { checkStalemate, listMessages, mentionsTutor, postMessage, type StudyGroupDeps } from '../study-group-service';
@@ -174,6 +174,20 @@ describe('study-group-service', () => {
     expect(result.message.content).toBe('@lucy ajuda');
     expect(result.tutorReply).toBeUndefined();
     expect(store).toHaveLength(1);
+  });
+
+  it('após falha da intervenção, aguarda o backoff antes de tentar de novo', async () => {
+    const agendaId = 'ag-backoff';
+    const old = makeMessage({ id: 'm1', agendaId, createdAt: new Date(NOW.getTime() - HOUR) });
+    const { deps, chat, store } = makeDeps(makeAgenda({ id: agendaId }), [old]);
+    chat.mockRejectedValueOnce(new Error('provider fora'));
+    await expect(checkStalemate(agendaId, user, NOW, deps)).rejects.toThrow('provider fora');
+    expect(await checkStalemate(agendaId, user, NOW, deps)).toBeNull();
+    expect(chat).toHaveBeenCalledTimes(1);
+    const later = new Date(NOW.getTime() + STUDY_GROUP_STALEMATE_RETRY_MS + 1000);
+    expect(await checkStalemate(agendaId, user, later, deps)).not.toBeNull();
+    expect(chat).toHaveBeenCalledTimes(2);
+    expect(store.filter((m) => m.isAi)).toHaveLength(1);
   });
 
   it('menção respeita fronteira de palavra', () => {

@@ -157,6 +157,22 @@ describe('chatWithTutor', () => {
     );
   });
 
+  it('persistInteraction false não grava interação, mas ainda registra o log de inferência', async () => {
+    const f = makeDeps();
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'oi', persistInteraction: false }, f.deps);
+    expect(f.createInteraction).not.toHaveBeenCalled();
+    expect(f.createInferenceLog).toHaveBeenCalledTimes(1);
+    expect(res.interactionId).toBeNull();
+    expect(res.reply).toBeTruthy();
+  });
+
+  it('persistInteraction true (padrão) continua gravando a interação', async () => {
+    const f = makeDeps();
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'oi', persistInteraction: true }, f.deps);
+    expect(f.createInteraction).toHaveBeenCalledTimes(1);
+    expect(res.interactionId).toBe('int1');
+  });
+
   it('resposta sem pergunta é gravada como QUESTION', async () => {
     const f = makeDeps({ reply: 'Isso é uma explicação.' });
     const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'oi' }, f.deps);

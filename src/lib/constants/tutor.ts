@@ -13,6 +13,9 @@ export const TUTOR_DISPLAY_NAME = 'Tutora Lucy';
 /** Silêncio (em minutos) após o qual a Tutora intervém no grupo de estudos. */
 export const STUDY_GROUP_STALEMATE_MINUTES = 5;
 
+/** Espera após uma intervenção que falhou antes de tentar novamente na mesma agenda. */
+export const STUDY_GROUP_STALEMATE_RETRY_MS = 60_000;
+
 /** Intervalo de atualização do chat do grupo de estudos. */
 export const STUDY_GROUP_POLL_MS = 5000;
 

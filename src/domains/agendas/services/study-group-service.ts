@@ -11,6 +11,7 @@ import {
 import {
   STUDY_GROUP_CONTEXT_MESSAGES,
   STUDY_GROUP_STALEMATE_MINUTES,
+  STUDY_GROUP_STALEMATE_RETRY_MS,
   TUTOR_DISPLAY_NAME,
   TUTOR_MENTION_PATTERN,
 } from '@/lib/constants/tutor';
@@ -52,6 +53,9 @@ const MS_PER_MINUTE = 60_000;
 
 /** Agendas com intervenção em andamento neste processo (evita intervenções duplicadas). */
 const stalemateInFlight = new Set<string>();
+
+/** Última falha de intervenção por agenda: evita martelar o provider enquanto ele estiver indisponível. */
+const stalemateFailedAt = new Map<string, number>();
 
 function toDTO(m: StudyGroupMessageRecord): MessageDTO {
   return {
@@ -128,9 +132,16 @@ export async function checkStalemate(
   const agenda = await loadStudyGroup(agendaId, user, deps);
   if (agenda.status !== AgendaStatus.LIVE) return null;
   if (stalemateInFlight.has(agendaId)) return null;
+  const failedAt = stalemateFailedAt.get(agendaId);
+  if (failedAt !== undefined && now.getTime() - failedAt < STUDY_GROUP_STALEMATE_RETRY_MS) return null;
   stalemateInFlight.add(agendaId);
   try {
-    return await intervene(agenda, user, now, deps);
+    const created = await intervene(agenda, user, now, deps);
+    stalemateFailedAt.delete(agendaId);
+    return created;
+  } catch (err) {
+    stalemateFailedAt.set(agendaId, now.getTime());
+    throw err;
   } finally {
     stalemateInFlight.delete(agendaId);
   }
