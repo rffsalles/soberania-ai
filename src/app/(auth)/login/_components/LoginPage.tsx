@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   GraduationCap,
   ShieldCheck,
@@ -17,8 +18,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { isDemoMode } from '@/lib/constants/env';
-import { DemoShortcuts } from './DemoShortcuts';
+
+// Chunk separado: as credenciais do seed só são baixadas quando o modo demonstração renderiza os atalhos.
+const DemoShortcuts = dynamic(() => import('./DemoShortcuts').then((m) => m.DemoShortcuts));
 
 export default function LoginPage() {
   const router = useRouter();
@@ -176,8 +178,8 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        {/* Atalhos de demonstração: só em NEXT_PUBLIC_DEMO_MODE=true */}
-        {isDemoMode() && <DemoShortcuts onFill={handleQuickFill} />}
+        {/* Atalhos de demonstração: só em NEXT_PUBLIC_DEMO_MODE=true (acesso literal, embutido no build). */}
+        {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <DemoShortcuts onFill={handleQuickFill} />}
 
         {/* Sovereign Privacy Trust Seal */}
         <div className="mt-6 p-3 rounded-xl bg-slate-950/60 border border-slate-800/60 flex items-start gap-2.5">

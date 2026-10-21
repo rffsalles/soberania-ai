@@ -23,9 +23,9 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('button', { name: 'Admin' })).toBeNull();
   });
 
-  it('renderiza os atalhos com NEXT_PUBLIC_DEMO_MODE=true', () => {
+  it('renderiza os atalhos com NEXT_PUBLIC_DEMO_MODE=true', async () => {
     vi.stubEnv('NEXT_PUBLIC_DEMO_MODE', 'true');
     render(<LoginPage />);
-    expect(screen.getByRole('button', { name: 'Admin' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Admin' })).toBeTruthy();
   });
 });
