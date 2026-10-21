@@ -26,3 +26,10 @@ export const STUDY_GROUP_LIST_LIMIT = 200;
 export const STUDY_GROUP_CONTEXT_MESSAGES = 10;
 
 export const STUDY_GROUP_MAX_MESSAGE_LENGTH = 2000;
+
+/** Prompt do juiz que avalia a resposta do estudante a um desafio socrático. */
+export const JUDGE_SYSTEM_PROMPT =
+  'Você avalia se a resposta de um estudante a um desafio socrático está conceitualmente correta. Responda com UMA palavra: CORRETO ou INCORRETO.';
+
+/** O veredito é uma única palavra: poucos tokens bastam. */
+export const JUDGE_MAX_TOKENS = 8;

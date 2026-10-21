@@ -57,6 +57,7 @@ function makeDeps(opts: { agenda?: AgendaDTO | Error; reply?: string; fallback?:
     createInteraction,
     createInferenceLog,
     streamChat,
+    provider: 'vllm',
     now: () => NOW,
   } as unknown as ChatDeps;
   return { deps, search, getAgenda, createInteraction, createInferenceLog, streamChat, sent };
@@ -217,5 +218,38 @@ describe('chatWithTutor', () => {
     expect(f.createInteraction).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  describe('juiz de respostas socráticas', () => {
+    const challengeHistory = [{ role: 'assistant' as const, content: 'O que é uma chave primária?' }];
+
+    it('grava wasCorrect do juiz quando o turno anterior foi um desafio', async () => {
+      const f = makeDeps();
+      f.streamChat
+        .mockImplementationOnce(async function* () {
+          yield { token: 'Boa tentativa, pense na unicidade.', isComplete: false };
+          yield { token: '', isComplete: true, telemetry };
+        })
+        .mockImplementationOnce(async function* () {
+          yield { token: 'INCORRETO', isComplete: false };
+          yield { token: '', isComplete: true };
+        });
+      const result = await chatWithTutor(user, { agendaId: 'ag1', message: 'É um índice', history: challengeHistory }, f.deps);
+      expect(f.streamChat).toHaveBeenCalledTimes(2);
+      expect(f.createInteraction).toHaveBeenCalledWith(expect.objectContaining({ wasCorrect: false }));
+      expect(result.wasCorrect).toBe(false);
+    });
+
+    it('sem desafio anterior: wasCorrect null e o juiz não é chamado', async () => {
+      const f = makeDeps();
+      const result = await chatWithTutor(
+        user,
+        { agendaId: 'ag1', message: 'oi', history: [{ role: 'assistant', content: 'Olá.' }] },
+        f.deps
+      );
+      expect(f.streamChat).toHaveBeenCalledTimes(1);
+      expect(f.createInteraction).toHaveBeenCalledWith(expect.objectContaining({ wasCorrect: null }));
+      expect(result.wasCorrect).toBeNull();
+    });
   });
 });

@@ -8,8 +8,9 @@ import { createInteraction } from '@/domains/pedagogy/services/interaction-repos
 import type { InteractionInput } from '@/domains/pedagogy/services/interaction-repository';
 import { createInferenceLog } from '@/domains/telemetry/services/inference-log-repository';
 import type { InferenceLogInput } from '@/domains/telemetry/services/inference-log-repository';
-import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
+import { aiProvider, type AICompletionOptions, type AIProviderType, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
 import { startTutorPipeline } from '../tutor-pipeline';
+import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
 
 export const MAX_HISTORY_MESSAGES = 10;
 export const MAX_HISTORY_CHARS = 4000;
@@ -33,6 +34,8 @@ export type ChatResult = {
   latencyMs: number;
   fallback: boolean;
   interactionId: string | null;
+  /** Veredito do juiz sobre a resposta do aluno ao desafio anterior; null quando não houve desafio ou juiz. */
+  wasCorrect: boolean | null;
 };
 
 export type ChatDeps = {
@@ -40,6 +43,8 @@ export type ChatDeps = {
   createInteraction(data: InteractionInput): Promise<{ id: string }>;
   createInferenceLog(data: InferenceLogInput): Promise<unknown>;
   streamChat(messages: AIMessage[], options?: AICompletionOptions): AsyncGenerator<StreamChunk, void, unknown>;
+  /** Provedor ativo (o juiz não roda no mock). */
+  provider: AIProviderType;
   search?(query: RAGSearchQuery): Promise<RAGSearchResult>;
   now?: () => Date;
 };
@@ -49,6 +54,9 @@ const defaultDeps: ChatDeps = {
   createInteraction,
   createInferenceLog,
   streamChat: (messages, options) => aiProvider.streamChat(messages, options),
+  get provider() {
+    return aiProvider.getProviderConfig().provider;
+  },
 };
 
 export function truncateHistory(history: ChatHistoryMessage[] = []): ChatHistoryMessage[] {
@@ -133,6 +141,7 @@ async function runChat(
       latencyMs,
       fallback: false,
       interactionId: interaction?.id ?? null,
+      wasCorrect: null,
     };
   }
 
@@ -149,7 +158,15 @@ async function runChat(
   }
   reply = reply.trim();
 
-  const isSocraticChallenge = reply.endsWith('?');
+  const isSocraticChallenge = isSocraticChallengeText(reply);
+  const lastTurn = history[history.length - 1];
+  const wasCorrect =
+    lastTurn?.role === 'assistant' && isSocraticChallengeText(lastTurn.content)
+      ? await judgeAnswer(
+          { challenge: lastTurn.content, answer: input.message, agendaType: agenda.type },
+          { streamChat: deps.streamChat, provider: deps.provider }
+        )
+      : null;
   const topChunk = start.topChunk;
   const latencyMs = Date.now() - startedAt;
   const interaction = input.persistInteraction === false ? null : await deps.createInteraction({
@@ -160,6 +177,7 @@ async function runChat(
     guardrailBlocked: false,
     ragSourceBook: topChunk?.bookTitle ?? null,
     ragSourcePage: topChunk?.pageNumber ?? null,
+    wasCorrect,
     latencyMs,
   });
   if (telemetry) {
@@ -190,5 +208,6 @@ async function runChat(
     latencyMs,
     fallback,
     interactionId: interaction?.id ?? null,
+    wasCorrect,
   };
 }
