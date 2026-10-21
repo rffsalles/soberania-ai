@@ -4,8 +4,8 @@ import type { AgendaSession } from '@/domains/agendas/types';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import type { RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
-import { createInteraction } from '@/domains/pedagogy/services/interaction-repository';
-import type { InteractionInput } from '@/domains/pedagogy/services/interaction-repository';
+import { createInteraction, findLastInteraction } from '@/domains/pedagogy/services/interaction-repository';
+import type { InteractionInput, LastInteraction } from '@/domains/pedagogy/services/interaction-repository';
 import { createInferenceLog } from '@/domains/telemetry/services/inference-log-repository';
 import type { InferenceLogInput } from '@/domains/telemetry/services/inference-log-repository';
 import { aiProvider, type AICompletionOptions, type AIProviderType, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
@@ -42,6 +42,8 @@ export type ChatDeps = {
   getAgenda(id: string, user: AgendaActor): Promise<AgendaDTO>;
   createInteraction(data: InteractionInput): Promise<{ id: string }>;
   createInferenceLog(data: InferenceLogInput): Promise<unknown>;
+  /** Última interação persistida do aluno na agenda; o desafio julgado vem daqui, nunca do history do cliente. */
+  findLastInteraction(agendaId: string, studentId: string): Promise<LastInteraction | null>;
   streamChat(messages: AIMessage[], options?: AICompletionOptions): AsyncGenerator<StreamChunk, void, unknown>;
   /** Provedor ativo (o juiz não roda no mock). */
   provider: AIProviderType;
@@ -53,6 +55,7 @@ const defaultDeps: ChatDeps = {
   getAgenda: (id, user) => getAgendaForUser(id, user),
   createInteraction,
   createInferenceLog,
+  findLastInteraction,
   streamChat: (messages, options) => aiProvider.streamChat(messages, options),
   get provider() {
     return aiProvider.getProviderConfig().provider;
@@ -117,6 +120,9 @@ async function runChat(
       input.videoTimestampSeconds === undefined ? null : Math.round(input.videoTimestampSeconds),
   };
 
+  // Lida antes de gravar o turno atual: é a interação imediatamente anterior a esta resposta.
+  const previous = await deps.findLastInteraction(agenda.id, user.id);
+
   const start = await startTutorPipeline(
     { message: input.message, agendaType: agenda.type, history },
     { search: deps.search, streamChat: deps.streamChat }
@@ -159,14 +165,12 @@ async function runChat(
   reply = reply.trim();
 
   const isSocraticChallenge = isSocraticChallengeText(reply);
-  const lastTurn = history[history.length - 1];
-  const wasCorrect =
-    lastTurn?.role === 'assistant' && isSocraticChallengeText(lastTurn.content)
-      ? await judgeAnswer(
-          { challenge: lastTurn.content, answer: input.message, agendaType: agenda.type },
-          { streamChat: deps.streamChat, provider: deps.provider }
-        )
-      : null;
+  const wasCorrect = previous?.isSocraticChallenge
+    ? await judgeAnswer(
+        { challenge: previous.responseText, answer: input.message, agendaType: agenda.type },
+        { streamChat: deps.streamChat, provider: deps.provider }
+      )
+    : null;
   const topChunk = start.topChunk;
   const latencyMs = Date.now() - startedAt;
   const interaction = input.persistInteraction === false ? null : await deps.createInteraction({

@@ -53,7 +53,7 @@ export function getSystemPromptForAgenda(agendaType: AgendaType): string {
 
 /**
  * Pipeline único: guardrail (EXAM) -> RAG híbrido -> prompt enriquecido -> stream do provider.
- * Em violação do guardrail, nem RAG nem provider são acionados.
+ * Em violação do guardrail (mensagem atual ou turno do aluno no history), nem RAG nem provider são acionados.
  */
 export async function startTutorPipeline(
   request: TutorPipelineRequest,
@@ -62,9 +62,11 @@ export async function startTutorPipeline(
   const { message, agendaType, history = [] } = request;
 
   if (agendaType === 'EXAM') {
-    const guardrail = checkExamGuardrail(message);
-    if (guardrail.isViolation) {
-      return { kind: 'blocked', refusalMessage: guardrail.refusalMessage ?? '' };
+    // O history vem do cliente: todo turno do aluno passa pelo guardrail, não só a mensagem atual.
+    const userTurns = [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)];
+    const violation = userTurns.map(checkExamGuardrail).find((g) => g.isViolation);
+    if (violation) {
+      return { kind: 'blocked', refusalMessage: violation.refusalMessage ?? '' };
     }
   }
 

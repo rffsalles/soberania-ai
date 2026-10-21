@@ -8,6 +8,17 @@ export function createInteraction(data: InteractionInput): Promise<InteractionRe
   return db.studentInteraction.create({ data });
 }
 
+export type LastInteraction = { isSocraticChallenge: boolean; responseText: string; createdAt: Date };
+
+/** Última interação persistida do aluno na agenda (fonte confiável do desafio a julgar). */
+export function findLastInteraction(agendaId: string, studentId: string): Promise<LastInteraction | null> {
+  return db.studentInteraction.findFirst({
+    where: { agendaId, studentId },
+    orderBy: { createdAt: 'desc' },
+    select: { isSocraticChallenge: true, responseText: true, createdAt: true },
+  });
+}
+
 export function listInteractionsByAgendaAndStudent(agendaId: string, studentId: string): Promise<InteractionRecord[]> {
   return db.studentInteraction.findMany({
     where: { agendaId, studentId },

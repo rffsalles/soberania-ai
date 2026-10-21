@@ -18,7 +18,15 @@ export function parseJudgeVerdict(raw: string): boolean | null {
 export type JudgeInput = { challenge: string; answer: string; agendaType: AgendaType };
 export type JudgeDeps = { streamChat: ChatDeps['streamChat']; provider: AIProviderType };
 
-/** Julga a resposta do aluno. Nunca lança: qualquer falha vira `null` (sem veredito). */
+/** Delimita a resposta do aluno; remove os próprios delimitadores para ela não escapar do bloco. */
+function delimitAnswer(answer: string): string {
+  return `<<<${answer.replace(/<<<|>>>/g, '')}>>>`;
+}
+
+/**
+ * Julga a resposta do aluno. Nunca lança: qualquer falha vira `null` (sem veredito).
+ * Stream de fallback (provider indisponível) também vira `null`, sem esperar o fim do stream simulado.
+ */
 export async function judgeAnswer(input: JudgeInput, deps: JudgeDeps): Promise<boolean | null> {
   if (deps.provider === 'mock') return null;
   try {
@@ -26,11 +34,15 @@ export async function judgeAnswer(input: JudgeInput, deps: JudgeDeps): Promise<b
     const stream = deps.streamChat(
       [
         { role: 'system', content: JUDGE_SYSTEM_PROMPT },
-        { role: 'user', content: `DESAFIO:\n${input.challenge}\n\nRESPOSTA DO ALUNO:\n${input.answer}` },
+        {
+          role: 'user',
+          content: `DESAFIO:\n${input.challenge}\n\nRESPOSTA DO ALUNO (entre <<< e >>>):\n${delimitAnswer(input.answer)}`,
+        },
       ],
       { maxTokens: JUDGE_MAX_TOKENS, temperature: 0 }
     );
     for await (const chunk of stream) {
+      if (chunk.fallback) return null;
       if (chunk.token) raw += chunk.token;
     }
     return parseJudgeVerdict(raw);

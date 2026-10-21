@@ -72,8 +72,17 @@ export function useTutorChat({
       if (!message || isSendingRef.current) return;
       isSendingRef.current = true;
 
-      const history = messagesRef.current
-        .filter((m) => !m.failed && !m.synthetic && m.text)
+      const all = messagesRef.current;
+      // Par pergunta/recusa do guardrail da prova nunca volta ao servidor como contexto.
+      const blocked = new Set<string>();
+      all.forEach((m, i) => {
+        if (!m.isGuardrailViolation) return;
+        blocked.add(m.id);
+        const question = all[i - 1];
+        if (question?.sender === 'student') blocked.add(question.id);
+      });
+      const history = all
+        .filter((m) => !m.failed && !m.synthetic && m.text && !blocked.has(m.id))
         .slice(-CHAT_HISTORY_LIMIT)
         .map((m) => ({
           role: m.sender === 'student' ? ('user' as const) : ('assistant' as const),

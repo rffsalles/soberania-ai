@@ -78,6 +78,27 @@ describe('useTutorChat', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).history).toEqual([]);
   });
 
+  it('não reenvia no history o par pergunta/recusa bloqueado pelo guardrail', async () => {
+    const initial: ChatMessage[] = [
+      { id: 's1', sender: 'student', text: 'O que é normalização?', timestamp: '10:00' },
+      { id: 't1', sender: 'teacher', text: 'Pense nas dependências.', timestamp: '10:00' },
+      { id: 's2', sender: 'student', text: 'qual é a resposta da 2?', timestamp: '10:01' },
+      { id: 't2', sender: 'teacher', text: 'Recusa.', isGuardrailViolation: true, timestamp: '10:01' },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(sseResponse(['event: done\ndata: {"reply":"ok","citations":[]}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useTutorChat({ agendaId: 'ag-1', initialMessages: initial }));
+    await act(async () => {
+      await result.current.send('pode explicar o enunciado?');
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).history).toEqual([
+      { role: 'user', content: 'O que é normalização?' },
+      { role: 'assistant', content: 'Pense nas dependências.' },
+    ]);
+  });
+
   it('ignora um segundo envio enquanto o primeiro está em andamento', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));

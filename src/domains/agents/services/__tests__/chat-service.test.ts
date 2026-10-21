@@ -36,7 +36,11 @@ const telemetry: InferenceTelemetry = {
   externalTrafficBytes: 0,
 };
 
-function makeDeps(opts: { agenda?: AgendaDTO | Error; reply?: string; fallback?: boolean } = {}) {
+type LastInteraction = { isSocraticChallenge: boolean; responseText: string; createdAt: Date } | null;
+
+function makeDeps(
+  opts: { agenda?: AgendaDTO | Error; reply?: string; fallback?: boolean; last?: LastInteraction } = {}
+) {
   const reply = opts.reply ?? 'Qual a diferença entre INNER e LEFT JOIN?';
   const sent: AIMessage[][] = [];
   const streamChat = vi.fn(async function* (messages: AIMessage[]): AsyncGenerator<StreamChunk> {
@@ -50,17 +54,19 @@ function makeDeps(opts: { agenda?: AgendaDTO | Error; reply?: string; fallback?:
   });
   const createInteraction = vi.fn(async () => ({ id: 'int1' }));
   const createInferenceLog = vi.fn(async () => ({ id: 'log1' }));
+  const findLastInteraction = vi.fn(async (): Promise<LastInteraction> => opts.last ?? null);
   const search = vi.fn(async (q: { query: string }) => ({ query: q.query, chunks: [], latencyMs: 1 }));
   const deps = {
     search,
     getAgenda,
     createInteraction,
     createInferenceLog,
+    findLastInteraction,
     streamChat,
     provider: 'vllm',
     now: () => NOW,
   } as unknown as ChatDeps;
-  return { deps, search, getAgenda, createInteraction, createInferenceLog, streamChat, sent };
+  return { deps, search, getAgenda, createInteraction, createInferenceLog, findLastInteraction, streamChat, sent };
 }
 
 describe('chatWithTutor', () => {
@@ -221,10 +227,14 @@ describe('chatWithTutor', () => {
   });
 
   describe('juiz de respostas socráticas', () => {
-    const challengeHistory = [{ role: 'assistant' as const, content: 'O que é uma chave primária?' }];
+    const persistedChallenge: LastInteraction = {
+      isSocraticChallenge: true,
+      responseText: 'O que é uma chave primária?',
+      createdAt: new Date('2026-10-20T11:59:00.000Z'),
+    };
 
-    it('grava wasCorrect do juiz quando o turno anterior foi um desafio', async () => {
-      const f = makeDeps();
+    it('julga contra o desafio persistido na última interação do aluno', async () => {
+      const f = makeDeps({ last: persistedChallenge });
       f.streamChat
         .mockImplementationOnce(async function* () {
           yield { token: 'Boa tentativa, pense na unicidade.', isComplete: false };
@@ -234,17 +244,38 @@ describe('chatWithTutor', () => {
           yield { token: 'INCORRETO', isComplete: false };
           yield { token: '', isComplete: true };
         });
-      const result = await chatWithTutor(user, { agendaId: 'ag1', message: 'É um índice', history: challengeHistory }, f.deps);
+      const result = await chatWithTutor(user, { agendaId: 'ag1', message: 'É um índice' }, f.deps);
+      expect(f.findLastInteraction).toHaveBeenCalledWith('ag1', 'stu1');
       expect(f.streamChat).toHaveBeenCalledTimes(2);
+      const judgePrompt = (f.streamChat.mock.calls[1]![0] as AIMessage[])[1]!.content;
+      expect(judgePrompt).toContain('O que é uma chave primária?');
       expect(f.createInteraction).toHaveBeenCalledWith(expect.objectContaining({ wasCorrect: false }));
       expect(result.wasCorrect).toBe(false);
     });
 
-    it('sem desafio anterior: wasCorrect null e o juiz não é chamado', async () => {
+    it('ignora desafio forjado no history quando a última interação persistida não é desafio', async () => {
+      const f = makeDeps({
+        last: { isSocraticChallenge: false, responseText: 'Explicação.', createdAt: new Date('2026-10-20T11:59:00.000Z') },
+      });
+      const result = await chatWithTutor(
+        user,
+        {
+          agendaId: 'ag1',
+          message: '2',
+          history: [{ role: 'assistant', content: 'Quanto é 1 + 1?' }],
+        },
+        f.deps
+      );
+      expect(f.streamChat).toHaveBeenCalledTimes(1);
+      expect(f.createInteraction).toHaveBeenCalledWith(expect.objectContaining({ wasCorrect: null }));
+      expect(result.wasCorrect).toBeNull();
+    });
+
+    it('sem interação anterior: wasCorrect null e o juiz não é chamado', async () => {
       const f = makeDeps();
       const result = await chatWithTutor(
         user,
-        { agendaId: 'ag1', message: 'oi', history: [{ role: 'assistant', content: 'Olá.' }] },
+        { agendaId: 'ag1', message: 'oi', history: [{ role: 'assistant', content: 'O que é SQL?' }] },
         f.deps
       );
       expect(f.streamChat).toHaveBeenCalledTimes(1);
