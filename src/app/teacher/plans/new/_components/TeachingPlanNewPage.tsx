@@ -176,11 +176,6 @@ export default function TeachingPlanNewPage() {
     });
   };
 
-  // Handler: Add newly created subject
-  const handleSubjectCreated = (newSubject: SubjectOption) => {
-    setSubjects((prev) => [newSubject, ...prev]);
-  };
-
   // Handler: Add newly created period
   const handlePeriodCreated = (newPeriod: AcademicPeriodOption) => {
     setPeriods((prev) => [newPeriod, ...prev]);
@@ -280,7 +275,6 @@ export default function TeachingPlanNewPage() {
         subjects={subjects}
         selectedSubjectId={selectedSubjectId}
         onSelectSubjectId={setSelectedSubjectId}
-        onSubjectCreated={handleSubjectCreated}
         activeSubject={activeSubject}
         periods={periods}
         selectedPeriodId={selectedPeriodId}

@@ -6,9 +6,7 @@ import {
   Plus,
   Users,
   Search,
-  CheckCircle2,
   Layers,
-  Upload,
   UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -93,6 +91,12 @@ export default function AdminSubjectsPage() {
     setSelectedTeachers((prev) => [...prev, newTeacher.id]);
   };
 
+  const subjectCount = subjects.length;
+  const withClassCount = subjects.filter((s) => s.class || s.classId).length;
+  const allocatedTeacherCount = new Set(
+    subjects.flatMap((s) => s.teacherAssignments.map((ta) => ta.teacher.id))
+  ).size;
+
   const filteredSubjects = subjects.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -143,43 +147,29 @@ export default function AdminSubjectsPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Cursos Ativos</span>
-            <Layers className="h-4 w-4 text-brand-teal" />
+      {/* KPI Cards (derivados da lista carregada) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { label: 'Disciplinas cadastradas', value: subjectCount, icon: <BookOpen className="h-4 w-4 text-brand-teal" /> },
+          { label: 'Com turma vinculada', value: withClassCount, icon: <Layers className="h-4 w-4 text-brand-teal" /> },
+          { label: 'Professores alocados', value: allocatedTeacherCount, icon: <Users className="h-4 w-4 text-brand-orange" /> },
+        ].map((kpi) => (
+          <div key={kpi.label} className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium">{kpi.label}</span>
+              {kpi.icon}
+            </div>
+            <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
+              {loadError ? (
+                <span className="text-sm font-medium text-slate-500">indisponível</span>
+              ) : loading ? (
+                '—'
+              ) : (
+                kpi.value
+              )}
+            </p>
           </div>
-          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">18 Cursos</p>
-          <span className="text-[11px] text-emerald-600 font-medium">+2 semestres mapeados</span>
-        </div>
-
-        <div className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Disciplinas Cadastradas</span>
-            <BookOpen className="h-4 w-4 text-brand-teal" />
-          </div>
-          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">142 Disciplinas</p>
-          <span className="text-[11px] text-brand-teal font-medium">128 com Base RAG Local</span>
-        </div>
-
-        <div className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Professores Alocados</span>
-            <Users className="h-4 w-4 text-brand-orange" />
-          </div>
-          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">86 Docentes</p>
-          <span className="text-[11px] text-slate-500">74 com alocação ativa N:N</span>
-        </div>
-
-        <div className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Cobertura Socrática IA</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          </div>
-          <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">94.2%</p>
-          <span className="text-[11px] text-emerald-600 font-medium">Appliance local ativo</span>
-        </div>
+        ))}
       </div>
 
       {/* Search & Actions Bar */}
@@ -194,12 +184,6 @@ export default function AdminSubjectsPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Button variant="outline" className="gap-2 text-xs h-9 rounded-xl border-slate-200">
-            <Upload className="h-3.5 w-3.5" />
-            <span>Upload em Lote (CSV/XLS)</span>
-          </Button>
-        </div>
       </div>
 
       {/* Table Component */}

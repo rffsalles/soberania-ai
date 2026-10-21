@@ -5,7 +5,6 @@ import { Sparkles, GraduationCap, Calendar, Loader2, Lock, ShieldCheck, Cpu } fr
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
-import { SubjectCreateInlineModal } from './SubjectCreateInlineModal';
 import { PeriodCreateInlineModal } from './PeriodCreateInlineModal';
 import type { SubjectOption, AcademicPeriodOption } from '../types';
 
@@ -13,7 +12,6 @@ interface PlanHeaderControlsProps {
   subjects: SubjectOption[];
   selectedSubjectId: string;
   onSelectSubjectId: (id: string) => void;
-  onSubjectCreated: (subject: SubjectOption) => void;
   activeSubject: SubjectOption | null;
 
   periods: AcademicPeriodOption[];
@@ -32,7 +30,6 @@ export function PlanHeaderControls({
   subjects,
   selectedSubjectId,
   onSelectSubjectId,
-  onSubjectCreated,
   activeSubject,
   periods,
   selectedPeriodId,
@@ -44,7 +41,6 @@ export function PlanHeaderControls({
   isGeneratingAI,
   onGenerateAI,
 }: PlanHeaderControlsProps) {
-  const [isSubjectModalOpen, setIsSubjectModalOpen] = React.useState(false);
   const [isPeriodModalOpen, setIsPeriodModalOpen] = React.useState(false);
 
   // Map subjects to combobox items
@@ -66,11 +62,6 @@ export function PlanHeaderControls({
       badge: `${p.year}`,
     }));
   }, [periods]);
-
-  const handleSubjectCreated = (newSubject: SubjectOption) => {
-    onSubjectCreated(newSubject);
-    onSelectSubjectId(newSubject.id);
-  };
 
   const handlePeriodCreated = (newPeriod: AcademicPeriodOption) => {
     onPeriodCreated(newPeriod);
@@ -158,10 +149,11 @@ export function PlanHeaderControls({
             items={subjectItems}
             selectedId={selectedSubjectId}
             onSelect={onSelectSubjectId}
-            addNewLabel="Cadastrar nova disciplina..."
-            onAddNewClick={() => setIsSubjectModalOpen(true)}
             icon={<GraduationCap className="h-4 w-4 text-brand-teal" />}
           />
+          <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+            Não encontra a disciplina? Peça ao administrador para cadastrá-la e alocar você.
+          </p>
         </div>
 
         <div>
@@ -180,12 +172,6 @@ export function PlanHeaderControls({
       </div>
 
       {/* Modals for Inline Creation */}
-      <SubjectCreateInlineModal
-        open={isSubjectModalOpen}
-        onOpenChange={setIsSubjectModalOpen}
-        onCreated={handleSubjectCreated}
-      />
-
       <PeriodCreateInlineModal
         open={isPeriodModalOpen}
         onOpenChange={setIsPeriodModalOpen}
