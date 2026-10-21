@@ -20,6 +20,8 @@ export function useCurrentUser(
   React.useEffect(() => {
     if (!enabled || initialUser) return;
     let cancelled = false;
+    // `enabled` pode virar true depois da montagem: sinaliza carregamento antes de buscar.
+    setIsLoading(true);
     fetch(API_ROUTES.AUTH_ME)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {

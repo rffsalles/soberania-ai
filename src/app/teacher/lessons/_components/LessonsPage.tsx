@@ -13,7 +13,10 @@ import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 // classDate é o instante de início da aula; exibido no fuso da instituição.
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, dateStyle: 'short', timeStyle: 'short' });
-const formatPeriod = (s: ScheduleItem) => `${formatDate(s.startDate)} a ${formatDate(s.endDate)}`;
+// Limites do cronograma são datas puras gravadas às 00:00Z: formatar em UTC evita recuar um dia.
+const formatDateOnly = (iso: string) =>
+  new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'UTC', dateStyle: 'short' });
+const formatPeriod = (s: ScheduleItem) => `${formatDateOnly(s.startDate)} a ${formatDateOnly(s.endDate)}`;
 
 const SELECT_CLASS =
   'h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900';
