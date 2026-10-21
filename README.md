@@ -212,6 +212,11 @@ Não restam dados simulados no código: agendas, interações, atas, relatórios
 - **O sandbox Python vem desligado** (`ENABLE_PYTHON_SANDBOX=false`). Ele executa código gerado por LLM no servidor; os limites de tempo e saída do processo não substituem isolamento em nível de SO (contêiner, usuário sem privilégios, sem rede). Habilite apenas no appliance com esse isolamento.
 - O limite de memória do sandbox usa `ulimit -v`, indisponível no macOS: lá a execução informa `memoryLimited: false`.
 - A telemetria de GPU/VRAM depende de `nvidia-smi`; sem GPU NVIDIA o campo aparece como indisponível.
+- **Turmas e alunos são provisionados por seed ou direto no banco.** O admin escolhe a turma de uma disciplina entre as existentes, mas não há cadastro de turmas, alunos ou matrículas na interface nesta versão.
+- **A busca do RAG filtra por categoria, não por disciplina.** O parâmetro de disciplina é ignorado e a Tutora Lucy consulta todo o acervo da instituição.
+- **Bibliotecas anteriores a esta versão precisam de reindexação manual.** Chunks sem embedding só ganham vetores por `POST /api/v1/library/materials/:id/reindex`, material a material. O modelo que gerou cada embedding não é registrado, então trocar `AI_PROVIDER=mock` por um modelo real exige reindexar todo o acervo para não misturar vetores.
+- **As respostas da prova ficam só na memória do navegador até o envio.** Recarregar a página durante a prova perde as alternativas marcadas.
+- **Conversas de professores e administradores nas agendas são gravadas como interações.** Elas aparecem no FAQ da turma e geram falhas (sem turma) na geração das atas da agenda.
 
 ## Documentação adicional
 
