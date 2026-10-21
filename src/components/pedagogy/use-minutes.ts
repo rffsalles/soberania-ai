@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { API_ROUTES } from '@/lib/constants/routes';
+import { useCurrentUser } from '@/components/layout/use-current-user';
 import type { MinuteDTO, MinuteFilter } from '@/domains/pedagogy/services/minutes-service';
 import type { TeacherStruggleHeatmap } from '@/domains/pedagogy/types';
 
@@ -32,7 +33,7 @@ interface AsyncState<T> {
   error: string | null;
 }
 
-function useRemoteList<T>(url: string | null, field: string): AsyncState<T[]> {
+function useRemoteList<T>(url: string | null, field: string, reloadKey = 0): AsyncState<T[]> {
   const [state, setState] = React.useState<AsyncState<T[]>>({ data: [], isLoading: url !== null, error: null });
 
   React.useEffect(() => {
@@ -46,30 +47,46 @@ function useRemoteList<T>(url: string | null, field: string): AsyncState<T[]> {
         setState({ data: [], isLoading: false, error: err instanceof Error ? err.message : GENERIC_ERROR });
       });
     return () => controller.abort();
-  }, [url, field]);
+  }, [url, field, reloadKey]);
 
   return state;
 }
 
-/** Atas visíveis ao usuário autenticado, filtradas. */
-export function useMinutes(filter: MinuteFilter = {}): AsyncState<MinuteDTO[]> {
-  return useRemoteList<MinuteDTO>(`${API_ROUTES.PEDAGOGY_MINUTES}${buildMinuteQuery(filter)}`, 'minutes');
+/** Atas visíveis ao usuário autenticado, filtradas; mudar `reloadKey` recarrega. */
+export function useMinutes(filter: MinuteFilter = {}, reloadKey = 0): AsyncState<MinuteDTO[]> {
+  return useRemoteList<MinuteDTO>(`${API_ROUTES.PEDAGOGY_MINUTES}${buildMinuteQuery(filter)}`, 'minutes', reloadKey);
 }
 
-/** Mapa de calor de dificuldades (professor/admin). */
-export function useHeatmap(filter: MinuteFilter = {}): AsyncState<TeacherStruggleHeatmap[]> {
+/** Mapa de calor de dificuldades (professor/admin); mudar `reloadKey` recarrega. */
+export function useHeatmap(filter: MinuteFilter = {}, reloadKey = 0): AsyncState<TeacherStruggleHeatmap[]> {
   return useRemoteList<TeacherStruggleHeatmap>(
     `${API_ROUTES.PEDAGOGY_HEATMAP}${buildMinuteQuery(filter)}`,
-    'heatmap'
+    'heatmap',
+    reloadKey
   );
 }
 
-/** Gera (ou reaproveita) a ata do usuário para a agenda informada. */
+const STAFF_MINUTE_INFO =
+  'A ata individual é emitida para alunos. Use "Gerar atas" em Relatórios para a turma inteira.';
+
+async function readMinute(res: Response): Promise<MinuteDTO | null> {
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.success) {
+    throw new Error(typeof body?.error === 'string' ? body.error : GENERATE_ERROR);
+  }
+  return (body.minute as MinuteDTO | undefined) ?? (body.minutes as MinuteDTO[] | undefined)?.[0] ?? null;
+}
+
+/**
+ * Ata do aluno autenticado para a agenda: lê a existente e só pede a geração quando ainda não houver
+ * (cada geração custa uma chamada à IA). Professores e administradores recebem um aviso em vez da ata.
+ */
 export function useGeneratedMinute(agendaId: string, enabled: boolean): {
   minute: MinuteDTO | null;
   isLoading: boolean;
   error: string | null;
 } {
+  const { user, isLoading: userLoading } = useCurrentUser(undefined, enabled);
   const [state, setState] = React.useState<{ minute: MinuteDTO | null; isLoading: boolean; error: string | null }>({
     minute: null,
     isLoading: enabled,
@@ -77,28 +94,36 @@ export function useGeneratedMinute(agendaId: string, enabled: boolean): {
   });
 
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || userLoading) return;
+    if (user?.role !== 'STUDENT') {
+      setState({ minute: null, isLoading: false, error: user ? STAFF_MINUTE_INFO : GENERATE_ERROR });
+      return;
+    }
     const controller = new AbortController();
     setState({ minute: null, isLoading: true, error: null });
-    fetch(API_ROUTES.PEDAGOGY_MINUTES, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agendaId }),
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        const body = await res.json().catch(() => null);
-        if (!res.ok || !body?.success) {
-          throw new Error(typeof body?.error === 'string' ? body.error : GENERATE_ERROR);
-        }
-        setState({ minute: body.minute as MinuteDTO, isLoading: false, error: null });
+    const query = buildMinuteQuery({ agendaId });
+    fetch(`${API_ROUTES.PEDAGOGY_MINUTES}${query}`, { signal: controller.signal })
+      .then(readMinute)
+      .then(
+        (existing) =>
+          existing ??
+          fetch(API_ROUTES.PEDAGOGY_MINUTES, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agendaId }),
+            signal: controller.signal,
+          }).then(readMinute)
+      )
+      .then((minute) => {
+        if (!minute) throw new Error(GENERATE_ERROR);
+        setState({ minute, isLoading: false, error: null });
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         setState({ minute: null, isLoading: false, error: err instanceof Error ? err.message : GENERATE_ERROR });
       });
     return () => controller.abort();
-  }, [agendaId, enabled]);
+  }, [agendaId, enabled, user, userLoading]);
 
   return state;
 }

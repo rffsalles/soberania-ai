@@ -3,7 +3,13 @@ import { AgendaStatus, AgendaType, InteractionType, Role } from '@prisma/client'
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import type { StreamChunk } from '@/lib/ai-provider';
 import type { MetricInteraction } from '../../minute-metrics';
-import { generateMinute, generateMinutesForAgenda, listMinutes, type MinutesDeps } from '../minutes-service';
+import {
+  generateMinute,
+  generateMinutesForAgenda,
+  listMinutes,
+  requestMinutes,
+  type MinutesDeps,
+} from '../minutes-service';
 
 const NOW = new Date('2026-10-20T12:00:00.000Z');
 const student = { id: 'stu1', role: Role.STUDENT, classId: 'c1' };
@@ -139,6 +145,73 @@ describe('generateMinutesForAgenda', () => {
     const res = await generateMinutesForAgenda('ag1', teacher, deps);
     expect(res.generated).toBe(1);
     expect(res.failed).toEqual([{ studentId: 'stu1', error: 'boom' }]);
+  });
+
+  it('verifica o acesso à agenda antes de gerar, mesmo sem alunos com interações', async () => {
+    const { deps } = makeDeps();
+    (deps.listStudentIds as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (deps.getAgenda as ReturnType<typeof vi.fn>).mockRejectedValue(Object.assign(new Error('nope'), { status: 403 }));
+    await expect(generateMinutesForAgenda('ag1', teacher, deps)).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe('requestMinutes', () => {
+  const storedMinute = {
+    id: 'm-old',
+    agendaId: 'ag1',
+    studentId: 'stu1',
+    sessionTitle: 'Aula de JOIN',
+    engagementScore: 70,
+    hesitationIndex: 10,
+    topicsMastered: [],
+    topicsStruggled: [],
+    totalQuestionsAsked: 3,
+    socraticChallengesAnswered: 1,
+    rawSummary: 'resumo antigo',
+    actionableAdvice: 'conselho antigo',
+    createdAt: NOW,
+    student: { name: 'Lucas' },
+    agenda: { subject: 'BD', subjectRef: { name: 'Banco de Dados' }, class: { name: 'Turma A' } },
+  };
+
+  it('professor sem studentId gera as atas da turma inteira e devolve o resumo', async () => {
+    const { deps, upsertMinute } = makeDeps();
+    const res = await requestMinutes(teacher, { agendaId: 'ag1' }, deps);
+    expect(res).toEqual({ kind: 'agenda', summary: { generated: 2, failed: [] } });
+    expect(upsertMinute).toHaveBeenCalledTimes(2);
+  });
+
+  it('professor com studentId regenera a ata daquele aluno', async () => {
+    const { deps, upsertMinute } = makeDeps();
+    const res = await requestMinutes(teacher, { agendaId: 'ag1', studentId: 'stu2' }, deps);
+    expect(res.kind).toBe('minute');
+    expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ studentId: 'stu2' }));
+  });
+
+  it('aluno recebe a ata já existente sem nova geração pela IA', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps();
+    listMinutesRepo.mockResolvedValueOnce([storedMinute] as never);
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res).toMatchObject({ kind: 'minute', minute: { id: 'm-old', rawSummary: 'resumo antigo' } });
+    expect(listMinutesRepo).toHaveBeenCalledWith({ agendaId: 'ag1', studentId: 'stu1' });
+    expect(deps.getAgenda).toHaveBeenCalledWith('ag1', student);
+    expect(deps.streamChat).not.toHaveBeenCalled();
+    expect(upsertMinute).not.toHaveBeenCalled();
+  });
+
+  it('aluno sem ata gera a própria uma vez', async () => {
+    const { deps, upsertMinute } = makeDeps();
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res.kind).toBe('minute');
+    expect(upsertMinute).toHaveBeenCalledOnce();
+    expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ studentId: 'stu1' }));
+  });
+
+  it('aluno não pede a ata de outro aluno (403)', async () => {
+    const { deps } = makeDeps();
+    await expect(requestMinutes(student, { agendaId: 'ag1', studentId: 'stu2' }, deps)).rejects.toMatchObject({
+      status: 403,
+    });
   });
 });
 

@@ -28,8 +28,8 @@ async function fetchJson<T>(url: string, signal: AbortSignal): Promise<ApiResult
   }
 }
 
-/** Lista as agendas visíveis ao usuário autenticado. */
-export function useAgendas(): { agendas: AgendaDTO[]; isLoading: boolean; error: string | null } {
+/** Lista as agendas visíveis ao usuário autenticado; mudar `reloadKey` recarrega a lista. */
+export function useAgendas(reloadKey = 0): { agendas: AgendaDTO[]; isLoading: boolean; error: string | null } {
   const [state, setState] = React.useState<{ agendas: AgendaDTO[]; isLoading: boolean; error: string | null }>({
     agendas: [],
     isLoading: true,
@@ -43,7 +43,7 @@ export function useAgendas(): { agendas: AgendaDTO[]; isLoading: boolean; error:
       setState({ agendas: result.data?.agendas ?? [], isLoading: false, error: result.error });
     });
     return () => controller.abort();
-  }, []);
+  }, [reloadKey]);
 
   return state;
 }

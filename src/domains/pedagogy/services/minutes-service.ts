@@ -156,6 +156,8 @@ export async function generateMinutesForAgenda(
   user: AgendaActor,
   deps: MinutesDeps = defaultDeps
 ): Promise<AgendaMinutesResult> {
+  // Autoriza antes de tudo: sem alunos com interações o laço abaixo não consultaria a agenda.
+  await deps.getAgenda(agendaId, user);
   const result: AgendaMinutesResult = { generated: 0, failed: [] };
   const studentIds = await deps.listStudentIds(agendaId);
   for (let i = 0; i < studentIds.length; i += MINUTES_BATCH_SIZE) {
@@ -176,6 +178,36 @@ export async function generateMinutesForAgenda(
     });
   }
   return result;
+}
+
+export type MinuteRequestResult =
+  | { kind: 'minute'; minute: MinuteDTO }
+  | { kind: 'agenda'; summary: AgendaMinutesResult };
+
+/**
+ * POST /pedagogy/minutes.
+ * - Professor/admin sem `studentId`: gera (ou regenera) as atas da turma inteira.
+ * - Professor/admin com `studentId`: regenera a ata daquele aluno.
+ * - Aluno: devolve a própria ata se já existir; só gera quando não houver (evita nova chamada à IA a cada abertura).
+ */
+export async function requestMinutes(
+  user: AgendaActor,
+  input: { agendaId: string; studentId?: string },
+  deps: MinutesDeps = defaultDeps
+): Promise<MinuteRequestResult> {
+  if (user.role !== Role.STUDENT) {
+    if (!input.studentId) {
+      return { kind: 'agenda', summary: await generateMinutesForAgenda(input.agendaId, user, deps) };
+    }
+    return { kind: 'minute', minute: await generateMinute(user, input, deps) };
+  }
+  if (input.studentId && input.studentId !== user.id) {
+    throw new DomainError(403, 'Estudantes só podem gerar a própria ata.');
+  }
+  await deps.getAgenda(input.agendaId, user);
+  const [existing] = await deps.listMinutes({ agendaId: input.agendaId, studentId: user.id });
+  if (existing) return { kind: 'minute', minute: toDTO(existing) };
+  return { kind: 'minute', minute: await generateMinute(user, { agendaId: input.agendaId }, deps) };
 }
 
 async function scopeWhere(user: AgendaActor, deps: MinutesDeps): Promise<MinuteWhere> {

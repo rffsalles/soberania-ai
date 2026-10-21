@@ -15,6 +15,7 @@ import { API_ROUTES } from '@/lib/constants/routes';
 import type { MinuteFilter } from '@/domains/pedagogy/services/minutes-service';
 import { BarChart3, Flame, Lightbulb, FileCheck2, Download, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ClassAgendasSection } from './ClassAgendasSection';
 
 const HIGH_STRUGGLE_PERCENT = 40;
 const END_OF_DAY = 'T23:59:59.999';
@@ -112,12 +113,16 @@ export default function TeacherReportsPage() {
   const [filters, setFilters] = React.useState<FilterState>(EMPTY_FILTERS);
   const apiFilter = React.useMemo(() => toApiFilter(filters), [filters]);
 
-  const { agendas } = useAgendas();
+  // Incrementado após encerrar/cancelar agendas ou gerar atas, para recarregar os dados do painel.
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const reload = React.useCallback(() => setReloadKey((k) => k + 1), []);
+
+  const { agendas, isLoading: agendasLoading, error: agendasError } = useAgendas(reloadKey);
   const subjects = useSubjects();
-  const { data: minutes, isLoading: minutesLoading, error: minutesError } = useMinutes(apiFilter);
-  const { data: heatmap, isLoading: heatmapLoading, error: heatmapError } = useHeatmap(apiFilter);
+  const { data: minutes, isLoading: minutesLoading, error: minutesError } = useMinutes(apiFilter, reloadKey);
+  const { data: heatmap, isLoading: heatmapLoading, error: heatmapError } = useHeatmap(apiFilter, reloadKey);
   // Alunos disponíveis vêm das atas sem filtro de aluno, para o seletor não encolher ao selecionar.
-  const { data: allMinutes } = useMinutes({ ...apiFilter, studentId: undefined });
+  const { data: allMinutes } = useMinutes({ ...apiFilter, studentId: undefined }, reloadKey);
 
   const classOptions = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -172,6 +177,8 @@ export default function TeacherReportsPage() {
             </Button>
           </div>
         </div>
+
+        <ClassAgendasSection agendas={agendas} isLoading={agendasLoading} error={agendasError} onChanged={reload} />
 
         <p className="print-only text-sm text-slate-700">{describeFilters(filters, classOptions, studentOptions, subjects)}</p>
 

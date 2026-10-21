@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { parseMinuteFilter } from '@/lib/validators/pedagogy.validator';
-import { generateMinute, listMinutes } from '@/domains/pedagogy/services/minutes-service';
+import { listMinutes, requestMinutes } from '@/domains/pedagogy/services/minutes-service';
 
 const optionalText = z.string().min(1).optional();
 
@@ -27,8 +27,10 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
     const input = generateBodySchema.parse(await req.json());
-    const minute = await generateMinute(user, input);
-    return NextResponse.json({ success: true, minute });
+    const result = await requestMinutes(user, input);
+    return result.kind === 'agenda'
+      ? NextResponse.json({ success: true, summary: result.summary })
+      : NextResponse.json({ success: true, minute: result.minute });
   } catch (error) {
     return apiError(error);
   }
