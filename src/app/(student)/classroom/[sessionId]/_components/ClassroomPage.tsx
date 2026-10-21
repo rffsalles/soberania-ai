@@ -11,7 +11,7 @@ import { AgendaNotFound } from '@/components/agendas/agenda-not-found';
 import { toAgendaSession } from '@/components/agendas/agenda-session';
 import { useAgenda } from '@/components/agendas/use-agenda';
 import { useAgendaFaqs, useAgendaLesson } from '@/components/classroom/use-agenda-lesson';
-import { LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
+import { resolveMediaType } from '@/domains/teaching/media-type';
 import { Skeleton } from '@/components/ui/skeleton';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
@@ -28,7 +28,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   const [activeCheckpoint, setActiveCheckpoint] = React.useState<SocraticCheckpoint | null>(null);
 
   const { agenda: session, isLoading, error, notFound } = useAgenda(sessionId);
-  const { lesson } = useAgendaLesson(sessionId);
+  const { lesson, isLoading: lessonLoading } = useAgendaLesson(sessionId);
   const { faqs, isLoading: faqsLoading } = useAgendaFaqs(sessionId, session?.status === AGENDA_STATUS_LIVE);
 
   const checkpoints = React.useMemo<SocraticCheckpoint[]>(
@@ -104,12 +104,16 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Interactive Video Player & Material Accordion (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
-            <InteractiveVideoPlayer
-              videoUrl={lesson?.videoUrl ?? session.videoUrl ?? null}
-              mediaType={lesson?.mediaType ?? LESSON_MEDIA_TYPE.NONE}
-              checkpoints={checkpoints}
-              onTriggerCheckpoint={setActiveCheckpoint}
-            />
+            {lessonLoading ? (
+              <Skeleton className="aspect-video w-full rounded-2xl" />
+            ) : (
+              <InteractiveVideoPlayer
+                videoUrl={lesson?.videoUrl ?? session.videoUrl ?? null}
+                mediaType={lesson?.mediaType ?? resolveMediaType(session.videoUrl)}
+                checkpoints={checkpoints}
+                onTriggerCheckpoint={setActiveCheckpoint}
+              />
+            )}
             {activeCheckpoint && (
               <div className="rounded-xl border border-brand-orange/40 bg-brand-orange/10 px-4 py-2 text-sm text-slate-800 dark:text-slate-100">
                 Pausa socrática: {activeCheckpoint.question}

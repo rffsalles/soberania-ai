@@ -22,12 +22,31 @@ interface InteractiveVideoPlayerProps {
 }
 
 const SECONDS_PER_MINUTE = 60;
+const YOUTUBE_IFRAME_API_URL = 'https://www.youtube.com/iframe_api';
+const YOUTUBE_POLL_MS = 500;
 const NO_VIDEO_MESSAGE = 'Sem vídeo para esta aula';
 
 function formatTime(secs: number) {
   const m = Math.floor(secs / SECONDS_PER_MINUTE).toString().padStart(2, '0');
   const s = Math.floor(secs % SECONDS_PER_MINUTE).toString().padStart(2, '0');
   return `${m}:${s}`;
+}
+
+let youtubeApiPromise: Promise<void> | null = null;
+
+function loadYoutubeApi(): Promise<void> {
+  if (window.YT?.Player) return Promise.resolve();
+  youtubeApiPromise ??= new Promise<void>((resolve) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve();
+    };
+    const script = document.createElement('script');
+    script.src = YOUTUBE_IFRAME_API_URL;
+    document.head.appendChild(script);
+  });
+  return youtubeApiPromise;
 }
 
 function youtubeEmbedUrl(url: string): string | null {
@@ -44,6 +63,8 @@ export function InteractiveVideoPlayer({
   className,
 }: InteractiveVideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const ytPlayer = React.useRef<YT.Player | null>(null);
   const triggered = React.useRef<Set<number>>(new Set());
   const [activeCheckpoint, setActiveCheckpoint] = React.useState<SocraticCheckpoint | null>(null);
 
@@ -52,28 +73,56 @@ export function InteractiveVideoPlayer({
   const trigger = React.useCallback(
     (cp: SocraticCheckpoint) => {
       videoRef.current?.pause();
+      ytPlayer.current?.pauseVideo();
       setActiveCheckpoint(cp);
       onTriggerCheckpoint?.(cp);
     },
     [onTriggerCheckpoint]
   );
 
-  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-    const now = e.currentTarget.currentTime;
-    const due = sorted.find((cp) => cp.timeSeconds <= now && !triggered.current.has(cp.timeSeconds));
-    if (!due) return;
-    // Marca todos os anteriores como vistos para não disparar em cascata após um salto na linha do tempo.
-    sorted.filter((cp) => cp.timeSeconds <= now).forEach((cp) => triggered.current.add(cp.timeSeconds));
-    trigger(sorted.filter((cp) => cp.timeSeconds <= now).at(-1) ?? due);
-  };
+  const checkAt = React.useCallback(
+    (now: number) => {
+      const passed = sorted.filter((cp) => cp.timeSeconds <= now);
+      if (!passed.some((cp) => !triggered.current.has(cp.timeSeconds))) return;
+      // Marca todos os anteriores como vistos para não disparar em cascata após um salto na linha do tempo.
+      passed.forEach((cp) => triggered.current.add(cp.timeSeconds));
+      trigger(passed[passed.length - 1]);
+    },
+    [sorted, trigger]
+  );
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => checkAt(e.currentTarget.currentTime);
 
   const jumpTo = (cp: SocraticCheckpoint) => {
     if (videoRef.current) videoRef.current.currentTime = cp.timeSeconds;
+    ytPlayer.current?.seekTo(cp.timeSeconds, true);
     triggered.current.add(cp.timeSeconds);
     trigger(cp);
   };
 
   const embedUrl = mediaType === LESSON_MEDIA_TYPE.YOUTUBE && videoUrl ? youtubeEmbedUrl(videoUrl) : null;
+  React.useEffect(() => {
+    if (!embedUrl) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    void loadYoutubeApi().then(() => {
+      if (cancelled || !iframeRef.current || !window.YT) return;
+      ytPlayer.current = new window.YT.Player(iframeRef.current, {
+        events: {
+          onReady: (event) => {
+            timer = setInterval(() => checkAt(event.target.getCurrentTime()), YOUTUBE_POLL_MS);
+          },
+        },
+      });
+    });
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      ytPlayer.current?.destroy();
+      ytPlayer.current = null;
+    };
+  }, [embedUrl, checkAt]);
+
   const isUpload = mediaType === LESSON_MEDIA_TYPE.S3_UPLOAD && !!videoUrl;
 
   return (
@@ -86,6 +135,7 @@ export function InteractiveVideoPlayer({
       <div className="relative aspect-video w-full bg-slate-900">
         {embedUrl ? (
           <iframe
+            ref={iframeRef}
             src={embedUrl}
             title="Vídeo da aula"
             className="absolute inset-0 h-full w-full"
@@ -120,6 +170,7 @@ export function InteractiveVideoPlayer({
                 onClick={() => {
                   setActiveCheckpoint(null);
                   void videoRef.current?.play();
+                  ytPlayer.current?.playVideo();
                 }}
                 className="bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
               >

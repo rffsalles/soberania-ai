@@ -54,10 +54,10 @@ export function buildFaqs(interactions: FaqInteraction[], limit = FAQ_DEFAULT_LI
   }
 
   const items = groups.map((g) => {
-    const rep = g.members[0];
+    const rep = g.members.reduce((s, m) => (m.questionText.length < s.questionText.length ? m : s));
     const stamps = g.members.map((m) => m.timestampInVideo).filter((s): s is number => typeof s === 'number');
     return {
-      question: g.members.reduce((s, m) => (m.questionText.length < s.length ? m.questionText : s), rep.questionText),
+      question: rep.questionText,
       shortAnswer: rep.responseText.slice(0, FAQ_ANSWER_MAX_CHARS),
       sourceChapter: sourceOf(rep),
       timestampSeconds: stamps.length ? Math.min(...stamps) : 0,

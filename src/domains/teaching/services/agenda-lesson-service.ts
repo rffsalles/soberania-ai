@@ -1,6 +1,7 @@
 import { DomainError } from '@/lib/api/domain-error';
-import { LESSON_MEDIA_TYPE, type LessonMediaType } from '@/lib/constants/teaching';
+import type { LessonMediaType } from '@/lib/constants/teaching';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
+import { resolveMediaType } from '../media-type';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
 import { findLessonPlayerData } from './lesson-plan-repository';
 
@@ -32,11 +33,6 @@ const defaultDeps: AgendaLessonDeps = {
 
 const LESSON_NOT_FOUND = 'Esta agenda não possui plano de aula.';
 
-function resolveMediaType(raw: string | null, videoUrl: string | null): LessonMediaType {
-  if (!videoUrl) return LESSON_MEDIA_TYPE.NONE;
-  return raw === LESSON_MEDIA_TYPE.YOUTUBE || raw === LESSON_MEDIA_TYPE.S3_UPLOAD ? raw : LESSON_MEDIA_TYPE.NONE;
-}
-
 /** Dados do plano de aula vinculado a uma agenda (escopo validado pela agenda). */
 export async function getAgendaLesson(
   user: AgendaActor,
@@ -50,7 +46,7 @@ export async function getAgendaLesson(
   const parsed = timeScriptSchema.safeParse(lesson.timeScript);
   return {
     videoUrl,
-    mediaType: resolveMediaType(lesson.mediaType, videoUrl),
+    mediaType: resolveMediaType(videoUrl),
     timeScript: parsed.success ? parsed.data : [],
     topicTitle: lesson.topicTitle,
     dailyObjective: lesson.dailyObjective,

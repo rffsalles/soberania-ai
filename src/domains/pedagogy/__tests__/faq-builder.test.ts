@@ -29,6 +29,16 @@ describe('buildFaqs', () => {
     expect(buildFaqs([base[2]])[0].sourceChapter).toBe('');
   });
 
+  it('usa um único representante (menor pergunta) para pergunta, resposta e fonte', () => {
+    const [faq] = buildFaqs([
+      q('Explique detalhadamente o left join null', { ragSourceBook: 'Longo', ragSourcePage: 1 }),
+      q('Left join null?', { responseText: 'Curta', ragSourceBook: 'Curto', ragSourcePage: 2 }),
+    ]);
+    expect(faq.question).toBe('Left join null?');
+    expect(faq.shortAnswer).toBe('Curta');
+    expect(faq.sourceChapter).toBe('Curto, pág. 2');
+  });
+
   it('respeita o limite', () => {
     expect(buildFaqs(base, 1)).toHaveLength(1);
   });
