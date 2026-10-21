@@ -1,5 +1,4 @@
 import type { DidacticChunk, MaterialIngestionInput, IngestionResult } from './types';
-import { addChunksToCorpus } from './hybrid-search';
 
 export interface ChunkingOptions {
   maxChunkCharacters?: number;
@@ -13,7 +12,8 @@ const DEFAULT_OPTIONS: Required<ChunkingOptions> = {
 
 /**
  * Serviço de Ingestão de Bibliografia Didática e Artigos Científicos
- * Realiza parser de páginas, chunking semântico com overlap e indexação estruturada
+ * Realiza parser de páginas e chunking semântico com overlap (função pura: a persistência
+ * dos chunks e embeddings fica em `library-service.uploadAndIngest`)
  */
 export class DocumentIngestionService {
   /**
@@ -45,9 +45,6 @@ export class DocumentIngestionService {
         });
       });
     }
-
-    // Indexa no repositório em memória do RAG Híbrido
-    addChunksToCorpus(createdChunks);
 
     return {
       materialId,

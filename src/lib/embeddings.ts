@@ -39,6 +39,11 @@ function fnv1a(token: string): number {
   return hash >>> 0;
 }
 
+/** Serializes an embedding as a pgvector text literal (`[x,y,...]`), bound as a parameter and cast `::vector`. */
+export function toVectorLiteral(embedding: number[]): string {
+  return `[${embedding.join(',')}]`;
+}
+
 export function hashEmbedding(text: string): number[] {
   const vector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   const tokens = text.toLowerCase().split(TOKEN_SPLIT_PATTERN).filter(Boolean);

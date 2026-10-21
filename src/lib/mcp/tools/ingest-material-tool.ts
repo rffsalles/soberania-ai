@@ -1,4 +1,4 @@
-import { documentIngestionService } from '@/domains/rag/ingestion';
+import { ingestTextDocument } from '@/domains/rag/services/library-service';
 import type { RawDocumentPage } from '@/domains/rag/types';
 
 export const ingestDidacticMaterialTool = {
@@ -33,10 +33,10 @@ export const ingestDidacticMaterialTool = {
     subject: string;
     pages: RawDocumentPage[];
   }) => {
-    return documentIngestionService.ingestMaterial({
+    return ingestTextDocument({
       title: args.title,
       author: args.author,
-      subject: args.subject,
+      categories: [args.subject],
       pages: args.pages,
     });
   },

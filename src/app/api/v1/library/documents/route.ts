@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { title, author, category, categories, text, edition, materialType, pages: rawPages } = parsed.data;
+    const { title, author, category, categories, text, edition, pages: rawPages } = parsed.data;
 
     const categoriesList: string[] =
       Array.isArray(categories) && categories.length > 0
@@ -64,7 +64,6 @@ export async function POST(req: Request) {
       title,
       author,
       edition,
-      materialType,
       categories: categoriesList,
       text,
       pages: rawPages,
@@ -72,7 +71,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      material: result,
+      material: result.material,
     });
   } catch (error) {
     return apiError(error);

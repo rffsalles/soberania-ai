@@ -5,6 +5,10 @@ export function createMaterial(data: Prisma.DidacticMaterialUncheckedCreateInput
   return db.didacticMaterial.create({ data });
 }
 
+export async function updateMaterialStatus(id: string, status: string): Promise<void> {
+  await db.didacticMaterial.update({ where: { id }, data: { status } });
+}
+
 export function findMaterial(id: string) {
   return db.didacticMaterial.findUnique({ where: { id } });
 }
@@ -32,13 +36,19 @@ export function listMaterials(filter: { category?: string | null; search?: strin
   });
 }
 
-/** All materials with one sample chunk, used to merge uploaded files into the library view. */
+/** All materials with chunk counts, linked categories and one sample chunk (library view). */
 export function listMaterialsWithSample() {
   return db.didacticMaterial.findMany({
     include: {
       _count: { select: { chunks: true } },
-      chunks: { take: 1, select: { content: true } },
+      categories: { select: { name: true }, orderBy: { name: 'asc' } },
+      chunks: {
+        take: 1,
+        select: { content: true },
+        orderBy: [{ pageNumber: 'asc' }, { createdAt: 'asc' }],
+      },
     },
+    orderBy: { createdAt: 'desc' },
   });
 }
 

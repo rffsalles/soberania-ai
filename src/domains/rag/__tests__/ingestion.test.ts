@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { documentIngestionService } from '../ingestion';
-import { executeHybridSearch } from '../hybrid-search';
 
-describe('RAG Domain - Ingestion Service', () => {
+describe('RAG Domain - Ingestion Service (chunking)', () => {
   it('deve realizar chunking semântico com overlap de artigo científico', () => {
     const result = documentIngestionService.ingestMaterial({
       title: 'Artigo: Impacto Pedagógico de SLMs no Ensino Técnico',
@@ -24,51 +23,22 @@ describe('RAG Domain - Ingestion Service', () => {
     expect(result.materialId).toBeDefined();
   });
 
-  it('deve permitir busca imediata no RAG Híbrido após ingestão', async () => {
-    const uniqueKeyword = 'algoritmos_quantizados_xyz';
-    documentIngestionService.ingestMaterial({
-      title: 'Artigo Especializado em Algoritmos',
-      author: 'Pesquisador Demo',
-      subject: 'Computação Avançada',
-      pages: [
-        {
-          pageNumber: 42,
-          chapter: 'Seção de Teste',
-          text: `O método ${uniqueKeyword} otimiza o uso de memória no appliance educacional permitindo 200 sessões concorrentes sem perda de acurácia conceitual.`,
-        },
-      ],
+  it('divide páginas longas em vários chunks preservando página, capítulo e categoria', () => {
+    const longText = 'A normalização reduz redundância em bancos relacionais. '.repeat(30);
+    const result = documentIngestionService.ingestMaterial({
+      id: 'mat-x',
+      title: 'Livro',
+      author: 'Autor',
+      subject: 'Banco de Dados',
+      pages: [{ pageNumber: 42, chapter: 'Cap. 3', text: longText }],
     });
 
-    const searchResult = await executeHybridSearch({
-      query: uniqueKeyword,
-      topK: 1,
-    });
-
-    expect(searchResult.chunks.length).toBeGreaterThan(0);
-    expect(searchResult.chunks[0].content).toContain(uniqueKeyword);
-    expect(searchResult.primaryCitation).toContain('pág. 42');
-  });
-
-  it('deve associar categoria corretamente ao chunk ingerido', async () => {
-    const categoryName = 'Diretrizes Curriculares Nacionais (DCN / MEC)';
-    documentIngestionService.ingestMaterial({
-      title: 'Guia de Diretrizes Pedagógicas',
-      author: 'Comissão Especial MEC',
-      subject: categoryName,
-      pages: [
-        {
-          pageNumber: 5,
-          text: 'As diretrizes curriculares orientam a articulação entre teoria e prática profissional no ensino superior.',
-        },
-      ],
-    });
-
-    const searchResult = await executeHybridSearch({
-      query: 'articulação entre teoria e prática',
-      topK: 1,
-    });
-
-    expect(searchResult.chunks[0].category).toBe(categoryName);
+    expect(result.totalChunks).toBeGreaterThan(1);
+    for (const c of result.createdChunks ?? []) {
+      expect(c.materialId).toBe('mat-x');
+      expect(c.pageNumber).toBe(42);
+      expect(c.chapter).toBe('Cap. 3');
+      expect(c.category).toBe('Banco de Dados');
+    }
   });
 });
-

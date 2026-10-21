@@ -1,9 +1,14 @@
 import { DomainError } from '@/lib/api/domain-error';
-import { DEFAULT_CATEGORY_COLOR, GENERAL_CATEGORY, MATERIAL_STATUS } from '@/lib/constants/library';
+import {
+  DEFAULT_CATEGORY_COLOR,
+  GENERAL_CATEGORY,
+  MATERIAL_STATUS,
+  type MaterialStatus,
+} from '@/lib/constants/library';
+import { embedTexts, EmbeddingUnavailableError } from '@/lib/embeddings';
 import { storageService } from '@/domains/storage';
 import { validateFileSafety, parseDocumentFile } from '../file-parser';
 import { documentIngestionService } from '../ingestion';
-import { getAllCorpusChunks } from '../hybrid-search';
 import type { RawDocumentPage } from '../types';
 import * as materialRepo from './material-repository';
 import * as chunkRepo from './chunk-repository';
@@ -13,9 +18,18 @@ type MaterialRecord = Awaited<ReturnType<typeof materialRepo.createMaterial>>;
 
 export interface LibraryDeps {
   storage: { uploadFile(buffer: Buffer, name: string, mime: string): Promise<{ filePath: string }> };
-  materials: { createMaterial(data: Parameters<typeof materialRepo.createMaterial>[0]): Promise<MaterialRecord> };
-  chunks: { createChunks(materialId: string, chunks: chunkRepo.NewChunk[]): Promise<unknown> };
-  categories: { upsertCategoryByName(name: string): Promise<unknown> };
+  materials: {
+    createMaterial(data: Parameters<typeof materialRepo.createMaterial>[0]): Promise<MaterialRecord>;
+    updateMaterialStatus(id: string, status: string): Promise<void>;
+    findMaterial(id: string): Promise<{ id: string } | null>;
+  };
+  chunks: {
+    createChunks(materialId: string, chunks: chunkRepo.NewChunk[]): Promise<chunkRepo.StoredChunk[]>;
+    setEmbeddings(rows: chunkRepo.ChunkEmbedding[]): Promise<void>;
+    listChunksByMaterial(materialId: string): Promise<chunkRepo.StoredChunk[]>;
+  };
+  categories: { upsertCategoryByName(name: string): Promise<{ id: string } | null> };
+  embed(texts: string[]): Promise<number[][]>;
 }
 
 const defaultDeps: LibraryDeps = {
@@ -23,6 +37,7 @@ const defaultDeps: LibraryDeps = {
   materials: materialRepo,
   chunks: chunkRepo,
   categories: categoryRepo,
+  embed: (texts) => embedTexts(texts),
 };
 
 export interface UploadMeta {
@@ -33,16 +48,50 @@ export interface UploadMeta {
 }
 
 const SAMPLE_EXCERPT_LENGTH = 160;
+const TEXT_FILE_EXTENSION = '.txt';
+const TEXT_FILE_FALLBACK_NAME = 'documento';
+const TEXT_PAGE_SEPARATOR = '\n\n';
 
+/** Ensures the categories exist and returns the ids of the ones that could be resolved. */
 export async function registerCategories(
   names: string[],
   deps: Pick<LibraryDeps, 'categories'> = defaultDeps
-) {
+): Promise<string[]> {
+  const ids: string[] = [];
   for (const name of names) {
     if (name && name !== GENERAL_CATEGORY) {
-      await deps.categories.upsertCategoryByName(name);
+      const category = await deps.categories.upsertCategoryByName(name);
+      if (category) ids.push(category.id);
     }
   }
+  return ids;
+}
+
+/**
+ * Embeds the chunks and stores the vectors. When the embedding provider is unavailable the
+ * material stays searchable through full-text only (`INDEXED_LEXICAL_ONLY`).
+ */
+async function indexEmbeddings(
+  materialId: string,
+  chunks: chunkRepo.StoredChunk[],
+  deps: Pick<LibraryDeps, 'chunks' | 'materials' | 'embed'>
+): Promise<MaterialStatus> {
+  let status: MaterialStatus = MATERIAL_STATUS.INDEXED;
+  if (chunks.length > 0) {
+    try {
+      const vectors = await deps.embed(chunks.map((c) => c.content));
+      await deps.chunks.setEmbeddings(chunks.map((c, i) => ({ id: c.id, embedding: vectors[i] })));
+    } catch (err) {
+      if (!(err instanceof EmbeddingUnavailableError)) throw err;
+      console.warn(
+        `[LibraryService] Embeddings indisponíveis para o material ${materialId}; indexado apenas para busca léxica:`,
+        err.message
+      );
+      status = MATERIAL_STATUS.INDEXED_LEXICAL_ONLY;
+    }
+  }
+  await deps.materials.updateMaterialStatus(materialId, status);
+  return status;
 }
 
 export async function uploadAndIngest(
@@ -65,7 +114,7 @@ export async function uploadAndIngest(
   if (categoriesList.length === 0) categoriesList.push(GENERAL_CATEGORY);
   const resolvedCategory = categoriesList.join(', ');
 
-  await registerCategories(categoriesList, deps);
+  const categoryIds = await registerCategories(categoriesList, deps);
 
   const stored = await deps.storage.uploadFile(
     file.buffer,
@@ -86,7 +135,8 @@ export async function uploadAndIngest(
     fileSize: file.buffer.length,
     mimeType: validation.mimeType,
     isOcrApplied: parsed.isOcrApplied,
-    status: MATERIAL_STATUS.INDEXED,
+    status: MATERIAL_STATUS.PARSING,
+    categories: { connect: categoryIds.map((id) => ({ id })) },
   });
 
   const ingest = documentIngestionService.ingestMaterial({
@@ -104,10 +154,13 @@ export async function uploadAndIngest(
     pages: parsed.pages,
   });
 
-  if (ingest.createdChunks && ingest.createdChunks.length > 0) {
-    await deps.chunks.createChunks(material.id, ingest.createdChunks).catch((err) => {
-      console.warn('[LibraryService] Advertência ao salvar chunks no banco:', err);
-    });
+  let status: MaterialStatus;
+  try {
+    const storedChunks = await deps.chunks.createChunks(material.id, ingest.createdChunks ?? []);
+    status = await indexEmbeddings(material.id, storedChunks, deps);
+  } catch (err) {
+    await deps.materials.updateMaterialStatus(material.id, MATERIAL_STATUS.ERROR).catch(() => undefined);
+    throw err;
   }
 
   return {
@@ -121,63 +174,60 @@ export async function uploadAndIngest(
       fileSize: material.fileSize,
       originalFilename: material.originalFilename,
       isOcrApplied: material.isOcrApplied,
+      status,
       sampleExcerpt: parsed.pages[0]?.text.slice(0, SAMPLE_EXCERPT_LENGTH) + '...',
       createdAt: material.createdAt,
     },
   };
 }
 
+/** Re-embeds every chunk of a material (e.g. after the embedding provider comes back). */
+export async function reindexMaterial(id: string, deps: LibraryDeps = defaultDeps) {
+  const material = await deps.materials.findMaterial(id);
+  if (!material) throw new DomainError(404, 'Material não encontrado.');
+
+  const chunks = await deps.chunks.listChunksByMaterial(id);
+  const status = await indexEmbeddings(id, chunks, deps);
+  return { status, chunks: chunks.length };
+}
+
 export interface TextDocumentInput {
   title: string;
   author: string;
   edition?: string;
-  materialType?: 'BOOK' | 'SCIENTIFIC_PAPER' | 'INSTITUTIONAL_GUIDE';
   categories: string[];
   text?: string;
   pages?: RawDocumentPage[];
 }
 
-const TEXT_PAGE_SIZE = 1000;
+function textFileName(title: string): string {
+  const slug = title
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+  return `${slug || TEXT_FILE_FALLBACK_NAME}${TEXT_FILE_EXTENSION}`;
+}
 
-export async function ingestTextDocument(
-  input: TextDocumentInput,
-  deps: Pick<LibraryDeps, 'categories'> = defaultDeps
-) {
-  const categoriesList = input.categories.length > 0 ? input.categories : [GENERAL_CATEGORY];
-  const resolvedCategory = categoriesList.join(', ') || GENERAL_CATEGORY;
-
-  await registerCategories(categoriesList, deps);
-
-  let pages: RawDocumentPage[] = [];
+/** Pasted text (or structured pages) is stored as a generated `.txt` file and ingested like any upload. */
+export async function ingestTextDocument(input: TextDocumentInput, deps: LibraryDeps = defaultDeps) {
+  let content = '';
   if (Array.isArray(input.pages) && input.pages.length > 0) {
-    pages = input.pages;
-  } else if (typeof input.text === 'string' && input.text.trim().length > 0) {
-    let pageNum = 1;
-    for (let i = 0; i < input.text.length; i += TEXT_PAGE_SIZE) {
-      pages.push({
-        pageNumber: pageNum++,
-        chapter: resolvedCategory,
-        section: `Página ${pageNum - 1}`,
-        text: input.text.slice(i, i + TEXT_PAGE_SIZE),
-      });
-    }
-  } else {
-    pages.push({
-      pageNumber: 1,
-      chapter: resolvedCategory,
-      section: 'Documento Completo',
-      text: `Documento de referência: ${input.title}, por ${input.author}. Categoria(s): ${resolvedCategory}.`,
-    });
+    content = input.pages.map((p) => p.text).join(TEXT_PAGE_SEPARATOR);
+  } else if (typeof input.text === 'string') {
+    content = input.text;
+  }
+  if (!content.trim()) {
+    const categories = input.categories.length > 0 ? input.categories.join(', ') : GENERAL_CATEGORY;
+    content = `Documento de referência: ${input.title}, por ${input.author}. Categoria(s): ${categories}.`;
   }
 
-  return documentIngestionService.ingestMaterial({
-    title: input.title,
-    author: input.author,
-    edition: input.edition,
-    subject: resolvedCategory,
-    materialType: input.materialType || 'BOOK',
-    pages,
-  });
+  return uploadAndIngest(
+    { buffer: Buffer.from(content, 'utf-8'), name: textFileName(input.title) },
+    { title: input.title, author: input.author, edition: input.edition, categories: input.categories },
+    deps
+  );
 }
 
 export interface LibraryDocumentSummary {
@@ -195,69 +245,55 @@ export interface LibraryCategorySummary {
   chunkCount: number;
 }
 
-type CategoryStat = { chunks: number; docIds: Set<string> };
+const sumChunks = (materials: { _count: { chunks: number } }[]) =>
+  materials.reduce((acc, m) => acc + m._count.chunks, 0);
 
 export async function getLibraryOverview(filter: { category?: string | null; search?: string | null }) {
-  const docMap = new Map<string, LibraryDocumentSummary>();
-  const categoryStats = new Map<string, CategoryStat>();
-  const statFor = (name: string) => {
-    if (!categoryStats.has(name)) categoryStats.set(name, { chunks: 0, docIds: new Set<string>() });
-    return categoryStats.get(name)!;
-  };
+  const [materials, dbCategories] = await Promise.all([
+    materialRepo.listMaterialsWithSample(),
+    categoryRepo.listCategoriesWithCounts(),
+  ]);
 
-  for (const chunk of getAllCorpusChunks()) {
-    const category = chunk.category || GENERAL_CATEGORY;
-    const stat = statFor(category);
-    stat.chunks += 1;
-    stat.docIds.add(chunk.materialId);
+  const categories: LibraryCategorySummary[] = dbCategories.map((c) => ({
+    name: c.name,
+    documentCount: c._count.materials,
+    chunkCount: sumChunks(c.materials),
+  }));
 
-    const existing = docMap.get(chunk.materialId);
-    if (existing) {
-      existing.totalChunks += 1;
+  const uncategorized = materials.filter((m) => m.categories.length === 0);
+  if (uncategorized.length > 0) {
+    const general = categories.find((c) => c.name === GENERAL_CATEGORY);
+    if (general) {
+      general.documentCount += uncategorized.length;
+      general.chunkCount += sumChunks(uncategorized);
     } else {
-      docMap.set(chunk.materialId, {
-        id: chunk.materialId,
-        title: chunk.bookTitle,
-        author: chunk.author,
-        category,
-        totalChunks: 1,
-        sampleExcerpt: chunk.content.slice(0, SAMPLE_EXCERPT_LENGTH) + '...',
+      categories.push({
+        name: GENERAL_CATEGORY,
+        documentCount: uncategorized.length,
+        chunkCount: sumChunks(uncategorized),
       });
     }
   }
 
-  for (const mat of await materialRepo.listMaterialsWithSample()) {
-    const category = mat.subject || GENERAL_CATEGORY;
-    const stat = statFor(category);
-    stat.docIds.add(mat.id);
-    if (!docMap.has(mat.id)) {
-      stat.chunks += mat._count.chunks;
-      docMap.set(mat.id, {
-        id: mat.id,
-        title: mat.title,
-        author: mat.author,
-        category,
-        totalChunks: mat._count.chunks || 1,
-        sampleExcerpt:
-          mat.chunks[0]?.content.slice(0, SAMPLE_EXCERPT_LENGTH) ||
-          `${mat.title} (${mat.totalPages} páginas)...`,
-      });
-    }
-  }
-
-  for (const dbCat of await categoryRepo.listCategories()) {
-    statFor(dbCat.name);
-  }
-
-  const categories: LibraryCategorySummary[] = Array.from(categoryStats.entries()).map(
-    ([name, stat]) => ({ name, documentCount: stat.docIds.size, chunkCount: stat.chunks })
-  );
-
-  let documents = Array.from(docMap.values());
+  let filtered = materials;
   if (filter.category && filter.category !== 'ALL') {
     const wanted = filter.category.toLowerCase();
-    documents = documents.filter((doc) => doc.category.toLowerCase() === wanted);
+    filtered = filtered.filter((mat) => {
+      const names = mat.categories.length > 0 ? mat.categories.map((c) => c.name) : [mat.subject || GENERAL_CATEGORY];
+      return names.some((name) => name.toLowerCase() === wanted);
+    });
   }
+
+  let documents: LibraryDocumentSummary[] = filtered.map((mat) => ({
+    id: mat.id,
+    title: mat.title,
+    author: mat.author,
+    category: mat.subject || GENERAL_CATEGORY,
+    totalChunks: mat._count.chunks,
+    sampleExcerpt: mat.chunks[0]
+      ? mat.chunks[0].content.slice(0, SAMPLE_EXCERPT_LENGTH) + '...'
+      : `${mat.title} (${mat.totalPages} páginas)...`,
+  }));
   if (filter.search) {
     const q = filter.search;
     documents = documents.filter(
@@ -272,29 +308,16 @@ export async function getLibraryOverview(filter: { category?: string | null; sea
 }
 
 export async function listCategoriesWithStats() {
-  const categories = await categoryRepo.listCategories();
-
-  const statsMap = new Map<string, CategoryStat>();
-  for (const chunk of getAllCorpusChunks()) {
-    const key = (chunk.category || GENERAL_CATEGORY).toLowerCase();
-    if (!statsMap.has(key)) statsMap.set(key, { chunks: 0, docIds: new Set<string>() });
-    const stat = statsMap.get(key)!;
-    stat.chunks += 1;
-    stat.docIds.add(chunk.materialId);
-  }
-
-  return categories.map((cat) => {
-    const stat = statsMap.get(cat.name.toLowerCase());
-    return {
-      id: cat.id,
-      name: cat.name,
-      description: cat.description,
-      color: cat.color,
-      documentCount: stat ? stat.docIds.size : 0,
-      chunkCount: stat ? stat.chunks : 0,
-      createdAt: cat.createdAt,
-    };
-  });
+  const categories = await categoryRepo.listCategoriesWithCounts();
+  return categories.map((cat) => ({
+    id: cat.id,
+    name: cat.name,
+    description: cat.description,
+    color: cat.color,
+    documentCount: cat._count.materials,
+    chunkCount: sumChunks(cat.materials),
+    createdAt: cat.createdAt,
+  }));
 }
 
 export async function createCategoryIfMissing(input: {

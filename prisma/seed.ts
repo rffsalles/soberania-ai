@@ -2,7 +2,8 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, Role } from '@prisma/client';
 import { DEFAULT_PERIODS } from '../src/domains/academic/default-periods';
 import { DEFAULT_CATEGORIES } from '../src/domains/rag/default-categories';
-import { DEFAULT_CATEGORY_COLOR } from '../src/lib/constants/library';
+import { DEFAULT_CATEGORY_COLOR, MATERIAL_STATUS } from '../src/lib/constants/library';
+import { embedTexts, EmbeddingUnavailableError, toVectorLiteral } from '../src/lib/embeddings';
 import { LESSON_MEDIA_TYPE } from '../src/lib/constants/teaching';
 import { DEMO_USERS } from './seed-data/users';
 import {
@@ -87,7 +88,7 @@ async function seedCorpus() {
         });
 
     await prisma.materialChunk.deleteMany({ where: { materialId: saved.id } });
-    await prisma.materialChunk.createMany({
+    const created = await prisma.materialChunk.createManyAndReturn({
       data: chunks.map((c) => ({
         materialId: saved.id,
         chapter: c.chapter,
@@ -95,8 +96,28 @@ async function seedCorpus() {
         pageNumber: c.pageNumber,
         content: c.content,
       })),
+      select: { id: true, content: true },
     });
+
+    const status = await seedEmbeddings(created);
+    await prisma.didacticMaterial.update({ where: { id: saved.id }, data: { status } });
   }
+}
+
+/** Stores chunk embeddings (vector column managed via raw SQL); lexical-only when the provider is unavailable. */
+async function seedEmbeddings(chunks: { id: string; content: string }[]) {
+  let vectors: number[][];
+  try {
+    vectors = await embedTexts(chunks.map((c) => c.content));
+  } catch (err) {
+    if (!(err instanceof EmbeddingUnavailableError)) throw err;
+    console.warn('[seed] Embeddings indisponíveis; materiais indexados apenas para busca léxica:', err.message);
+    return MATERIAL_STATUS.INDEXED_LEXICAL_ONLY;
+  }
+  for (const [i, chunk] of chunks.entries()) {
+    await prisma.$executeRaw`UPDATE material_chunks SET embedding = ${toVectorLiteral(vectors[i])}::vector WHERE id = ${chunk.id}`;
+  }
+  return MATERIAL_STATUS.INDEXED;
 }
 
 async function main() {

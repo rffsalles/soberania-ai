@@ -129,7 +129,7 @@ export function ReferenceUploadTab({
         if (!data.success) throw new Error(data.error || 'Falha ao ingerir documento.');
 
         onSuccess({
-          id: data.material.materialId,
+          id: data.material.id,
           title: title.trim(),
           author: author.trim(),
           category: resolvedCategories.join(', '),
