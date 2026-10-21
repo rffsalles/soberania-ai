@@ -7,7 +7,6 @@ const TEST_DB_URL = process.env.DATABASE_URL_TEST;
 const SUFFIX = `${Date.now()}`;
 const MS_PER_MINUTE = 60_000;
 const STUDENT_ENROLLMENT = '202601001';
-const HEATMAP_TOPIC = `Livro E2E ${SUFFIX}, pág. 1`;
 
 const TEXT_CONTENT = [
   'A terceira forma normal (3FN) exige que nenhum atributo não chave dependa transitivamente da chave primária.',
@@ -57,6 +56,8 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
   const agendaIds: string[] = [];
   let lessonAgendaId = '';
   let examAgendaId = '';
+  let heatmapTopic = '';
+  let expectedAnsweredChallenges = 0;
 
   let teacher: { id: string; role: 'TEACHER'; classId: string | null };
   let student: { id: string; role: 'STUDENT'; classId: string | null };
@@ -227,6 +228,62 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     expect(await db.inferenceLog.count()).toBe(logsBefore + 1);
   });
 
+  it('student answers a persisted Socratic challenge and the judge marks it wrong', async () => {
+    const { chatWithTutor } = await import('@/domains/agents/services/chat-service');
+    const { getAgendaForUser } = await import('@/domains/agendas/services/agenda-service');
+    const { createInteraction, findLastInteraction } = await import(
+      '@/domains/pedagogy/services/interaction-repository'
+    );
+    const { createInferenceLog } = await import('@/domains/telemetry/services/inference-log-repository');
+    const { JUDGE_SYSTEM_PROMPT } = await import('@/lib/constants/tutor');
+    type StreamChunk = import('@/lib/ai-provider').StreamChunk;
+
+    // Provedor "real" falso: a tutora responde com um desafio; o juiz reprova só a resposta a esse desafio.
+    const CHALLENGE = 'Antes de seguir: qual a diferença entre 2FN e 3FN?';
+    const judgeCalls: string[] = [];
+    const tutorReplies = [CHALLENGE, 'Vamos revisar a dependência transitiva.'];
+    const deps = {
+      getAgenda: getAgendaForUser,
+      createInteraction,
+      createInferenceLog,
+      findLastInteraction,
+      provider: 'ollama' as const,
+      async *streamChat(messages: { role: string; content: string }[]): AsyncGenerator<StreamChunk> {
+        if (messages[0]?.content === JUDGE_SYSTEM_PROMPT) {
+          judgeCalls.push(messages[1].content);
+          yield { token: messages[1].content.includes(CHALLENGE) ? 'INCORRETO' : 'CORRETO', isComplete: false };
+        } else {
+          yield { token: tutorReplies.shift() ?? 'Ok.', isComplete: false };
+        }
+        yield { token: '', isComplete: true };
+      },
+    };
+
+    // O turno anterior (provedor mock) também pode ter terminado em desafio; aí este turno é julgado CORRETO.
+    const previous = await db.studentInteraction.findFirstOrThrow({
+      where: { agendaId: lessonAgendaId, studentId: student.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    const challenge = await chatWithTutor(student, { agendaId: lessonAgendaId, message: 'Explique a 3FN.' }, deps);
+    expect(challenge.isSocraticChallenge).toBe(true);
+    expect(challenge.wasCorrect).toBe(previous.isSocraticChallenge ? true : null);
+    expectedAnsweredChallenges = previous.isSocraticChallenge ? 2 : 1;
+
+    const answer = await chatWithTutor(
+      student,
+      { agendaId: lessonAgendaId, message: 'A 2FN e a 3FN são a mesma coisa.' },
+      deps
+    );
+    expect(answer.wasCorrect).toBe(false);
+    expect(judgeCalls.filter((c) => c.includes(CHALLENGE))).toHaveLength(1);
+
+    const stored = await db.studentInteraction.findUniqueOrThrow({ where: { id: answer.interactionId! } });
+    expect(stored).toMatchObject({ wasCorrect: false, studentId: student.id, agendaId: lessonAgendaId });
+    expect(stored.ragSourceBook).toBeTruthy();
+    heatmapTopic =
+      stored.ragSourcePage == null ? stored.ragSourceBook! : `${stored.ragSourceBook}, pág. ${stored.ragSourcePage}`;
+  });
+
   it('student submits the exam and the score is computed server-side', async () => {
     const { getExamForStudent, submitExam } = await import('@/domains/assessments/services/exam-service');
 
@@ -251,24 +308,6 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     const { setAgendaStatus } = await import('@/domains/agendas/services/agenda-service');
     const { generateMinutesForAgenda, listMinutes } = await import('@/domains/pedagogy/services/minutes-service');
     const { buildHeatmap } = await import('@/domains/pedagogy/services/reports-service');
-    const { createInteraction } = await import('@/domains/pedagogy/services/interaction-repository');
-
-    // Nenhum código de produção grava wasCorrect ainda: simula um desafio socrático errado
-    // sobre um tópico para exercitar o mapa de calor sobre dados reais.
-    await createInteraction({
-      agendaId: lessonAgendaId,
-      studentId: student.id,
-      agendaType: 'CLASSROOM',
-      type: 'SOCRATIC_CHALLENGE',
-      questionText: 'Qual a diferença entre 2FN e 3FN?',
-      responseText: 'Pense na dependência entre atributos não chave.',
-      isSocraticChallenge: true,
-      guardrailBlocked: false,
-      wasCorrect: false,
-      ragSourceBook: `Livro E2E ${SUFFIX}`,
-      ragSourcePage: 1,
-      latencyMs: 800,
-    });
 
     const completed = await setAgendaStatus(lessonAgendaId, teacher, 'COMPLETED');
     expect(completed.status).toBe('COMPLETED');
@@ -278,11 +317,13 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     const minutes = await listMinutes(teacher, { agendaId: lessonAgendaId });
     expect(minutes).toHaveLength(1);
     expect(minutes[0]).toMatchObject({ studentId: student.id, totalQuestionsAsked: expect.any(Number) });
-    expect(minutes[0].topicsStruggled).toContain(HEATMAP_TOPIC);
+    // Conta as interações que seguem um desafio persistido.
+    expect(minutes[0].socraticChallengesAnswered).toBe(expectedAnsweredChallenges);
+    expect(minutes[0].topicsStruggled).toContain(heatmapTopic);
 
     const heatmap = buildHeatmap(minutes);
     expect(heatmap).toEqual([
-      expect.objectContaining({ topic: HEATMAP_TOPIC, strugglePercentage: 100, affectedStudentsCount: 1 }),
+      expect.objectContaining({ topic: heatmapTopic, strugglePercentage: 100, affectedStudentsCount: 1 }),
     ]);
   });
 });
