@@ -3,7 +3,7 @@ import { findUserByIdentifier } from '@/domains/auth/services/user-repository';
 import { loginSchema } from '@/lib/validators/auth.validator';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
-import { getSessionCookieConfig } from '@/lib/auth/token';
+import { getSessionCookieConfig, shouldUseSecureCookie } from '@/lib/auth/token';
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,8 +51,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieConfig = getSessionCookieConfig(isProduction);
+    const cookieConfig = getSessionCookieConfig(shouldUseSecureCookie());
 
     const response = NextResponse.json({
       success: true,

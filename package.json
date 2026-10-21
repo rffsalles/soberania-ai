@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "check:links": "node scripts/check-links.mjs",
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
     "clean:next": "npm run clean",
     "test": "vitest run",
