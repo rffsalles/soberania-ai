@@ -17,7 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { DEMO_CREDENTIALS } from '@/lib/constants/demo-credentials';
+import { isDemoMode } from '@/lib/constants/env';
+import { DemoShortcuts } from './DemoShortcuts';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,13 +30,10 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
-  const handleQuickFill = (userType: 'STUDENT' | 'TEACHER' | 'ADMIN') => {
-    const demo = DEMO_CREDENTIALS.find((u) => u.role === userType);
-    if (demo) {
-      setIdentifier(demo.enrollment);
-      setPassword(demo.password);
-      setErrorMessage(null);
-    }
+  const handleQuickFill = (demoIdentifier: string, demoPassword: string) => {
+    setIdentifier(demoIdentifier);
+    setPassword(demoPassword);
+    setErrorMessage(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -178,41 +176,8 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        {/* Quick Demo Access Buttons */}
-        <div className="mt-6 pt-5 border-t border-slate-800/80">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center mb-3">
-            Atalhos para Demonstração / Avaliação:
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickFill('STUDENT')}
-              className="text-[11px] h-8 border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer rounded-lg"
-            >
-              Aluno
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickFill('TEACHER')}
-              className="text-[11px] h-8 border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer rounded-lg"
-            >
-              Professor
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickFill('ADMIN')}
-              className="text-[11px] h-8 border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer rounded-lg"
-            >
-              Admin
-            </Button>
-          </div>
-        </div>
+        {/* Atalhos de demonstração: só em NEXT_PUBLIC_DEMO_MODE=true */}
+        {isDemoMode() && <DemoShortcuts onFill={handleQuickFill} />}
 
         {/* Sovereign Privacy Trust Seal */}
         <div className="mt-6 p-3 rounded-xl bg-slate-950/60 border border-slate-800/60 flex items-start gap-2.5">

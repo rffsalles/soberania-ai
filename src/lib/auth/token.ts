@@ -2,12 +2,32 @@ import { SignJWT, jwtVerify } from 'jose';
 import { AuthSessionPayload, UserRole } from './types';
 import { AUTH_COOKIE_NAME } from './rbac';
 
-const DEFAULT_SECRET = 'soberania-ai-institution-secret-key-32-chars-minimum-safe';
+/** Segredo de desenvolvimento: aceito apenas fora de produção. */
+export const DEFAULT_SECRET = 'soberania-ai-institution-secret-key-32-chars-minimum-safe';
+const MIN_SECRET_LENGTH = 32;
 const JWT_EXPIRES_IN = '7d';
 
+type SecretEnv = { NODE_ENV?: string; AUTH_SECRET?: string; JWT_SECRET?: string };
+
+/**
+ * Em produção exige AUTH_SECRET forte (definido, com 32+ caracteres e diferente do padrão de desenvolvimento)
+ * e lança na primeira leitura; fora de produção cai no segredo padrão.
+ */
+export function resolveJwtSecret(env: SecretEnv = process.env): string {
+  const secret = env.AUTH_SECRET || env.JWT_SECRET;
+  if (env.NODE_ENV !== 'production') return secret || DEFAULT_SECRET;
+  if (!secret) throw new Error('AUTH_SECRET não definido: configure um segredo forte antes de iniciar em produção.');
+  if (secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(`AUTH_SECRET deve ter pelo menos ${MIN_SECRET_LENGTH} caracteres em produção.`);
+  }
+  if (secret === DEFAULT_SECRET) {
+    throw new Error('AUTH_SECRET não pode ser o segredo padrão de desenvolvimento em produção.');
+  }
+  return secret;
+}
+
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.AUTH_SECRET || process.env.JWT_SECRET || DEFAULT_SECRET;
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(resolveJwtSecret());
 }
 
 /**
@@ -35,8 +55,9 @@ export async function signAuthToken(payload: AuthSessionPayload): Promise<string
  * Retorna o payload decodificado ou null se inválido/expirado.
  */
 export async function verifyAuthToken(token: string): Promise<AuthSessionPayload | null> {
+  // Fora do try: segredo mal configurado em produção é erro de configuração, não token inválido.
+  const secretKey = getJwtSecret();
   try {
-    const secretKey = getJwtSecret();
     const { payload } = await jwtVerify(token, secretKey);
 
     return {

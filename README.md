@@ -47,7 +47,7 @@ Subir um Postgres descartável com Docker:
 
 ```bash
 docker run -d --name soberania-pg -p 5432:5432 \
-  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=soberania_db postgres:17
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=soberania_db pgvector/pgvector:pg17
 ```
 
 ### Usuários de demonstração
@@ -60,7 +60,18 @@ Criados por `npm run db:seed` a partir de [src/lib/constants/demo-credentials.ts
 | TEACHER | PROF001 | professor@soberania.edu.br | prof123 | /materials |
 | STUDENT | 202601001 | aluno@soberania.edu.br | aluno123 | /dashboard |
 
-A tela de login possui atalhos que preenchem essas credenciais.
+Com `NEXT_PUBLIC_DEMO_MODE=true` a tela de login exibe atalhos que preenchem essas credenciais; fora do modo demonstração os atalhos não são renderizados.
+
+### Primeiro acesso em produção
+
+Não rode o seed de demonstração em produção. Defina um `AUTH_SECRET` forte (32+ caracteres; `openssl rand -base64 48`) — com `NODE_ENV=production` o servidor recusa um segredo ausente, curto ou igual ao padrão de desenvolvimento — e crie o primeiro administrador:
+
+```bash
+npm run admin:create -- --email admin@instituicao.edu.br --name "Nome do Administrador" --password "senha-forte"
+# opcional: --enrollment ADM001 (padrão: o próprio e-mail)
+```
+
+O script grava o usuário com o mesmo hash de senha do login e recusa e-mail ou matrícula já cadastrados. A partir daí o administrador entra pela tela de login e cadastra professores e disciplinas.
 
 ### Seed
 
@@ -78,6 +89,7 @@ A tela de login possui atalhos que preenchem essas credenciais.
 | `npm run test:ci` | typecheck + lint + testes + build (gate de integração) |
 | `npm run check:links` | Confere, sem navegador, que todo link interno aponta para uma página/rota existente |
 | `npm run db:seed` | Carrega os dados de demonstração (idempotente) |
+| `npm run admin:create -- --email … --name … --password …` | Cria um ADMIN (primeiro acesso em produção) |
 | `npm run prisma:generate` | Gera o Prisma Client |
 | `npm run prisma:migrate` | Cria/aplica migrações em desenvolvimento |
 | `npm run clean` | Remove a pasta `.next` |
@@ -89,7 +101,8 @@ Todas estão documentadas em [.env.example](.env.example). As principais:
 | Variável | Descrição |
 | :-- | :-- |
 | `DATABASE_URL` | Conexão PostgreSQL usada pelo Prisma |
-| `AUTH_SECRET` / `JWT_SECRET` | Segredo de assinatura dos JWTs (mínimo 32 caracteres) |
+| `AUTH_SECRET` / `JWT_SECRET` | Segredo de assinatura dos JWTs; em produção é obrigatório, com 32+ caracteres e diferente do padrão de desenvolvimento |
+| `NEXT_PUBLIC_DEMO_MODE` | `true` exibe os atalhos de login de demonstração (padrão: desligado; nunca em produção) |
 | `AI_PROVIDER` | `mock` (padrão, respostas socráticas determinísticas offline), `ollama`, `vllm`, `groq` ou `together` |
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Endpoint, chave e modelo do provedor de inferência |
 | `MAX_UPLOAD_SIZE_MB`, `ALLOWED_DOCUMENT_EXTENSIONS` | Limites de upload do acervo (padrão 25 MB; pdf, docx, txt, md) |

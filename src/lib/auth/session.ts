@@ -63,12 +63,12 @@ export async function revokeSession(sessionId: string): Promise<boolean> {
 }
 
 /**
- * Verifica se a sessão está ativa e não foi revogada no PostgreSQL.
+ * Verifica se a sessão está ativa, não foi revogada no PostgreSQL e pertence ao usuário do token.
  */
-export async function isSessionActive(sessionId: string): Promise<boolean> {
+export async function isSessionActiveForUser(sessionId: string, userId: string): Promise<boolean> {
   try {
     const session = await sessionRepo.findActiveSession(sessionId);
-    return !!session;
+    return session?.userId === userId;
   } catch {
     return false;
   }
@@ -81,8 +81,8 @@ export async function getSessionUser(token: string): Promise<AuthenticatedUser |
   const payload = await verifyAuthToken(token);
   if (!payload || !payload.sessionId) return null;
 
-  // Validação ativa no banco (revogação instantânea)
-  const active = await isSessionActive(payload.sessionId);
+  // Validação ativa no banco (revogação instantânea) e vínculo sessão <-> sub do token
+  const active = await isSessionActiveForUser(payload.sessionId, payload.sub);
   if (!active) return null;
 
   const user = await findUserProfile(payload.sub);
