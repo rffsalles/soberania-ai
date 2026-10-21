@@ -10,8 +10,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { id } = await params;
     const result = await syncLessons(id, user);
-    await syncAgendasForSchedule(id);
-    return NextResponse.json({ success: true, result });
+    const agendas = await syncAgendasForSchedule(id);
+    return NextResponse.json({ success: true, result: { ...result, agendas } });
   } catch (error) {
     return apiError(error);
   }

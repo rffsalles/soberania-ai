@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 import {
   S3Client,
+  HeadObjectCommand,
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
@@ -25,6 +27,14 @@ export interface FileStreamResult {
   buffer: Buffer;
   contentType?: string;
   contentLength?: number;
+}
+
+export interface FileReadResult {
+  stream: ReadableStream<Uint8Array>;
+  size: number;
+  contentType?: string;
+  /** True when only the requested byte range is in the stream (local provider). */
+  partial: boolean;
 }
 
 export class StorageService {
@@ -182,6 +192,57 @@ export class StorageService {
     return {
       buffer,
       contentLength: buffer.length,
+    };
+  }
+
+  private resolveLocalPath(filePathOrKey: string): string {
+    const normalizedPath = filePathOrKey.replace(/^r2:\/\/[^/]+\//, '');
+    return path.isAbsolute(normalizedPath) ? normalizedPath : path.resolve(process.cwd(), normalizedPath);
+  }
+
+  private isR2Path(filePathOrKey: string): boolean {
+    return filePathOrKey.startsWith('r2://') || (this.getProvider() === 'r2' && !filePathOrKey.startsWith('.'));
+  }
+
+  /** Size in bytes of a stored file. */
+  public async getFileSize(filePathOrKey: string): Promise<number> {
+    if (this.isR2Path(filePathOrKey) && this.s3Client) {
+      const bucketName = process.env.R2_BUCKET_NAME || 'soberania-materials';
+      const key = filePathOrKey.replace(/^r2:\/\/[^/]+\//, '');
+      const head = await this.s3Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+      return head.ContentLength ?? 0;
+    }
+    const absolutePath = this.resolveLocalPath(filePathOrKey);
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error(`Arquivo não encontrado no disco local: ${absolutePath}`);
+    }
+    return (await fs.promises.stat(absolutePath)).size;
+  }
+
+  /**
+   * Streams a file. The local provider honours `range` (inclusive byte offsets) without loading the file
+   * in memory; R2 returns the whole object.
+   */
+  public async createReadStream(
+    filePathOrKey: string,
+    range?: { start: number; end: number }
+  ): Promise<FileReadResult> {
+    if (this.isR2Path(filePathOrKey) && this.s3Client) {
+      const { buffer, contentType, contentLength } = await this.getFileBuffer(filePathOrKey);
+      return {
+        stream: Readable.toWeb(Readable.from(buffer)) as ReadableStream<Uint8Array>,
+        size: contentLength ?? buffer.length,
+        contentType,
+        partial: false,
+      };
+    }
+    const absolutePath = this.resolveLocalPath(filePathOrKey);
+    const size = await this.getFileSize(filePathOrKey);
+    const nodeStream = fs.createReadStream(absolutePath, range ? { start: range.start, end: range.end } : undefined);
+    return {
+      stream: Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>,
+      size,
+      partial: Boolean(range),
     };
   }
 

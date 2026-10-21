@@ -48,7 +48,8 @@ export function LessonEditor({ lesson, onSaved }: Props) {
         resourcesNeeded: resources.split('\n').map((r) => r.trim()).filter(Boolean),
         timeScript: steps.map(({ socraticQuestion, ...step }) => (socraticQuestion ? { ...step, socraticQuestion } : step)),
         mediaType: media.type ?? LESSON_MEDIA_TYPE.NONE,
-        mediaUrl: media.url,
+        // Uploaded media is managed by the upload endpoint only.
+        ...(media.type === LESSON_MEDIA_TYPE.S3_UPLOAD ? {} : { mediaUrl: media.url }),
       });
       setNotice('Aula salva e agenda da turma atualizada.');
       onSaved();

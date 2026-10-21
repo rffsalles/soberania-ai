@@ -22,8 +22,8 @@ export type LessonItem = {
 
 export type LessonDraft = Pick<
   LessonItem,
-  'topicTitle' | 'dailyObjective' | 'timeScript' | 'methodology' | 'resourcesNeeded' | 'fixationExercise' | 'mediaType' | 'mediaUrl'
->;
+  'topicTitle' | 'dailyObjective' | 'timeScript' | 'methodology' | 'resourcesNeeded' | 'fixationExercise' | 'mediaType'
+> & { mediaUrl?: string | null };
 
 const NO_LESSONS: LessonItem[] = [];
 const UPLOAD_ERROR = 'Não foi possível enviar o arquivo. Tente novamente.';

@@ -57,6 +57,17 @@ describe('teaching-content-service ownership', () => {
     await expect(createAssessment(teacher, { teachingPlanId: 'nope', title: 'x' }, deps)).rejects.toMatchObject({ status: 404 });
   });
 
+  it('createLesson rejects an invalid mediaType and hand-set uploads with 400', async () => {
+    const { deps, calls } = makeDeps();
+    const base = { courseScheduleId: 'own', topicTitle: 'x' };
+    await expect(createLesson(teacher, { ...base, mediaType: 'VIMEO' }, deps)).rejects.toMatchObject({ status: 400 });
+    await expect(createLesson(teacher, { ...base, mediaType: 'S3_UPLOAD' }, deps)).rejects.toMatchObject({ status: 400 });
+    await expect(
+      createLesson(teacher, { ...base, mediaType: 'YOUTUBE', mediaUrl: 'https://example.com/x' }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+    expect(calls.createLesson).toBeUndefined();
+  });
+
   it('invalid input gives 400', async () => {
     const { deps } = makeDeps();
     await expect(createLesson(teacher, { courseScheduleId: 'own' }, deps)).rejects.toMatchObject({ status: 400 });

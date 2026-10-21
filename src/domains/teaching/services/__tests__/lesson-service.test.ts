@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
 import {
-  getLessonMedia,
+  openLessonMedia,
   syncAgendaForLesson,
+  syncAgendasForSchedule,
   updateLesson,
   uploadLessonMedia,
   type LessonDeps,
@@ -17,12 +18,13 @@ const baseLesson = (teacherId: string, classId: string | null = 'c1'): LessonWit
   id: 'own',
   topicTitle: 'Aula 1',
   classDate: new Date('2026-03-02T13:00:00Z'),
+  mediaType: null,
   mediaUrl: null,
   s3ObjectKey: null,
   courseSchedule: { teachingPlan: { teacherId, subject: { id: 'sub1', name: 'BD', classId } } },
 });
 
-function makeDeps(opts: { teacherId?: string; classId?: string | null; s3ObjectKey?: string | null } = {}) {
+function makeDeps(opts: { teacherId?: string; classId?: string | null; s3ObjectKey?: string | null; mediaType?: string | null; mediaUrl?: string | null; failDelete?: boolean } = {}) {
   const calls: Record<string, unknown[]> = {};
   const rec = (name: string, arg: unknown) => {
     (calls[name] ||= []).push(arg);
@@ -31,6 +33,8 @@ function makeDeps(opts: { teacherId?: string; classId?: string | null; s3ObjectK
   const lessonRow: LessonWithContext = {
     ...baseLesson(opts.teacherId ?? 't1', opts.classId === undefined ? 'c1' : opts.classId),
     s3ObjectKey: opts.s3ObjectKey ?? null,
+    mediaType: opts.mediaType ?? null,
+    mediaUrl: opts.mediaUrl ?? null,
   };
   const deps: LessonDeps = {
     repo: {
@@ -51,8 +55,15 @@ function makeDeps(opts: { teacherId?: string; classId?: string | null; s3ObjectK
         rec('upload', { name, mime, prefix, size: buffer.length });
         return { key: 'k', filePath: `media/${name}`, provider: 'local' as const };
       },
-      getFileBuffer: async () => ({ buffer: Buffer.from('x') }),
-      deleteFile: async (p) => void rec('delete', p),
+      getFileSize: async () => 1000,
+      createReadStream: async (p, range) => {
+        rec('stream', { p, range });
+        return { stream: new Response('x').body as ReadableStream<Uint8Array>, size: 1000, partial: Boolean(range) };
+      },
+      deleteFile: async (p) => {
+        if (opts.failDelete) throw new Error('disk');
+        rec('delete', p);
+      },
     },
   };
   return { deps, calls, agendas };
@@ -154,16 +165,94 @@ describe('lesson-service uploadLessonMedia', () => {
   });
 });
 
-describe('lesson-service getLessonMedia', () => {
+describe('lesson-service openLessonMedia', () => {
   it('404 when the lesson has no stored media', async () => {
     const { deps } = makeDeps();
-    await expect(getLessonMedia('own', teacher, deps)).rejects.toMatchObject({ status: 404 });
+    await expect(openLessonMedia('own', teacher, null, deps)).rejects.toMatchObject({ status: 404 });
   });
 
   it('serves students of the lesson class only', async () => {
     const { deps } = makeDeps({ s3ObjectKey: 'media/aula.mp4' });
-    const ok = await getLessonMedia('own', student, deps);
-    expect(ok.contentType).toBe('video/mp4');
-    await expect(getLessonMedia('own', otherStudent, deps)).rejects.toMatchObject({ status: 403 });
+    const ok = await openLessonMedia('own', student, null, deps);
+    expect(ok).toMatchObject({ status: 200, contentType: 'video/mp4', start: 0, end: 999 });
+    await expect(openLessonMedia('own', otherStudent, null, deps)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('answers a Range request with 206 and the requested window', async () => {
+    const { deps, calls } = makeDeps({ s3ObjectKey: 'media/aula.mp4' });
+    const res = await openLessonMedia('own', student, 'bytes=100-199', deps);
+    expect(res).toMatchObject({ status: 206, start: 100, end: 199, size: 1000 });
+    expect(calls.stream).toEqual([{ p: 'media/aula.mp4', range: { start: 100, end: 199 } }]);
+  });
+
+  it('answers 416 for an unsatisfiable range without opening the file', async () => {
+    const { deps, calls } = makeDeps({ s3ObjectKey: 'media/aula.mp4' });
+    expect(await openLessonMedia('own', student, 'bytes=5000-', deps)).toEqual({ status: 416, size: 1000 });
+    expect(calls.stream).toBeUndefined();
+  });
+});
+
+describe('lesson-service media validation', () => {
+  it('rejects a bad URL in a mediaUrl-only update of a YOUTUBE lesson', async () => {
+    const { deps } = makeDeps({ mediaType: 'YOUTUBE', mediaUrl: 'https://youtu.be/abcdefghijk' });
+    await expect(updateLesson('own', teacher, { mediaUrl: 'https://evil.example/x' }, deps)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('rejects an unknown mediaType, an unanchored URL and S3 fields set by hand', async () => {
+    const { deps } = makeDeps();
+    await expect(updateLesson('own', teacher, { mediaType: 'VIMEO' }, deps)).rejects.toMatchObject({ status: 400 });
+    await expect(
+      updateLesson('own', teacher, { mediaType: 'YOUTUBE', mediaUrl: 'https://youtu.be/abcdefghijk.evil.com/x y' }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(updateLesson('own', teacher, { mediaType: 'S3_UPLOAD' }, deps)).rejects.toMatchObject({ status: 400 });
+    await expect(updateLesson('own', teacher, { s3ObjectKey: 'x' }, deps)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('clears mediaUrl when the type becomes NONE', async () => {
+    const { deps, calls } = makeDeps({ mediaType: 'YOUTUBE', mediaUrl: 'https://youtu.be/abcdefghijk' });
+    await updateLesson('own', teacher, { mediaType: 'NONE', mediaUrl: 'https://youtu.be/abcdefghijk' }, deps);
+    expect(calls.updateLesson).toEqual([{ id: 'own', data: { mediaType: 'NONE', mediaUrl: null } }]);
+  });
+
+  it('keeps the upload when an S3_UPLOAD lesson is saved without touching its URL', async () => {
+    const { deps, calls } = makeDeps({ mediaType: 'S3_UPLOAD', s3ObjectKey: 'media/a.mp4' });
+    await updateLesson('own', teacher, { mediaType: 'S3_UPLOAD', topicTitle: 'z' }, deps);
+    expect(calls.updateLesson).toEqual([{ id: 'own', data: { mediaType: 'S3_UPLOAD', topicTitle: 'z' } }]);
+    expect(calls.delete).toBeUndefined();
+  });
+
+  it('clears s3ObjectKey and deletes the stored file when switching to YouTube', async () => {
+    const { deps, calls } = makeDeps({ mediaType: 'S3_UPLOAD', s3ObjectKey: 'media/a.mp4' });
+    await updateLesson('own', teacher, { mediaType: 'YOUTUBE', mediaUrl: 'https://youtu.be/abcdefghijk' }, deps);
+    expect(calls.updateLesson).toEqual([
+      { id: 'own', data: { mediaType: 'YOUTUBE', mediaUrl: 'https://youtu.be/abcdefghijk', s3ObjectKey: null } },
+    ]);
+    expect(calls.delete).toEqual(['media/a.mp4']);
+  });
+
+  it('does not fail the update when deleting the old file fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { deps } = makeDeps({ mediaType: 'S3_UPLOAD', s3ObjectKey: 'media/a.mp4', failDelete: true });
+    await expect(updateLesson('own', teacher, { mediaType: 'NONE' }, deps)).resolves.toBeDefined();
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+});
+
+describe('syncAgendasForSchedule', () => {
+  it('keeps syncing the other lessons when one fails and reports the counts', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const lessons = ['a', 'b', 'c'].map((id) => ({ ...baseLesson('t1'), id }));
+    const synced: string[] = [];
+    const result = await syncAgendasForSchedule('s1', {
+      listLessons: async () => lessons,
+      syncLesson: async (l) => {
+        if (l.id === 'b') throw new Error('boom');
+        synced.push(l.id);
+      },
+    });
+    expect(result).toEqual({ synced: 2, failed: 1 });
+    expect(synced).toEqual(['a', 'c']);
+    error.mockRestore();
   });
 });

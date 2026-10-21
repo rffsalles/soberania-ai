@@ -1,6 +1,7 @@
 import { Prisma, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { ASSESSMENT_TYPE, LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
+import { parseLessonInput, type LessonInput } from '@/lib/validators/lesson.validator';
 import { MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from '@/lib/validators/assessment.validator';
 import { assertOwner } from '../ownership';
 import * as planRepo from './teaching-plan-repository';
@@ -57,21 +58,10 @@ export function listLessons(user: PlanActor, scheduleId?: string, deps: Teaching
   return deps.repo.listLessonsBySchedule({ scheduleId, ...ownerFilter(user) });
 }
 
-export type LessonInput = {
-  courseScheduleId?: string;
-  classDate?: string;
-  classNumber?: number | string;
-  topicTitle?: string;
-  dailyObjective?: string;
-  timeScript?: Prisma.InputJsonValue;
-  methodology?: string;
-  resourcesNeeded?: string[];
-  fixationExercise?: string;
-  mediaType?: string;
-  mediaUrl?: string | null;
-};
+export type { LessonInput };
 
-export async function createLesson(user: PlanActor, input: LessonInput, deps: TeachingContentDeps = defaultDeps) {
+export async function createLesson(user: PlanActor, raw: unknown, deps: TeachingContentDeps = defaultDeps) {
+  const input = parseLessonInput(raw);
   if (!input.courseScheduleId || !input.topicTitle) {
     throw new DomainError(400, 'Cronograma e título do tópico são obrigatórios.');
   }
@@ -82,7 +72,7 @@ export async function createLesson(user: PlanActor, input: LessonInput, deps: Te
     classNumber: Number(input.classNumber) || 1,
     topicTitle: input.topicTitle,
     dailyObjective: input.dailyObjective || '',
-    timeScript: input.timeScript || [],
+    timeScript: input.timeScript ?? [],
     methodology: input.methodology || '',
     resourcesNeeded: input.resourcesNeeded || [],
     fixationExercise: input.fixationExercise || '',
