@@ -1,0 +1,6 @@
+export const ENV = {
+  AI_PROVIDER: 'AI_PROVIDER',
+  AI_BASE_URL: 'AI_BASE_URL',
+  AI_API_KEY: 'AI_API_KEY',
+  AI_EMBEDDING_MODEL: 'AI_EMBEDDING_MODEL',
+} as const;

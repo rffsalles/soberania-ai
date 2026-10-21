@@ -5,6 +5,8 @@
  * chamam `POST {AI_BASE_URL}/embeddings` (API compatível com OpenAI).
  */
 
+import { ENV } from './constants/env';
+
 export const EMBEDDING_DIMENSIONS = 1024;
 export const EMBEDDING_BATCH_SIZE = 32;
 export const EMBEDDING_TIMEOUT_MS = 15_000;
@@ -50,9 +52,38 @@ export function hashEmbedding(text: string): number[] {
   return vector.map((x) => x / norm);
 }
 
-async function embedBatch(batch: string[], fetchImpl: typeof fetch): Promise<number[][]> {
-  const baseUrl = process.env.AI_BASE_URL ?? '';
-  const apiKey = process.env.AI_API_KEY;
+interface EmbeddingConfig {
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+}
+
+function readConfig(): EmbeddingConfig {
+  const model = process.env[ENV.AI_EMBEDDING_MODEL]?.trim();
+  const baseUrl = process.env[ENV.AI_BASE_URL]?.trim();
+  if (!model) {
+    throw new EmbeddingUnavailableError(
+      `Modelo de embeddings não configurado (${ENV.AI_EMBEDDING_MODEL})`,
+    );
+  }
+  if (!baseUrl) {
+    throw new EmbeddingUnavailableError(
+      `URL do provedor de IA não configurada (${ENV.AI_BASE_URL})`,
+    );
+  }
+  return {
+    model,
+    baseUrl: baseUrl.replace(/\/+$/, ''),
+    apiKey: process.env[ENV.AI_API_KEY] || undefined,
+  };
+}
+
+async function embedBatch(
+  batch: string[],
+  fetchImpl: typeof fetch,
+  config: EmbeddingConfig,
+): Promise<number[][]> {
+  const { baseUrl, apiKey, model } = config;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
@@ -61,7 +92,7 @@ async function embedBatch(batch: string[], fetchImpl: typeof fetch): Promise<num
     response = await fetchImpl(`${baseUrl}/embeddings`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: process.env.AI_EMBEDDING_MODEL, input: batch }),
+      body: JSON.stringify({ model, input: batch }),
       signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
     });
   } catch (cause) {
@@ -93,13 +124,14 @@ async function embedBatch(batch: string[], fetchImpl: typeof fetch): Promise<num
 }
 
 export async function embedTexts(texts: string[], deps: EmbeddingDeps = {}): Promise<number[][]> {
-  const provider = process.env.AI_PROVIDER ?? DEFAULT_PROVIDER;
+  const provider = process.env[ENV.AI_PROVIDER] ?? DEFAULT_PROVIDER;
   if (provider === MOCK_PROVIDER) return texts.map(hashEmbedding);
 
+  const config = readConfig();
   const fetchImpl = deps.fetch ?? fetch;
   const result: number[][] = [];
   for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
-    result.push(...(await embedBatch(texts.slice(i, i + EMBEDDING_BATCH_SIZE), fetchImpl)));
+    result.push(...(await embedBatch(texts.slice(i, i + EMBEDDING_BATCH_SIZE), fetchImpl, config)));
   }
   return result;
 }
