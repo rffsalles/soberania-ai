@@ -13,10 +13,12 @@ function messagesUrl(agendaId: string): string {
   return `${API_ROUTES.AGENDAS}/${encodeURIComponent(agendaId)}/messages`;
 }
 
+/** Mescla por id e mantém a ordem cronológica (o POST pode trazer mensagens mais novas que as do polling). */
 function mergeById(current: MessageDTO[], incoming: MessageDTO[]): MessageDTO[] {
   const seen = new Set(current.map((m) => m.id));
   const added = incoming.filter((m) => !seen.has(m.id));
-  return added.length ? [...current, ...added] : current;
+  if (!added.length) return current;
+  return [...current, ...added].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 /** Mensagens do grupo de estudos com atualização periódica (polling) e envio otimista. */
@@ -37,7 +39,11 @@ export function useStudyGroupMessages(
   const lastCreatedAt = React.useRef<string | null>(null);
   const pollInFlight = React.useRef(false);
 
-  const apply = React.useCallback((incoming: MessageDTO[]) => {
+  /**
+   * Aplica mensagens recebidas. Só o polling avança o cursor `lastCreatedAt`: o POST devolve a resposta da tutora,
+   * criada segundos depois, e avançar por ela esconderia mensagens de colegas postadas nesse intervalo.
+   */
+  const apply = React.useCallback((incoming: MessageDTO[], fromPoll: boolean) => {
     if (incoming.length === 0) return;
     setMessages((prev) => {
       // Mensagens reais substituem as otimistas equivalentes (mesmo autor e conteúdo).
@@ -45,6 +51,7 @@ export function useStudyGroupMessages(
       const cleaned = prev.filter((m) => !(m.id.startsWith(OPTIMISTIC_PREFIX) && real.has(`${m.authorId}|${m.content}`)));
       return mergeById(cleaned, incoming);
     });
+    if (!fromPoll) return;
     const newest = incoming[incoming.length - 1]?.createdAt;
     if (newest && (!lastCreatedAt.current || newest > lastCreatedAt.current)) lastCreatedAt.current = newest;
   }, []);
@@ -65,7 +72,7 @@ export function useStudyGroupMessages(
         const body = await res.json().catch(() => null);
         if (controller.signal.aborted) return;
         if (res.ok && body?.success) {
-          apply(body.messages as MessageDTO[]);
+          apply(body.messages as MessageDTO[], true);
           setError(null);
         } else {
           setError(typeof body?.error === 'string' ? body.error : LOAD_ERROR);
@@ -117,7 +124,7 @@ export function useStudyGroupMessages(
           return false;
         }
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        apply([body.message as MessageDTO, ...(body.tutorReply ? [body.tutorReply as MessageDTO] : [])]);
+        apply([body.message as MessageDTO, ...(body.tutorReply ? [body.tutorReply as MessageDTO] : [])], false);
         setError(null);
         return true;
       } catch {
