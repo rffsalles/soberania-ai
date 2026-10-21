@@ -1,26 +1,22 @@
-export interface FAQItem {
-  id: string;
-  timestampSeconds: number;
-  question: string;
-  shortAnswer: string;
-  sourceChapter: string;
-}
-import { LESSON_FAQS } from '@/lib/mocks-pending';
+import { DomainError } from '@/lib/api/domain-error';
+import { getAgendaFaqs } from '@/domains/pedagogy/services/faq-service';
+import type { McpContext } from '../mcp-context';
 
 export const getLessonFaqsTool = {
   name: 'get_lesson_faqs',
-  description: 'Retorna a lista de perguntas e respostas frequentes mapeadas para a aula ou timestamp do vídeo.',
+  description: 'Retorna as perguntas e respostas mais frequentes dos alunos na sessão (agenda) informada.',
   parameters: {
     type: 'object',
     properties: {
-      lessonId: {
+      agendaId: {
         type: 'string',
-        description: 'Identificador da sessão ou aula.',
+        description: 'Identificador da agenda (sessão de aula).',
       },
     },
+    required: ['agendaId'],
   },
-  execute: async (args: { lessonId?: string }) => {
-    const key = args.lessonId && LESSON_FAQS[args.lessonId] ? args.lessonId : 'default';
-    return LESSON_FAQS[key];
+  execute: async (args: { agendaId: string }, ctx?: McpContext) => {
+    if (!ctx?.user) throw new DomainError(401, 'Contexto de usuário ausente para a ferramenta MCP.');
+    return getAgendaFaqs(ctx.user, args.agendaId);
   },
 };

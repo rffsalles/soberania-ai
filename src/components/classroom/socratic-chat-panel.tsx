@@ -7,6 +7,7 @@ import type { AgendaType } from '@/domains/agendas/types';
 export interface SocraticChatPanelProps {
   agendaId: string;
   agendaType: AgendaType;
+  suggestions?: string[];
   onOpenMinutesModal?: () => void;
   onGuardrailBlock?: () => void;
   className?: string;
@@ -15,6 +16,7 @@ export interface SocraticChatPanelProps {
 export function SocraticChatPanel({
   agendaId,
   agendaType,
+  suggestions,
   onOpenMinutesModal,
   onGuardrailBlock,
   className,
@@ -23,6 +25,7 @@ export function SocraticChatPanel({
     <UniversalSocraticChat
       agendaId={agendaId}
       agendaType={agendaType}
+      suggestions={suggestions}
       onOpenMinutesModal={onOpenMinutesModal}
       onGuardrailBlock={onGuardrailBlock}
       className={className}

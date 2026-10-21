@@ -31,3 +31,10 @@ export function findLessonWithContext(id: string) {
 export function updateLessonWithContext(id: string, data: Prisma.LessonPlanUncheckedUpdateInput) {
   return db.lessonPlan.update({ where: { id }, data, include: lessonContextInclude });
 }
+
+export function findLessonPlayerData(id: string) {
+  return db.lessonPlan.findUnique({
+    where: { id },
+    select: { topicTitle: true, dailyObjective: true, timeScript: true, mediaType: true, mediaUrl: true },
+  });
+}

@@ -15,6 +15,8 @@ export const LESSON_DEFAULT_DURATION_MINUTES = 100;
 export const MEDIA_MAX_UPLOAD_MB = 200;
 export const YOUTUBE_URL_PATTERN = /^https:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11}([?&#].*)?$/;
 
+export const YOUTUBE_VIDEO_ID_PATTERN = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/;
+
 /** Extensões de mídia aceitas no upload de aulas, com o tipo de conteúdo servido no download. */
 export const LESSON_MEDIA_CONTENT_TYPES = {
   mp4: 'video/mp4',

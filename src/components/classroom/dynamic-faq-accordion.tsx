@@ -9,32 +9,17 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { FAQItem } from '@/domains/pedagogy/faq-builder';
 
-export function DynamicFaqAccordion() {
-  const faqs = [
-    {
-      id: 'faq-1',
-      question: 'Por que usamos INNER JOIN em vez de WHERE tabelaA.id = tabelaB.id?',
-      answer:
-        'O INNER JOIN segue o padrão ANSI SQL-92, separando nitidamente a condição de junção estrutural das condições de filtro no WHERE. Isso evita acidentes de produto cartesiano desnecessário e melhora a legibilidade do código.',
-      citation: 'Apostila Oficial BD · Cap. 4, pág. 58',
-    },
-    {
-      id: 'faq-2',
-      question: 'O que acontece com tuplas sem par no LEFT JOIN?',
-      answer:
-        'A linha da tabela à esquerda é preservada no resultado. Todos os atributos vindos da tabela à direita que não possuem correspondência são preenchidos com o valor NULL.',
-      citation: 'Apostila Oficial BD · Cap. 4, pág. 62',
-    },
-    {
-      id: 'faq-3',
-      question: 'Como saber se uma relação está violando a 3ª Forma Normal?',
-      answer:
-        'Basta verificar se existe dependência transitiva: se a coluna A determina B, e B determina C (onde nem B nem C são chaves primárias), a relação está na 2FN mas NÃO na 3FN.',
-      citation: 'Apostila Oficial BD · Cap. 6, pág. 112',
-    },
-  ];
+const EMPTY_MESSAGE = 'Ainda não há dúvidas frequentes nesta sessão.';
 
+interface DynamicFaqAccordionProps {
+  faqs: FAQItem[];
+  isLoading?: boolean;
+}
+
+export function DynamicFaqAccordion({ faqs, isLoading = false }: DynamicFaqAccordionProps) {
   return (
     <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
       <CardHeader className="pb-2">
@@ -44,22 +29,28 @@ export function DynamicFaqAccordion() {
         </div>
       </CardHeader>
       <CardContent>
-        <Accordion type="single" collapsible className="w-full">
-          {faqs.map((faq) => (
-            <AccordionItem key={faq.id} value={faq.id}>
-              <AccordionTrigger className="text-left text-sm hover:no-underline">
-                {faq.question}
-              </AccordionTrigger>
-              <AccordionContent className="text-slate-600 dark:text-slate-300 space-y-2">
-                <p>{faq.answer}</p>
-                <div className="flex items-center gap-1.5 text-xs text-brand-teal font-medium">
-                  <BookOpen className="h-3.5 w-3.5" />
-                  <span>{faq.citation}</span>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        {isLoading ? (
+          <Skeleton className="h-16 w-full rounded-xl" />
+        ) : faqs.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{EMPTY_MESSAGE}</p>
+        ) : (
+          <Accordion type="single" collapsible className="w-full">
+            {faqs.map((faq) => (
+              <AccordionItem key={faq.id} value={faq.id}>
+                <AccordionTrigger className="text-left text-sm hover:no-underline">{faq.question}</AccordionTrigger>
+                <AccordionContent className="text-slate-600 dark:text-slate-300 space-y-2">
+                  <p>{faq.shortAnswer}</p>
+                  {faq.sourceChapter && (
+                    <div className="flex items-center gap-1.5 text-xs text-brand-teal font-medium">
+                      <BookOpen className="h-3.5 w-3.5" />
+                      <span>{faq.sourceChapter}</span>
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        )}
       </CardContent>
     </Card>
   );

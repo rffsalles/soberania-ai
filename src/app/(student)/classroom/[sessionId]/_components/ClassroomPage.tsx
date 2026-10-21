@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { AppHeader } from '@/components/layout/app-header';
-import { InteractiveVideoPlayer } from '@/components/classroom/interactive-video-player';
+import { InteractiveVideoPlayer, type SocraticCheckpoint } from '@/components/classroom/interactive-video-player';
 import { SocraticChatPanel } from '@/components/classroom/socratic-chat-panel';
 import { DynamicFaqAccordion } from '@/components/classroom/dynamic-faq-accordion';
 import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minutes-modal';
@@ -10,9 +10,13 @@ import { Badge } from '@/components/ui/badge';
 import { AgendaNotFound } from '@/components/agendas/agenda-not-found';
 import { toAgendaSession } from '@/components/agendas/agenda-session';
 import { useAgenda } from '@/components/agendas/use-agenda';
+import { useAgendaFaqs, useAgendaLesson } from '@/components/classroom/use-agenda-lesson';
+import { LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
 import { Skeleton } from '@/components/ui/skeleton';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
+
+const AGENDA_STATUS_LIVE = 'LIVE';
 
 interface ClassroomPageProps {
   sessionId: string;
@@ -21,7 +25,21 @@ interface ClassroomPageProps {
 export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   const [minutesModalOpen, setMinutesModalOpen] = React.useState(false);
 
+  const [activeCheckpoint, setActiveCheckpoint] = React.useState<SocraticCheckpoint | null>(null);
+
   const { agenda: session, isLoading, error, notFound } = useAgenda(sessionId);
+  const { lesson } = useAgendaLesson(sessionId);
+  const { faqs, isLoading: faqsLoading } = useAgendaFaqs(sessionId, session?.status === AGENDA_STATUS_LIVE);
+
+  const checkpoints = React.useMemo<SocraticCheckpoint[]>(
+    () =>
+      (lesson?.timeScript ?? []).flatMap((item) =>
+        item.socraticQuestion
+          ? [{ timeSeconds: item.timeSeconds, question: item.socraticQuestion, label: item.activity }]
+          : []
+      ),
+    [lesson]
+  );
 
   if (isLoading || !session) {
     return (
@@ -86,8 +104,18 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Interactive Video Player & Material Accordion (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
-            <InteractiveVideoPlayer />
-            <DynamicFaqAccordion />
+            <InteractiveVideoPlayer
+              videoUrl={lesson?.videoUrl ?? session.videoUrl ?? null}
+              mediaType={lesson?.mediaType ?? LESSON_MEDIA_TYPE.NONE}
+              checkpoints={checkpoints}
+              onTriggerCheckpoint={setActiveCheckpoint}
+            />
+            {activeCheckpoint && (
+              <div className="rounded-xl border border-brand-orange/40 bg-brand-orange/10 px-4 py-2 text-sm text-slate-800 dark:text-slate-100">
+                Pausa socrática: {activeCheckpoint.question}
+              </div>
+            )}
+            <DynamicFaqAccordion faqs={faqs} isLoading={faqsLoading} />
           </div>
 
           {/* Right Column: Socratic Chat Panel with Tutora Lucy (5 cols) */}
@@ -95,6 +123,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
             <SocraticChatPanel
               agendaType="CLASSROOM"
               agendaId={session.id}
+              suggestions={activeCheckpoint ? [activeCheckpoint.question] : undefined}
               onOpenMinutesModal={() => setMinutesModalOpen(true)}
             />
           </div>
