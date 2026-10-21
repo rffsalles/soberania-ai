@@ -5,6 +5,10 @@ import { localMcpServer } from '../mcp-server';
 const generateMinute = vi.hoisted(() => vi.fn());
 const executeHybridSearch = vi.hoisted(() => vi.fn());
 const createInteraction = vi.hoisted(() => vi.fn());
+const getAgendaForUser = vi.hoisted(() => vi.fn());
+const findStudent = vi.hoisted(() => vi.fn());
+vi.mock('@/domains/agendas/services/agenda-service', () => ({ getAgendaForUser }));
+vi.mock('@/domains/pedagogy/services/minute-repository', () => ({ findStudent }));
 vi.mock('@/domains/pedagogy/services/minutes-service', () => ({
   generateMinute,
 }));
@@ -84,8 +88,8 @@ describe('Local MCP Server', () => {
     studentId: 'other',
     questionText: 'q',
     responseText: 'r',
-    agendaType: AgendaType.CLASSROOM,
   };
+  const examAgenda = { id: 'ag1', type: AgendaType.EXAM, classId: 'c1' };
 
   it('register_student_interaction proíbe studentId alheio para STUDENT (403)', async () => {
     await expect(
@@ -94,17 +98,36 @@ describe('Local MCP Server', () => {
     expect(createInteraction).not.toHaveBeenCalled();
   });
 
-  it('register_student_interaction exige agendaType (400)', async () => {
-    const { agendaType: _omitted, ...rest } = interactionArgs;
-    void _omitted;
-    await expect(
-      localMcpServer.executeTool('register_student_interaction', rest, { user: teacher })
-    ).rejects.toMatchObject({ status: 400 });
+  it('register_student_interaction resolve a agenda no escopo do usuário e deriva o agendaType dela', async () => {
+    getAgendaForUser.mockResolvedValueOnce(examAgenda);
+    findStudent.mockResolvedValueOnce({ id: 'other', name: 'A', classId: 'c1' });
+    createInteraction.mockResolvedValueOnce({ id: 'i1' });
+    const res = await localMcpServer.executeTool(
+      'register_student_interaction',
+      { ...interactionArgs, agendaType: AgendaType.CLASSROOM },
+      { user: teacher }
+    );
+    expect(res).toEqual({ success: true, recordId: 'i1' });
+    expect(getAgendaForUser).toHaveBeenCalledWith('ag1', teacher);
+    expect(createInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ agendaId: 'ag1', studentId: 'other', agendaType: AgendaType.EXAM })
+    );
   });
 
-  it('register_student_interaction permite a TEACHER registrar para outro aluno', async () => {
-    createInteraction.mockResolvedValueOnce({ id: 'i1' });
-    const res = await localMcpServer.executeTool('register_student_interaction', interactionArgs, { user: teacher });
-    expect(res).toEqual({ success: true, recordId: 'i1' });
+  it('register_student_interaction propaga 404 de agenda fora do escopo do professor', async () => {
+    getAgendaForUser.mockRejectedValueOnce(Object.assign(new Error('Agenda não encontrada.'), { status: 404 }));
+    await expect(
+      localMcpServer.executeTool('register_student_interaction', interactionArgs, { user: teacher })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(createInteraction).not.toHaveBeenCalled();
+  });
+
+  it('register_student_interaction recusa aluno de outra turma (404)', async () => {
+    getAgendaForUser.mockResolvedValueOnce(examAgenda);
+    findStudent.mockResolvedValueOnce({ id: 'other', name: 'A', classId: 'c2' });
+    await expect(
+      localMcpServer.executeTool('register_student_interaction', interactionArgs, { user: teacher })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(createInteraction).not.toHaveBeenCalled();
   });
 });
