@@ -1,7 +1,7 @@
 # 📋 Plano: Ingestão de Documentos (PDF, DOCX, TXT/MD), Motor de OCR e Acervo de Materiais
 
 > **Task Slug:** `document-ingestion-ocr`  
-> **Status:** 🟡 Proposto (Aguardando Aprovação)  
+> **Status:** 🟢 Concluído (implementado e coberto por testes; ver `CODEBASE.md` e o domínio `rag`)  
 > **Data:** 17/09/2026  
 > **Agentes Responsáveis:** `@[project-planner]`, `@[backend-specialist]`, `@[frontend-specialist]`, `@[database-architect]`, `@[security-auditor]`  
 > **Documentos de Referência:** [`docs/PRD.md`](file:///c:/projects/soberania-ai/docs/PRD.md) · [`docs/UX_UI_DESIGN_SYSTEM.md`](file:///c:/projects/soberania-ai/docs/UX_UI_DESIGN_SYSTEM.md) · [`docs/rules/CLEAN_CODE.md`](file:///c:/projects/soberania-ai/docs/rules/CLEAN_CODE.md) · [`docs/rules/DATA_TABLE.md`](file:///c:/projects/soberania-ai/docs/rules/DATA_TABLE.md) · [`TSX_SCREEN_RULES.md`](file:///c:/projects/soberania-ai/.agent/rules/TSX_SCREEN_RULES.md)

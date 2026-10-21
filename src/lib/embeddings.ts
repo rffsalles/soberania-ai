@@ -11,8 +11,8 @@ export const EMBEDDING_DIMENSIONS = 1024;
 export const EMBEDDING_BATCH_SIZE = 32;
 export const EMBEDDING_TIMEOUT_MS = 15_000;
 
-const MOCK_PROVIDER = 'mock';
-const DEFAULT_PROVIDER = MOCK_PROVIDER;
+const OFFLINE_PROVIDER = 'mock';
+const DEFAULT_PROVIDER = OFFLINE_PROVIDER;
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 const SECONDARY_BUCKET_WEIGHT = 0.5;
@@ -130,7 +130,7 @@ async function embedBatch(
 
 export async function embedTexts(texts: string[], deps: EmbeddingDeps = {}): Promise<number[][]> {
   const provider = process.env[ENV.AI_PROVIDER] ?? DEFAULT_PROVIDER;
-  if (provider === MOCK_PROVIDER) return texts.map(hashEmbedding);
+  if (provider === OFFLINE_PROVIDER) return texts.map(hashEmbedding);
 
   const config = readConfig();
   const fetchImpl = deps.fetch ?? fetch;

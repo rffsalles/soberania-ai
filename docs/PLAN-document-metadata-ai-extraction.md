@@ -1,7 +1,7 @@
 # 📋 Plano: Extração Inteligente de Metadados (Título, Autores e Categorias) das 4 Primeiras Páginas via IA
 
 > **Task Slug:** `document-metadata-ai-extraction`  
-> **Status:** 🟡 Proposto (Aguardando Aprovação)  
+> **Status:** 🟢 Concluído (implementado e coberto por testes; ver `CODEBASE.md` e o domínio `rag`)  
 > **Data:** 17/09/2026  
 > **Agentes Responsáveis:** `@[project-planner]`, `@[backend-specialist]`, `@[frontend-specialist]`, `@[security-auditor]`, `@[test-engineer]`  
 > **Documentos de Referência:** [`docs/PRD.md`](file:///c:/projects/soberania-ai/docs/PRD.md) · [`docs/UX_UI_DESIGN_SYSTEM.md`](file:///c:/projects/soberania-ai/docs/UX_UI_DESIGN_SYSTEM.md) · [`docs/rules/CLEAN_CODE.md`](file:///c:/projects/soberania-ai/docs/rules/CLEAN_CODE.md) · [`TSX_SCREEN_RULES.md`](file:///c:/projects/soberania-ai/.agent/rules/TSX_SCREEN_RULES.md)

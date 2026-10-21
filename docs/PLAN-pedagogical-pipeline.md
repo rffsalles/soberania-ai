@@ -5,6 +5,8 @@
 > **Provedor de Mídia:** Armazenamento S3 Parametrizável (AWS S3 / MinIO Institucional On-Premises)  
 > **Diretrizes Visuais & Produto:** [`docs/PRD.md`](file:///c:/projects/soberania-ai/docs/PRD.md) | [`docs/UX_UI_DESIGN_SYSTEM.md`](file:///c:/projects/soberania-ai/docs/UX_UI_DESIGN_SYSTEM.md)
 
+> **Observação (mídia):** a mídia das aulas não usa mais S3 parametrizável diretamente: o upload passa pelo serviço `storage` (filesystem local em `MEDIA_STORAGE_DIR` ou Cloudflare R2 quando `STORAGE_PROVIDER=r2`) e é servido por `GET /api/v1/teacher/lessons/:id/media` com suporte a Range.
+
 ---
 
 ## 1. 🎯 Objetivos do Plano
