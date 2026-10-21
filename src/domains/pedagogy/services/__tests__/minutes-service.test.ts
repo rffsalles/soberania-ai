@@ -32,8 +32,10 @@ function interaction(o: Partial<MetricInteraction> = {}): MetricInteraction {
   return {
     type: InteractionType.QUESTION,
     guardrailBlocked: false,
+    isSocraticChallenge: false,
     wasCorrect: null,
     latencyMs: 2000,
+    createdAt: NOW,
     ragSourceBook: 'BD',
     ragSourcePage: 5,
     ...o,
@@ -107,11 +109,13 @@ describe('generateMinute', () => {
   it('calcula métricas e usa o texto da IA quando o provider é real', async () => {
     const { deps } = makeDeps({
       interactions: [
-        interaction({ wasCorrect: true }),
+        // A tutora respondeu com um desafio; a interação seguinte é a resposta do aluno.
+        interaction({ wasCorrect: true, isSocraticChallenge: true }),
         interaction({
           type: InteractionType.SOCRATIC_CHALLENGE,
           ragSourcePage: 9,
           wasCorrect: false,
+          createdAt: new Date(NOW.getTime() + 60_000),
         }),
       ],
       ai: 'Texto: {"rawSummary":"Resumo IA","actionableAdvice":"Conselho IA"}',
