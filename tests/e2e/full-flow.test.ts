@@ -145,15 +145,26 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     });
     planId = plan.id;
 
-    const today = new Date();
-    const iso = today.toISOString().slice(0, 10);
-    const schedule = await createSchedule(teacher, {
-      teachingPlanId: planId,
-      startDate: iso,
-      endDate: iso,
-      weekdays: [0, 1, 2, 3, 4, 5, 6],
-      holidays: [],
-    });
+    // A aula começa no minuto local de 5 minutos atrás: a agenda gerada pelo fluxo normal fica LIVE agora.
+    const { INSTITUTION_TIMEZONE } = await import('@/lib/constants/teaching');
+    const { toLocalDateTimeInput } = await import('@/lib/timezone');
+    const [classDay, startTime] = toLocalDateTimeInput(
+      new Date(Date.now() - 5 * MS_PER_MINUTE),
+      INSTITUTION_TIMEZONE
+    ).split('T');
+    // Mesmo shape que POST /teacher/schedules aceita.
+    const { createScheduleSchema } = await import('@/lib/validators/schedule.validator');
+    const schedule = await createSchedule(
+      teacher,
+      createScheduleSchema.parse({
+        teachingPlanId: planId,
+        startDate: classDay,
+        endDate: classDay,
+        weekdays: [0, 1, 2, 3, 4, 5, 6],
+        holidays: [],
+        startTime,
+      })
+    );
     expect(schedule.meetings.length).toBe(1);
     const scheduleId = (schedule as unknown as { id: string }).id;
 
@@ -161,9 +172,10 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     expect(synced.created).toBe(1);
 
     const lesson = await db.lessonPlan.findFirstOrThrow({ where: { courseScheduleId: scheduleId } });
-    // Aula começou há 5 minutos: a agenda gerada fica LIVE e aceita chat agora.
+    expect(toLocalDateTimeInput(lesson.classDate, INSTITUTION_TIMEZONE)).toBe(`${classDay}T${startTime}`);
+    // Edição como o LessonEditor envia: classDate em datetime-local no fuso da instituição.
     await updateLesson(lesson.id, { ...teacher }, {
-      classDate: new Date(Date.now() - 5 * MS_PER_MINUTE).toISOString(),
+      classDate: `${classDay}T${startTime}`,
       topicTitle: `Normalização E2E ${SUFFIX}`,
     });
     await syncAgendasForSchedule(scheduleId);
@@ -172,6 +184,7 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     lessonAgendaId = agenda.id;
     agendaIds.push(agenda.id);
     expect(agenda).toMatchObject({ type: 'CLASSROOM', classId, subjectId, teacherId });
+    expect(agenda.startTime.getTime()).toBe(lesson.classDate.getTime());
   });
 
   it('teacher creates and publishes an exam', async () => {

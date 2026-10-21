@@ -1,4 +1,5 @@
 import type { AgendaSession, AgendaStatus, AgendaTimeWindowValidation } from './types';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
 /**
  * Valida se a requisição do aluno está dentro da janela de horário autorizada para a sessão
@@ -23,7 +24,7 @@ export function validateAgendaTimeWindow(
         isWithinWindow: false,
         minutesRemaining: 0,
         timeUntilStartMinutes: 0,
-        message: `Esta sessão foi encerrada às ${new Date(liveEnd).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. As interações ativas foram finalizadas e a Ata Pedagógica foi emitida.`,
+        message: `Esta sessão foi encerrada às ${new Date(liveEnd).toLocaleTimeString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' })}. As interações ativas foram finalizadas e a Ata Pedagógica foi emitida.`,
       };
     }
     if (!isNaN(liveEnd)) {
@@ -58,7 +59,7 @@ export function validateAgendaTimeWindow(
         isWithinWindow: false,
         minutesRemaining: 0,
         timeUntilStartMinutes: diffMin,
-        message: `Esta sessão iniciará em ${diffMin} minuto(s). O acesso com o agente só estará liberado às ${start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`,
+        message: `Esta sessão iniciará em ${diffMin} minuto(s). O acesso com o agente só estará liberado às ${start.toLocaleTimeString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' })}.`,
       };
     }
 
@@ -67,7 +68,7 @@ export function validateAgendaTimeWindow(
         isWithinWindow: false,
         minutesRemaining: 0,
         timeUntilStartMinutes: 0,
-        message: `Esta sessão foi encerrada às ${end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. As interações ativas foram finalizadas e a Ata Pedagógica foi emitida.`,
+        message: `Esta sessão foi encerrada às ${end.toLocaleTimeString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' })}. As interações ativas foram finalizadas e a Ata Pedagógica foi emitida.`,
       };
     }
 

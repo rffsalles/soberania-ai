@@ -8,8 +8,11 @@ import { useTeacherPlans } from '@/components/assessments/use-assessments';
 import { useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
 import { useLessons, type LessonItem } from '@/components/teaching/use-lessons';
 import { LessonEditor } from './LessonEditor';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
-const formatDate = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+// classDate é o instante de início da aula; exibido no fuso da instituição.
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, dateStyle: 'short', timeStyle: 'short' });
 const formatPeriod = (s: ScheduleItem) => `${formatDate(s.startDate)} a ${formatDate(s.endDate)}`;
 
 const SELECT_CLASS =

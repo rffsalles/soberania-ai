@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
+import { INSTITUTION_TIMEZONE, LESSON_TEXT_MAX_LENGTH, LESSON_TITLE_MAX_LENGTH } from '@/lib/constants/teaching';
+import { localDateTimeToUtc, toLocalDateTimeInput } from '@/lib/timezone';
 import {
   openLessonMedia,
   syncAgendaForLesson,
@@ -99,9 +101,48 @@ describe('lesson-service updateLesson', () => {
     await updateLesson('own', teacher, { topicTitle: 'y', courseScheduleId: 'other', id: 'zzz' } as never, deps);
     expect(calls.updateLesson).toEqual([{ id: 'own', data: { topicTitle: 'y' } }]);
   });
+
+  it('interpreta classDate de datetime-local no fuso da instituição e a agenda começa às 19:00 locais', async () => {
+    const { deps, calls, agendas } = makeDeps();
+    await updateLesson('own', teacher, { classDate: '2026-03-02T19:00' }, deps);
+    const saved = (calls.updateLesson[0] as { data: { classDate: Date } }).data.classDate;
+    expect(saved.toISOString()).toBe('2026-03-02T22:00:00.000Z');
+    const start = agendas.get('own')!.startTime as Date;
+    expect(start.toLocaleTimeString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' })).toBe(
+      '19:00'
+    );
+  });
+
+  it('rejeita classDate inválida com 400 em vez de erro do banco', async () => {
+    const { deps, calls } = makeDeps();
+    for (const classDate of ['amanhã', '2026-02-30T19:00', '2026-03-02T25:00']) {
+      await expect(updateLesson('own', teacher, { classDate }, deps)).rejects.toMatchObject({ status: 400 });
+    }
+    expect(calls.updateLesson).toBeUndefined();
+  });
+
+  it('rejeita textos acima do limite com 400', async () => {
+    const { deps } = makeDeps();
+    await expect(
+      updateLesson('own', teacher, { topicTitle: 'x'.repeat(LESSON_TITLE_MAX_LENGTH + 1) }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      updateLesson('own', teacher, { methodology: 'x'.repeat(LESSON_TEXT_MAX_LENGTH + 1) }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+  });
 });
 
 describe('lesson-service syncAgendaForLesson', () => {
+  it('aula gerada pelo cronograma às 19:00 locais gera agenda [19:00, 19:00 + duração] no fuso da instituição', async () => {
+    const { deps, agendas } = makeDeps();
+    const classDate = localDateTimeToUtc('2026-03-02', '19:00', INSTITUTION_TIMEZONE);
+    await syncAgendaForLesson({ ...baseLesson('t1'), classDate }, deps);
+    const agenda = agendas.get('own')!;
+    expect((agenda.startTime as Date).getTime()).toBe(classDate.getTime());
+    expect(toLocalDateTimeInput(agenda.startTime as Date, INSTITUTION_TIMEZONE)).toBe('2026-03-02T19:00');
+    expect(toLocalDateTimeInput(agenda.endTime as Date, INSTITUTION_TIMEZONE)).toBe('2026-03-02T20:40');
+  });
+
   it('creates one agenda, then the second call updates the same one', async () => {
     const { deps, agendas, calls } = makeDeps();
     const lesson = baseLesson('t1');

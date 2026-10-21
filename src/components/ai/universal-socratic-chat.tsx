@@ -10,6 +10,7 @@ import type { AgendaType } from '@/domains/agendas/types';
 import { ChatMessageList } from './chat-message-list';
 import { ChatComposer } from './chat-composer';
 import { useTutorChat, type ChatMessage } from './use-tutor-chat';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
 export interface UniversalSocraticChatProps {
   agendaId: string;
@@ -51,7 +52,7 @@ export function UniversalSocraticChat({
         synthetic: true,
         sender: 'teacher',
         text: GREETINGS[agendaType],
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: new Date().toLocaleTimeString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' }),
       },
     ],
     [agendaType]

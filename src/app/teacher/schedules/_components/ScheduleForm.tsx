@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { createSchedule } from '@/components/teaching/use-schedules';
+import { INSTITUTION_TIMEZONE, SCHEDULE_DEFAULT_START_TIME } from '@/lib/constants/teaching';
 
 const GENERIC_ERROR = 'Não foi possível criar o cronograma. Tente novamente.';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,6 +25,7 @@ type Props = { planId: string; onCreated: () => void; onCancel: () => void };
 export function ScheduleForm({ planId, onCreated, onCancel }: Props) {
   const [startDate, setStartDate] = React.useState('');
   const [endDate, setEndDate] = React.useState('');
+  const [startTime, setStartTime] = React.useState<string>(SCHEDULE_DEFAULT_START_TIME);
   const [weekdays, setWeekdays] = React.useState<number[]>([]);
   const [holidaysText, setHolidaysText] = React.useState('');
   const [saving, setSaving] = React.useState(false);
@@ -45,7 +47,7 @@ export function ScheduleForm({ planId, onCreated, onCancel }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await createSchedule({ teachingPlanId: planId, startDate, endDate, weekdays, holidays });
+      await createSchedule({ teachingPlanId: planId, startDate, endDate, weekdays, holidays, startTime });
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : GENERIC_ERROR);
@@ -56,7 +58,7 @@ export function ScheduleForm({ planId, onCreated, onCancel }: Props) {
 
   return (
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <label className="space-y-1 text-sm font-medium">
           Início
           <Input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -64,6 +66,11 @@ export function ScheduleForm({ planId, onCreated, onCancel }: Props) {
         <label className="space-y-1 text-sm font-medium">
           Término
           <Input type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </label>
+        <label className="space-y-1 text-sm font-medium">
+          Horário de início
+          <Input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          <span className="block text-xs font-normal text-slate-500">Fuso {INSTITUTION_TIMEZONE}</span>
         </label>
       </div>
 

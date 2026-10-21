@@ -12,6 +12,7 @@ export type ScheduleItem = {
   startDate: string;
   endDate: string;
   totalClasses: number;
+  startTime: string;
   holidays: { weekdays?: number[]; holidays?: string[] } | null;
 };
 
@@ -21,6 +22,8 @@ export type ScheduleDraft = {
   endDate: string;
   weekdays: number[];
   holidays: string[];
+  /** HH:mm no fuso da instituição. */
+  startTime: string;
 };
 
 export type SyncResult = { created: number; existing: number };

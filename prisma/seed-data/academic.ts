@@ -1,5 +1,12 @@
 import { generateMeetings } from '../../src/domains/teaching/schedule-generator';
-import { ASSESSMENT_STATUS, ASSESSMENT_TYPE, PLAN_STATUS } from '../../src/lib/constants/teaching';
+import {
+  ASSESSMENT_STATUS,
+  ASSESSMENT_TYPE,
+  INSTITUTION_TIMEZONE,
+  PLAN_STATUS,
+  SCHEDULE_DEFAULT_START_TIME,
+} from '../../src/lib/constants/teaching';
+import { localDateTimeToUtc } from '../../src/lib/timezone';
 
 export const DEMO_CLASS = {
   code: 'ADS-2026-3A',
@@ -43,6 +50,7 @@ export const DEMO_SCHEDULE = {
   startDate: new Date('2026-02-01T00:00:00.000Z'),
   endDate: new Date('2026-06-30T00:00:00.000Z'),
   holidays: { weekdays: [1, 3], holidays: [] as string[] },
+  startTime: SCHEDULE_DEFAULT_START_TIME,
 };
 
 const DEMO_MEETINGS = generateMeetings({
@@ -64,7 +72,8 @@ const DEMO_LESSON_TOPICS = [
 /** Demo lessons follow the schedule's own calendar rules, so the sync never conflicts with them. */
 export const DEMO_LESSON_PLANS = DEMO_LESSON_TOPICS.map((topicTitle, index) => ({
   classNumber: DEMO_MEETINGS[index].classNumber,
-  classDate: new Date(`${DEMO_MEETINGS[index].date}T00:00:00Z`),
+  // Mesmo instante que a sincronização do cronograma gravaria: data + horário de início no fuso da instituição.
+  classDate: localDateTimeToUtc(DEMO_MEETINGS[index].date, DEMO_SCHEDULE.startTime, INSTITUTION_TIMEZONE),
   topicTitle,
 }));
 

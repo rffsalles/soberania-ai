@@ -4,6 +4,7 @@ import * as React from 'react';
 import { createParser } from 'eventsource-parser';
 import { API_ROUTES } from '@/lib/constants/routes';
 import { CHAT_HISTORY_LIMIT, SSE_EVENT } from '@/lib/constants/chat';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
 export interface ChatMessage {
   id: string;
@@ -31,7 +32,7 @@ const WINDOW_CLOSED_STATUS = 422;
 const REQUEST_ERROR_TEXT = 'Não foi possível enviar a mensagem. Tente novamente.';
 
 const now = () =>
-  new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  new Date().toLocaleTimeString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' });
 
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}-${Date.now()}-${counter++}`;

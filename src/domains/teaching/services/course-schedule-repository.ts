@@ -37,6 +37,7 @@ export function findScheduleForSync(id: string) {
       startDate: true,
       endDate: true,
       holidays: true,
+      startTime: true,
       teachingPlan: { select: { teacherId: true } },
       lessonPlans: { select: { classNumber: true } },
     },

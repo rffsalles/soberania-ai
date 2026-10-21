@@ -6,7 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LESSON_MEDIA_TYPE, type LessonMediaType } from '@/lib/constants/teaching';
+import {
+  INSTITUTION_TIMEZONE,
+  LESSON_MEDIA_TYPE,
+  LESSON_TITLE_MAX_LENGTH,
+  type LessonMediaType,
+} from '@/lib/constants/teaching';
+import { toLocalDateTimeInput } from '@/lib/timezone';
 import type { TimeScriptItem } from '@/domains/teaching/time-script';
 import { saveLesson, type LessonItem } from '@/components/teaching/use-lessons';
 import { MediaTabs } from './MediaTabs';
@@ -18,6 +24,10 @@ type Props = { lesson: LessonItem; onSaved: () => void };
 
 export function LessonEditor({ lesson, onSaved }: Props) {
   const [topicTitle, setTopicTitle] = React.useState(lesson.topicTitle);
+  // Data e hora de início no fuso da instituição; o servidor converte para UTC.
+  const [classDate, setClassDate] = React.useState(() =>
+    toLocalDateTimeInput(new Date(lesson.classDate), INSTITUTION_TIMEZONE)
+  );
   const [dailyObjective, setDailyObjective] = React.useState(lesson.dailyObjective);
   const [methodology, setMethodology] = React.useState(lesson.methodology);
   const [fixationExercise, setFixationExercise] = React.useState(lesson.fixationExercise);
@@ -41,6 +51,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
     setNotice(null);
     try {
       await saveLesson(lesson.id, {
+        classDate,
         topicTitle,
         dailyObjective,
         methodology,
@@ -71,7 +82,25 @@ export function LessonEditor({ lesson, onSaved }: Props) {
             <label htmlFor="topic-title" className="text-xs font-semibold">
               Título do tópico
             </label>
-            <Input id="topic-title" value={topicTitle} onChange={(e) => setTopicTitle(e.target.value)} required />
+            <Input
+              id="topic-title"
+              value={topicTitle}
+              maxLength={LESSON_TITLE_MAX_LENGTH}
+              onChange={(e) => setTopicTitle(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="class-date" className="text-xs font-semibold">
+              Data e horário de início ({INSTITUTION_TIMEZONE})
+            </label>
+            <Input
+              id="class-date"
+              type="datetime-local"
+              required
+              value={classDate}
+              onChange={(e) => setClassDate(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <label htmlFor="daily-objective" className="text-xs font-semibold">

@@ -16,6 +16,7 @@ import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import type { AgendaSession } from '@/domains/agendas/types';
 import { TUTOR_DISPLAY_NAME } from '@/lib/constants/tutor';
 import { cn } from '@/lib/utils';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
 interface StudyGroupPageProps {
   groupId: string;
@@ -34,7 +35,7 @@ function initialsOf(name: string): string {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString('pt-BR', { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' });
 }
 
 export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {

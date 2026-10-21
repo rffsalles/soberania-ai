@@ -30,6 +30,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
 const AGENDA_ICONS: Record<AgendaDTO['type'], typeof Video> = {
   CLASSROOM: Video,
@@ -47,7 +48,7 @@ const AGENDA_STATUS_LABEL: Record<AgendaDTO['status'], string> = {
 };
 
 function formatTimeWindow(agenda: AgendaDTO): string {
-  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+  const options: Intl.DateTimeFormatOptions = { timeZone: INSTITUTION_TIMEZONE, hour: '2-digit', minute: '2-digit' };
   const start = new Date(agenda.startTime).toLocaleTimeString('pt-BR', options);
   const end = new Date(agenda.endTime).toLocaleTimeString('pt-BR', options);
   return `${start} – ${end}`;

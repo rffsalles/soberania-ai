@@ -18,4 +18,15 @@ describe('createScheduleSchema', () => {
     const holidays = Array.from({ length: SCHEDULE_MAX_HOLIDAYS + 1 }, () => '2026-03-02');
     expect(createScheduleSchema.safeParse({ ...valid, holidays }).success).toBe(false);
   });
+
+  it('usa 19:00 como horário de início padrão e aceita HH:mm', () => {
+    expect(createScheduleSchema.parse(valid).startTime).toBe('19:00');
+    expect(createScheduleSchema.parse({ ...valid, startTime: '07:30' }).startTime).toBe('07:30');
+  });
+
+  it('rejeita horário de início fora do formato HH:mm', () => {
+    for (const startTime of ['7:30', '24:00', '19h', '19:60']) {
+      expect(createScheduleSchema.safeParse({ ...valid, startTime }).success).toBe(false);
+    }
+  });
 });

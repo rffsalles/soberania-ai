@@ -236,6 +236,7 @@ model CourseSchedule {
   endDate        DateTime
   holidays       Json? // Datas de recessos e feriados
   totalClasses   Int
+  startTime      String   @default("19:00") @map("start_time") // HH:mm no fuso da instituição
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

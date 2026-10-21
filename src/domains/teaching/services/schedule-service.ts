@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
-import { LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
+import { INSTITUTION_TIMEZONE, LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
+import { localDateTimeToUtc } from '@/lib/timezone';
 import { assertOwner } from '../ownership';
 import { generateMeetings } from '../schedule-generator';
 import * as planRepo from './teaching-plan-repository';
@@ -18,6 +19,8 @@ export type ScheduleInput = {
   endDate: string;
   weekdays: number[];
   holidays: string[];
+  /** HH:mm no fuso da instituição. */
+  startTime: string;
 };
 
 export type ScheduleDeps = {
@@ -28,6 +31,7 @@ export type ScheduleDeps = {
       startDate: Date;
       endDate: Date;
       holidays: Prisma.JsonValue;
+      startTime: string;
       teachingPlan: { teacherId: string };
       lessonPlans: { classNumber: number }[];
     } | null>;
@@ -72,6 +76,7 @@ export async function createSchedule(user: PlanActor, input: ScheduleInput, deps
     endDate: fromIsoDate(input.endDate),
     holidays: rules,
     totalClasses: meetings.length,
+    startTime: input.startTime,
   });
   return { ...schedule, meetings };
 }
@@ -94,7 +99,8 @@ export async function syncLessons(scheduleId: string, user: PlanActor, deps: Sch
     await deps.repo.createLesson({
       courseScheduleId: schedule.id,
       classNumber: meeting.classNumber,
-      classDate: fromIsoDate(meeting.date),
+      // Instante real do início da aula: data do encontro + horário de início no fuso da instituição.
+      classDate: localDateTimeToUtc(meeting.date, schedule.startTime, INSTITUTION_TIMEZONE),
       topicTitle: `Aula ${meeting.classNumber}`,
       dailyObjective: '',
       timeScript: [],

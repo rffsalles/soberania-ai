@@ -22,6 +22,7 @@ function makeDeps(ownerId = 't1') {
               startDate: new Date('2026-02-01T00:00:00Z'),
               endDate: new Date('2026-03-04T00:00:00Z'),
               holidays: { weekdays: [MONDAY, WEDNESDAY], holidays: ['2026-02-16'] },
+              startTime: '19:30',
               teachingPlan: { teacherId: ownerId },
               lessonPlans: lessons.map((l) => ({ classNumber: l.classNumber })),
             },
@@ -37,6 +38,7 @@ function makeDeps(ownerId = 't1') {
 
 const input = {
   teachingPlanId: 'p1',
+  startTime: '19:00',
   startDate: '2026-02-01',
   endDate: '2026-03-04',
   weekdays: [MONDAY, WEDNESDAY],
@@ -47,7 +49,11 @@ describe('schedule-service', () => {
   it('createSchedule stores rules and totalClasses = meetings', async () => {
     const { deps, created } = makeDeps();
     const result = await createSchedule(teacher, input, deps);
-    expect(created[0]).toMatchObject({ totalClasses: 9, holidays: { weekdays: [MONDAY, WEDNESDAY], holidays: ['2026-02-16'] } });
+    expect(created[0]).toMatchObject({
+      totalClasses: 9,
+      startTime: '19:00',
+      holidays: { weekdays: [MONDAY, WEDNESDAY], holidays: ['2026-02-16'] },
+    });
     expect(result.meetings).toHaveLength(9);
   });
 
@@ -64,7 +70,14 @@ describe('schedule-service', () => {
     expect(await syncLessons('s1', teacher, deps)).toEqual({ created: 9, existing: 0 });
     expect(await syncLessons('s1', teacher, deps)).toEqual({ created: 0, existing: 9 });
     expect(lessons).toHaveLength(9);
-    expect(lessons[0]).toMatchObject({ classNumber: 1, topicTitle: 'Aula 1', classDate: new Date('2026-02-02T00:00:00Z') });
+    expect(lessons[0]).toMatchObject({ classNumber: 1, topicTitle: 'Aula 1' });
+  });
+
+  it('syncLessons grava classDate como o instante local data + horário de início (America/Sao_Paulo)', async () => {
+    const { deps, lessons } = makeDeps();
+    await syncLessons('s1', teacher, deps);
+    // 02/02/2026 19:30 em São Paulo (UTC-3) = 22:30 UTC, não 00:00 UTC.
+    expect(lessons[0].classDate.toISOString()).toBe('2026-02-02T22:30:00.000Z');
   });
 
   it('syncLessons rejects foreign teachers (403) but lets admins through', async () => {

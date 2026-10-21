@@ -23,7 +23,11 @@ export type LessonItem = {
 export type LessonDraft = Pick<
   LessonItem,
   'topicTitle' | 'dailyObjective' | 'timeScript' | 'methodology' | 'resourcesNeeded' | 'fixationExercise' | 'mediaType'
-> & { mediaUrl?: string | null };
+> & {
+  mediaUrl?: string | null;
+  /** `AAAA-MM-DDTHH:mm` no fuso da instituição (valor do datetime-local). */
+  classDate?: string;
+};
 
 const NO_LESSONS: LessonItem[] = [];
 const UPLOAD_ERROR = 'Não foi possível enviar o arquivo. Tente novamente.';

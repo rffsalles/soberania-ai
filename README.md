@@ -103,6 +103,7 @@ Todas estão documentadas em [.env.example](.env.example). As principais:
 | `DATABASE_URL` | Conexão PostgreSQL usada pelo Prisma |
 | `AUTH_SECRET` / `JWT_SECRET` | Segredo de assinatura dos JWTs; em produção é obrigatório, com 32+ caracteres e diferente do padrão de desenvolvimento |
 | `NEXT_PUBLIC_DEMO_MODE` | `true` exibe os atalhos de login de demonstração (padrão: desligado; nunca em produção) |
+| `NEXT_PUBLIC_INSTITUTION_TIMEZONE` | Fuso IANA em que horários de aula são digitados e exibidos (padrão: `America/Sao_Paulo`; lido no build) |
 | `AI_PROVIDER` | `mock` (padrão, respostas socráticas determinísticas offline), `ollama`, `vllm`, `groq` ou `together` |
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Endpoint, chave e modelo do provedor de inferência |
 | `MAX_UPLOAD_SIZE_MB`, `ALLOWED_DOCUMENT_EXTENSIONS` | Limites de upload do acervo (padrão 25 MB; pdf, docx, txt, md) |

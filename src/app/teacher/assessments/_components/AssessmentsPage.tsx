@@ -5,7 +5,7 @@ import { ClipboardList, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ASSESSMENT_STATUS } from '@/lib/constants/teaching';
+import { ASSESSMENT_STATUS, INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 import { useAssessments, useTeacherPlans, type AssessmentItem } from '@/components/assessments/use-assessments';
 import { AssessmentEditor } from './AssessmentEditor';
 import { PublishDialog } from './PublishDialog';
@@ -22,7 +22,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const formatWindow = (start: string, end: string) =>
-  `${new Date(start).toLocaleString('pt-BR')} até ${new Date(end).toLocaleString('pt-BR')}`;
+  `${new Date(start).toLocaleString('pt-BR', { timeZone: INSTITUTION_TIMEZONE })} até ${new Date(end).toLocaleString('pt-BR', { timeZone: INSTITUTION_TIMEZONE })}`;
 
 export function AssessmentsPage() {
   const { plans, isLoading: plansLoading, error: plansError } = useTeacherPlans();
