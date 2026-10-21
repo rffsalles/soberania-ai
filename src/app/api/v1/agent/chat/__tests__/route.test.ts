@@ -23,6 +23,10 @@ vi.mock('@/domains/pedagogy/services/interaction-repository', () => ({
   createInteraction: (...args: unknown[]) => createInteraction(...args),
   findLastInteraction: (...args: unknown[]) => findLastInteraction(...args),
 }));
+// A busca híbrida consulta o Postgres: isolada aqui para o teste não depender de banco.
+vi.mock('@/domains/rag/hybrid-search', () => ({
+  executeHybridSearch: vi.fn(async (q: { query: string }) => ({ query: q.query, chunks: [], latencyMs: 0 })),
+}));
 const createInferenceLog = vi.fn(async (..._args: unknown[]) => ({ id: 'log1' }));
 vi.mock('@/domains/telemetry/services/inference-log-repository', () => ({
   createInferenceLog: (...args: unknown[]) => createInferenceLog(...args),
