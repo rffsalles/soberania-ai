@@ -20,6 +20,13 @@ describe('apiError', () => {
     expect((await run(new AuthError(403, 'no'))).status).toBe(403);
   });
 
+  it('SyntaxError de req.json() -> 400 JSON inválido', async () => {
+    const err = await new Request('http://x', { method: 'POST', body: '{nope' }).json().catch((e: unknown) => e);
+    const { status, body } = await run(err);
+    expect(status).toBe(400);
+    expect(body).toEqual({ success: false, error: 'JSON inválido' });
+  });
+
   it('ZodError -> 400 com details', async () => {
     const parsed = z.object({ a: z.string() }).safeParse({});
     if (parsed.success) throw new Error('unreachable');

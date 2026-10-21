@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
+import { attachmentDisposition } from '@/lib/api/content-disposition';
 import { getMaterialDownload } from '@/domains/rag/services/library-service';
 import { Role } from '@prisma/client';
 
@@ -17,7 +18,7 @@ export async function GET(
       headers: {
         'Content-Type': contentType,
         'Content-Length': buffer.length.toString(),
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': attachmentDisposition(filename),
         'Cache-Control': 'private, max-age=3600',
       },
     });

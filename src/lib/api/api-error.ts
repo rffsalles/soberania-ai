@@ -13,6 +13,8 @@ function fail(status: number, error: string, details?: unknown) {
 
 export function apiError(err: unknown): NextResponse {
   if (err instanceof AuthError) return fail(err.status, err.message);
+  // Corpo malformado em req.json(): erro do cliente, não do servidor.
+  if (err instanceof SyntaxError) return fail(400, 'JSON inválido');
   if (err instanceof ZodError) return fail(400, 'Dados inválidos', err.flatten());
   if (err instanceof DomainError) return fail(err.status, err.message);
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
