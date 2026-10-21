@@ -1,5 +1,6 @@
 import { AgendaStatus, AgendaType, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
+import { ASSESSMENT_STATUS } from '@/lib/constants/teaching';
 import type { CreateAgendaInput } from '@/lib/validators/agenda.validator';
 import { deriveAgendaStatus } from '../agenda-validator';
 import * as realRepo from './agenda-repository';
@@ -28,7 +29,9 @@ export type AgendaDeps = {
     findAgendas(scope: AgendaScope): Promise<AgendaRecord[]>;
     findAgendaById(id: string): Promise<AgendaRecord | null>;
     findTeacherSubjectIds(teacherId: string): Promise<string[]>;
-    findSubjectName(subjectId: string): Promise<string | null>;
+    findSubject(subjectId: string): Promise<{ name: string; classId: string | null } | null>;
+    findLessonPlanSubjectId(lessonPlanId: string): Promise<string | null>;
+    findAssessmentRef(assessmentId: string): Promise<{ subjectId: string; status: string } | null>;
     insertAgenda(data: Parameters<typeof realRepo.insertAgenda>[0]): Promise<AgendaRecord>;
     updateAgendaStatus(id: string, status: AgendaStatus): Promise<AgendaRecord>;
   };
@@ -105,6 +108,32 @@ export async function getAgendaForUser(
   return toDTO(await loadInScope(id, user, deps), deps.now());
 }
 
+/** Turma, plano de aula e avaliação precisam pertencer à disciplina da agenda (sem IDOR entre professores). */
+async function assertAgendaReferences(
+  input: CreateAgendaInput,
+  subjectClassId: string | null,
+  deps: AgendaDeps
+): Promise<void> {
+  if (input.classId !== subjectClassId) {
+    throw new DomainError(400, 'A turma informada não é a turma desta disciplina.');
+  }
+  if (input.lessonPlanId) {
+    const lessonSubjectId = await deps.repo.findLessonPlanSubjectId(input.lessonPlanId);
+    if (lessonSubjectId !== input.subjectId) {
+      throw new DomainError(403, 'O plano de aula não pertence a um plano de ensino desta disciplina.');
+    }
+  }
+  if (input.assessmentId) {
+    const assessment = await deps.repo.findAssessmentRef(input.assessmentId);
+    if (!assessment || assessment.subjectId !== input.subjectId) {
+      throw new DomainError(403, 'A avaliação não pertence a um plano de ensino desta disciplina.');
+    }
+    if (input.type === AgendaType.EXAM && assessment.status !== ASSESSMENT_STATUS.PUBLISHED) {
+      throw new DomainError(400, 'Somente avaliações publicadas podem ser agendadas como prova.');
+    }
+  }
+}
+
 export async function createAgenda(
   user: AgendaActor,
   input: CreateAgendaInput,
@@ -117,12 +146,13 @@ export async function createAgenda(
       throw new DomainError(403, 'Você não está alocado a esta disciplina.');
     }
   }
-  const subjectName = await deps.repo.findSubjectName(input.subjectId);
-  if (!subjectName) throw new DomainError(404, 'Disciplina não encontrada.');
+  const subject = await deps.repo.findSubject(input.subjectId);
+  if (!subject) throw new DomainError(404, 'Disciplina não encontrada.');
+  await assertAgendaReferences(input, subject.classId, deps);
 
   const created = await deps.repo.insertAgenda({
     title: input.title,
-    subject: subjectName,
+    subject: subject.name,
     type: input.type,
     status: AgendaStatus.SCHEDULED,
     startTime: new Date(input.startTime),

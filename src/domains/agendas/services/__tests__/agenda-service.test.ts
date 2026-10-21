@@ -53,8 +53,21 @@ function makeDeps(agendas: AgendaRecord[], allocations: Record<string, string[]>
       async findTeacherSubjectIds(teacherId) {
         return allocations[teacherId] ?? [];
       },
-      async findSubjectName(subjectId) {
-        return subjectId === 'subj-bd' ? 'Banco de Dados' : null;
+      async findSubject(subjectId) {
+        if (subjectId === 'subj-bd') return { name: 'Banco de Dados', classId: 'class-a' };
+        if (subjectId === 'subj-calc') return { name: 'Cálculo', classId: 'class-b' };
+        return null;
+      },
+      async findLessonPlanSubjectId(lessonPlanId) {
+        return ({ 'lp-bd': 'subj-bd', 'lp-calc': 'subj-calc' } as Record<string, string>)[lessonPlanId] ?? null;
+      },
+      async findAssessmentRef(assessmentId) {
+        const refs: Record<string, { subjectId: string; status: string }> = {
+          'as-bd-pub': { subjectId: 'subj-bd', status: 'PUBLISHED' },
+          'as-bd-draft': { subjectId: 'subj-bd', status: 'DRAFT' },
+          'as-calc-pub': { subjectId: 'subj-calc', status: 'PUBLISHED' },
+        };
+        return refs[assessmentId] ?? null;
       },
       async insertAgenda(data) {
         const rec = makeAgenda({ ...(data as object), id: 'new-1' } as AgendaRecord);
@@ -161,6 +174,41 @@ describe('createAgenda / setAgendaStatus', () => {
     const dto = await createAgenda(teacher, input, makeDeps([], { 'teacher-2': ['subj-bd'] }));
     expect(dto.subject).toBe('Banco de Dados');
     expect(dto.status).toBe('SCHEDULED');
+  });
+
+  describe('posse de lessonPlanId, assessmentId e classId', () => {
+    const deps = () => makeDeps([], { 'teacher-2': ['subj-bd'] });
+
+    it('classId diferente da turma da disciplina -> 400', async () => {
+      await expect(createAgenda(teacher, { ...input, classId: 'class-b' }, deps())).rejects.toMatchObject({
+        status: 400,
+      });
+    });
+
+    it('lessonPlanId de plano de outra disciplina ou inexistente -> 403', async () => {
+      await expect(createAgenda(teacher, { ...input, lessonPlanId: 'lp-calc' }, deps())).rejects.toMatchObject({
+        status: 403,
+      });
+      await expect(createAgenda(teacher, { ...input, lessonPlanId: 'lp-nope' }, deps())).rejects.toMatchObject({
+        status: 403,
+      });
+      const dto = await createAgenda(teacher, { ...input, lessonPlanId: 'lp-bd' }, deps());
+      expect(dto.lessonPlanId).toBe('lp-bd');
+    });
+
+    it('assessmentId de outra disciplina -> 403', async () => {
+      const exam = { ...input, type: AgendaType.EXAM, assessmentId: 'as-calc-pub' };
+      await expect(createAgenda(teacher, exam, deps())).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('EXAM com avaliação em rascunho -> 400; publicada da mesma disciplina cria', async () => {
+      const exam = { ...input, type: AgendaType.EXAM };
+      await expect(createAgenda(teacher, { ...exam, assessmentId: 'as-bd-draft' }, deps())).rejects.toMatchObject({
+        status: 400,
+      });
+      const dto = await createAgenda(teacher, { ...exam, assessmentId: 'as-bd-pub' }, deps());
+      expect(dto.assessmentId).toBe('as-bd-pub');
+    });
   });
 
   it('teacher sets status on in-scope agenda, 404 otherwise', async () => {

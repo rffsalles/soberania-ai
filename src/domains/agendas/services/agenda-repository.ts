@@ -41,9 +41,25 @@ export async function findTeacherSubjectIds(teacherId: string): Promise<string[]
   return rows.map((r) => r.subjectId);
 }
 
-export async function findSubjectName(subjectId: string): Promise<string | null> {
-  const row = await db.subject.findUnique({ where: { id: subjectId }, select: { name: true } });
-  return row?.name ?? null;
+export function findSubject(subjectId: string): Promise<{ name: string; classId: string | null } | null> {
+  return db.subject.findUnique({ where: { id: subjectId }, select: { name: true, classId: true } });
+}
+
+/** Disciplina do plano de ensino ao qual o plano de aula pertence. */
+export async function findLessonPlanSubjectId(lessonPlanId: string): Promise<string | null> {
+  const row = await db.lessonPlan.findUnique({
+    where: { id: lessonPlanId },
+    select: { courseSchedule: { select: { teachingPlan: { select: { subjectId: true } } } } },
+  });
+  return row?.courseSchedule.teachingPlan.subjectId ?? null;
+}
+
+export async function findAssessmentRef(assessmentId: string): Promise<{ subjectId: string; status: string } | null> {
+  const row = await db.assessment.findUnique({
+    where: { id: assessmentId },
+    select: { status: true, teachingPlan: { select: { subjectId: true } } },
+  });
+  return row ? { subjectId: row.teachingPlan.subjectId, status: row.status } : null;
 }
 
 export function insertAgenda(data: Prisma.AgendaUncheckedCreateInput): Promise<AgendaRecord> {
