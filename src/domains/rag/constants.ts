@@ -8,3 +8,5 @@ export const HYBRID_CANDIDATE_LIMIT = 50;
 export const FULL_TEXT_LANGUAGE = 'portuguese';
 
 export const DEFAULT_TOP_K = 3;
+export const RAG_MIN_TOP_K = 1;
+export const RAG_MAX_TOP_K = 50;

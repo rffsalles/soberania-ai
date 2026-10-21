@@ -1,5 +1,5 @@
 import { embedTexts, EmbeddingUnavailableError } from '@/lib/embeddings';
-import { DEFAULT_TOP_K, RRF_K } from './constants';
+import { DEFAULT_TOP_K, RAG_MAX_TOP_K, RAG_MIN_TOP_K, RRF_K } from './constants';
 import * as chunkRepo from './services/chunk-repository';
 import * as categoryRepo from './services/category-repository';
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from './types';
@@ -51,14 +51,19 @@ async function embedQuery(query: string, deps: HybridSearchDeps): Promise<number
   }
 }
 
+/** `undefined` = no category filter requested; `[]` = names given but none exist (fail closed). */
 async function resolveCategoryIds(
   names: string[] | undefined,
   deps: HybridSearchDeps
 ): Promise<string[] | undefined> {
   if (!names || names.length === 0) return undefined;
   const found = await Promise.all(names.map((name) => deps.findCategoryByName(name)));
-  const ids = found.filter((c): c is { id: string } => Boolean(c)).map((c) => c.id);
-  return ids.length > 0 ? ids : undefined;
+  return found.filter((c): c is { id: string } => Boolean(c)).map((c) => c.id);
+}
+
+function clampTopK(topK: number | undefined): number {
+  if (topK === undefined || !Number.isFinite(topK)) return DEFAULT_TOP_K;
+  return Math.min(RAG_MAX_TOP_K, Math.max(RAG_MIN_TOP_K, Math.trunc(topK)));
 }
 
 /**
@@ -69,13 +74,15 @@ export async function executeHybridSearch(
   deps: HybridSearchDeps = defaultDeps
 ): Promise<RAGSearchResult> {
   const startTime = Date.now();
-  const { query, topK = DEFAULT_TOP_K, categories, allowedMaterialIds, subject } = searchQuery;
+  const { query, categories, allowedMaterialIds, subject } = searchQuery;
+  const topK = clampTopK(searchQuery.topK);
 
-  const [embedding, categoryIds] = await Promise.all([
-    embedQuery(query, deps),
-    resolveCategoryIds(categories, deps),
-  ]);
+  const categoryIds = await resolveCategoryIds(categories, deps);
+  if (categoryIds && categoryIds.length === 0) {
+    return { query, chunks: [], primaryCitation: undefined, latencyMs: Date.now() - startTime };
+  }
 
+  const embedding = await embedQuery(query, deps);
   const chunks = await deps.search({
     query,
     embedding,

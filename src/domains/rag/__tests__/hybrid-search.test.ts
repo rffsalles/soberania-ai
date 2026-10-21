@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EmbeddingUnavailableError } from '@/lib/embeddings';
 import { executeHybridSearch, rrfMerge, RRF_K, type HybridSearchDeps } from '../hybrid-search';
+import { RAG_MAX_TOP_K } from '../constants';
 import type { DidacticChunk } from '../types';
 
 const chunk = (over: Partial<DidacticChunk> = {}): DidacticChunk => ({
@@ -31,13 +32,14 @@ describe('rrfMerge', () => {
     expect(RRF_K).toBe(60);
   });
 
-  it('ranks ids present in both lists above ids present in only one', () => {
-    const merged = rrfMerge(['a', 'b', 'c'], ['c', 'd', 'a']);
-    expect(merged.map((m) => m.id)).toEqual(['a', 'c', 'b', 'd']);
-    expect(merged[0].score).toBeCloseTo(1 / 61 + 1 / 63, 10);
-    expect(merged[1].score).toBeCloseTo(1 / 63 + 1 / 61, 10);
+  it('ranks ids present in both lists above ids present in only one (distinct scores)', () => {
+    // b: 1/62 + 1/61, a: 1/61, d: 1/62, c: 1/63 — all distinct
+    const merged = rrfMerge(['a', 'b', 'c'], ['b', 'd']);
+    expect(merged.map((m) => m.id)).toEqual(['b', 'a', 'd', 'c']);
+    expect(merged[0].score).toBeCloseTo(1 / 62 + 1 / 61, 10);
+    expect(merged[1].score).toBeCloseTo(1 / 61, 10);
     expect(merged[2].score).toBeCloseTo(1 / 62, 10);
-    expect(merged[3].score).toBeCloseTo(1 / 62, 10);
+    expect(merged[3].score).toBeCloseTo(1 / 63, 10);
   });
 
   it('works with an empty vector list (lexical only)', () => {
@@ -99,6 +101,30 @@ describe('executeHybridSearch', () => {
     expect(deps.search).toHaveBeenCalledWith(
       expect.objectContaining({ categoryIds: ['cat-bd'], materialIds: ['m9'] })
     );
+  });
+
+  it('fails closed when none of the requested categories exist', async () => {
+    const deps = makeDeps({ findCategoryByName: vi.fn(async () => null) });
+    const result = await executeHybridSearch(
+      { query: 'x', categories: ['Inexistente', 'Outra'] },
+      deps
+    );
+    expect(result.chunks).toEqual([]);
+    expect(result.primaryCitation).toBeUndefined();
+    expect(deps.search).not.toHaveBeenCalled();
+    expect(deps.embed).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [0, 1],
+    [-5, 1],
+    [500, RAG_MAX_TOP_K],
+    [Number.NaN, 3],
+    [undefined, 3],
+  ])('clamps topK %s to %s', async (topK, expected) => {
+    const deps = makeDeps();
+    await executeHybridSearch({ query: 'x', topK }, deps);
+    expect(deps.search).toHaveBeenCalledWith(expect.objectContaining({ topK: expected }));
   });
 
   it('returns no citation when nothing matches', async () => {
