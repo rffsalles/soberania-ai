@@ -48,6 +48,9 @@ export const PROTECTED_ROUTE_ROLES: Readonly<Record<string, readonly Role[]>> = 
   [API_ROUTES.APPLIANCE]: ADMIN_ONLY,
 };
 
+/** GET/POST /api/v1/teacher/lessons/:id/media — exceção à área restrita a staff. */
+const LESSON_MEDIA_PATH = new RegExp(`^${API_ROUTES.TEACHER_LESSONS}/[^/]+/media/?$`);
+
 /** Prefixos de área: caminhos autenticados sob eles e não listados são negados. */
 const DENY_BY_DEFAULT_PREFIXES: readonly string[] = [
   API_ROUTES.ROOT,
@@ -95,6 +98,8 @@ export function isPublicRoute(pathname: string): boolean {
  * Verifica se determinado papel possui permissão para acessar a rota.
  */
 export function canAccessRoute(pathname: string, role: Role): boolean {
+  // Mídia de aula: alunos assistem; o escopo (turma/professor) é verificado no serviço.
+  if (LESSON_MEDIA_PATH.test(pathname)) return ALL_ROLES.includes(role);
   let bestPrefix: string | null = null;
   for (const prefix of Object.keys(PROTECTED_ROUTE_ROLES)) {
     if (matchesPrefix(pathname, prefix) && (bestPrefix === null || prefix.length > bestPrefix.length)) {

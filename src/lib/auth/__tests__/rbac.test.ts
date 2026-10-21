@@ -18,6 +18,12 @@ describe('canAccessRoute', () => {
     expect(canAccessRoute(path, STUDENT)).toBe(false);
   });
 
+  it('permite a mídia de aula para STUDENT, mas não outras rotas de lessons', () => {
+    expect(canAccessRoute('/api/v1/teacher/lessons/abc/media', STUDENT)).toBe(true);
+    expect(canAccessRoute('/api/v1/teacher/lessons/abc', STUDENT)).toBe(false);
+    expect(canAccessRoute('/api/v1/teacher/lessons', STUDENT)).toBe(false);
+  });
+
   it.each([
     '/teacher/plans',
     '/reports',

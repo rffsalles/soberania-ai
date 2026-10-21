@@ -6,7 +6,6 @@ import {
   listAssessments,
   listLessons,
   listSchedules,
-  updateLesson,
   type TeachingContentDeps,
 } from '../teaching-content-service';
 
@@ -23,16 +22,9 @@ function makeDeps() {
       findPlanOwner: async (id) => (id === 'own' ? { teacherId: 't1' } : id === 'foreign' ? { teacherId: 't2' } : null),
       findScheduleOwner: async (id) =>
         id === 'own' ? { teachingPlan: { teacherId: 't1' } } : id === 'foreign' ? { teachingPlan: { teacherId: 't2' } } : null,
-      findLessonOwner: async (id) =>
-        id === 'own'
-          ? { courseSchedule: { teachingPlan: { teacherId: 't1' } } }
-          : id === 'foreign'
-            ? { courseSchedule: { teachingPlan: { teacherId: 't2' } } }
-            : null,
       listSchedulesByPlan: async (f) => (rec('listSchedules', f), []),
       listLessonsBySchedule: async (f) => (rec('listLessons', f), []),
       createLesson: async (d) => (rec('createLesson', d), d),
-      updateLesson: async (id, d) => (rec('updateLesson', { id, d }), d),
       listAssessmentsByPlan: async (f) => (rec('listAssessments', f), []),
       createAssessment: async (d) => (rec('createAssessment', d), d),
     },
@@ -63,7 +55,6 @@ describe('teaching-content-service ownership', () => {
     const { deps } = makeDeps();
     await expect(createLesson(teacher, { courseScheduleId: 'nope', topicTitle: 'x' }, deps)).rejects.toMatchObject({ status: 404 });
     await expect(createAssessment(teacher, { teachingPlanId: 'nope', title: 'x' }, deps)).rejects.toMatchObject({ status: 404 });
-    await expect(updateLesson('nope', teacher, { topicTitle: 'y' }, deps)).rejects.toMatchObject({ status: 404 });
   });
 
   it('invalid input gives 400', async () => {
@@ -90,13 +81,5 @@ describe('teaching-content-service ownership', () => {
     expect(calls.listAssessments).toEqual([{ planId: 'p1', teacherId: 't1' }]);
     await listSchedules(admin, undefined, deps);
     expect(calls.listSchedules[1]).toEqual({ planId: undefined });
-  });
-
-  it('updateLesson enforces ownership and never forwards courseScheduleId', async () => {
-    const { deps, calls } = makeDeps();
-    await expect(updateLesson('foreign', teacher, { topicTitle: 'y' }, deps)).rejects.toMatchObject({ status: 403 });
-    const evil = { topicTitle: 'y', courseScheduleId: 'other', id: 'zzz' } as never;
-    await updateLesson('own', teacher, evil, deps);
-    expect(calls.updateLesson).toEqual([{ id: 'own', d: { topicTitle: 'y' } }]);
   });
 });

@@ -53,3 +53,14 @@ export function insertAgenda(data: Prisma.AgendaUncheckedCreateInput): Promise<A
 export function updateAgendaStatus(id: string, status: AgendaRecord['status']): Promise<AgendaRecord> {
   return db.agenda.update({ where: { id }, data: { status }, include: agendaInclude });
 }
+
+export type LessonAgendaData = Omit<Prisma.AgendaUncheckedCreateInput, 'lessonPlanId' | 'status'>;
+
+/** One agenda per lesson plan (Agenda.lessonPlanId is unique); status of an existing agenda is preserved. */
+export function upsertAgendaByLessonPlanId(lessonPlanId: string, data: LessonAgendaData) {
+  return db.agenda.upsert({
+    where: { lessonPlanId },
+    create: { ...data, lessonPlanId },
+    update: data,
+  });
+}

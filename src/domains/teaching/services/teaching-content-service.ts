@@ -15,11 +15,9 @@ export type TeachingContentDeps = {
   repo: {
     findPlanOwner: OwnerLookup<{ teacherId: string }>;
     findScheduleOwner: OwnerLookup<{ teachingPlan: { teacherId: string } }>;
-    findLessonOwner: OwnerLookup<{ courseSchedule: { teachingPlan: { teacherId: string } } }>;
     listSchedulesByPlan(filter: { planId?: string; teacherId?: string }): Promise<unknown[]>;
     listLessonsBySchedule(filter: { scheduleId?: string; teacherId?: string }): Promise<unknown[]>;
     createLesson(data: Prisma.LessonPlanUncheckedCreateInput): Promise<unknown>;
-    updateLesson(id: string, data: Prisma.LessonPlanUncheckedUpdateInput): Promise<unknown>;
     listAssessmentsByPlan(filter: { planId?: string; teacherId?: string }): Promise<unknown[]>;
     createAssessment(data: Prisma.AssessmentUncheckedCreateInput): Promise<unknown>;
   };
@@ -29,11 +27,9 @@ const defaultDeps: TeachingContentDeps = {
   repo: {
     findPlanOwner: planRepo.findPlanOwner,
     findScheduleOwner: scheduleRepo.findScheduleOwner,
-    findLessonOwner: lessonRepo.findLessonOwner,
     listSchedulesByPlan: scheduleRepo.listSchedulesByPlan,
     listLessonsBySchedule: lessonRepo.listLessonsBySchedule,
     createLesson: lessonRepo.createLesson,
-    updateLesson: lessonRepo.updateLesson,
     listAssessmentsByPlan: assessmentRepo.listAssessmentsByPlan,
     createAssessment: assessmentRepo.createAssessment,
   },
@@ -93,31 +89,6 @@ export async function createLesson(user: PlanActor, input: LessonInput, deps: Te
     mediaType: input.mediaType || LESSON_MEDIA_TYPE.NONE,
     mediaUrl: input.mediaUrl || null,
   });
-}
-
-export async function updateLesson(
-  id: string,
-  user: PlanActor,
-  input: Omit<LessonInput, 'courseScheduleId'>,
-  deps: TeachingContentDeps = defaultDeps
-) {
-  const lesson = await deps.repo.findLessonOwner(id);
-  if (!lesson) throw new DomainError(404, 'Plano de aula não encontrado.');
-  assertOwner(user, lesson.courseSchedule.teachingPlan.teacherId);
-
-  // Explicit whitelist: the parent schedule can never be changed through an update.
-  const data: Prisma.LessonPlanUncheckedUpdateInput = {};
-  if (input.classDate) data.classDate = new Date(input.classDate);
-  if (input.classNumber !== undefined) data.classNumber = Number(input.classNumber);
-  if (input.topicTitle !== undefined) data.topicTitle = input.topicTitle;
-  if (input.dailyObjective !== undefined) data.dailyObjective = input.dailyObjective;
-  if (input.timeScript !== undefined) data.timeScript = input.timeScript;
-  if (input.methodology !== undefined) data.methodology = input.methodology;
-  if (input.resourcesNeeded !== undefined) data.resourcesNeeded = input.resourcesNeeded;
-  if (input.fixationExercise !== undefined) data.fixationExercise = input.fixationExercise;
-  if (input.mediaType !== undefined) data.mediaType = input.mediaType;
-  if (input.mediaUrl !== undefined) data.mediaUrl = input.mediaUrl;
-  return deps.repo.updateLesson(id, data);
 }
 
 export function listAssessments(user: PlanActor, planId?: string, deps: TeachingContentDeps = defaultDeps) {

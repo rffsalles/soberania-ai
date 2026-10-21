@@ -7,6 +7,13 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 
+export type StoragePrefix = 'materials' | 'media';
+
+const STORAGE_DIRS: Record<StoragePrefix, { env: string; fallback: string; bucketKey: string }> = {
+  materials: { env: 'MATERIALS_STORAGE_DIR', fallback: './storage/materials', bucketKey: 'materials' },
+  media: { env: 'MEDIA_STORAGE_DIR', fallback: './storage/media', bucketKey: 'media' },
+};
+
 export interface UploadResult {
   key: string;
   filePath: string;
@@ -79,14 +86,16 @@ export class StorageService {
   public async uploadFile(
     fileBuffer: Buffer,
     sanitizedFilename: string,
-    mimeType: string
+    mimeType: string,
+    prefix: StoragePrefix = 'materials'
   ): Promise<UploadResult> {
+    const target = STORAGE_DIRS[prefix];
     const activeProvider = this.getProvider();
     const uniqueFilename = `${Date.now()}-${sanitizedFilename}`;
 
     if (activeProvider === 'r2' && this.s3Client) {
       const bucketName = process.env.R2_BUCKET_NAME || 'soberania-materials';
-      const key = `materials/${uniqueFilename}`;
+      const key = `${target.bucketKey}/${uniqueFilename}`;
 
       await this.s3Client.send(
         new PutObjectCommand({
@@ -110,7 +119,7 @@ export class StorageService {
     }
 
     // Fallback: Armazenamento no FileSystem Local
-    const relativeDir = process.env.MATERIALS_STORAGE_DIR || './storage/materials';
+    const relativeDir = process.env[target.env] || target.fallback;
     const absoluteDir = path.resolve(process.cwd(), relativeDir);
 
     if (!fs.existsSync(absoluteDir)) {
