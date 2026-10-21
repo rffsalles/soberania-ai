@@ -18,13 +18,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       if (Number.isNaN(since.getTime())) throw new DomainError(HTTP_BAD_REQUEST, 'Parâmetro since inválido.');
     }
     // Intervenção por silêncio é best-effort: falha não impede a leitura.
-    try {
-      await checkStalemate(id, user, new Date());
-    } catch (err) {
-      if (err instanceof DomainError) throw err;
-      console.warn('[study-group] falha ao verificar silêncio do grupo', err);
-    }
     const messages = await listMessages(user, id, since);
+    // Sem await: a resposta não espera o LLM; a intervenção aparece no próximo polling.
+    void checkStalemate(id, user, new Date()).catch((err) => {
+      console.warn('[study-group] falha ao verificar silêncio do grupo', err);
+    });
     return NextResponse.json({ success: true, messages });
   } catch (error) {
     return apiError(error);

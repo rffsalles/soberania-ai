@@ -4,7 +4,7 @@ import { DomainError } from '@/lib/api/domain-error';
 import { STUDY_GROUP_STALEMATE_MINUTES } from '@/lib/constants/tutor';
 import type { AgendaActor, AgendaDTO } from '../agenda-service';
 import type { StudyGroupMessageRecord } from '../study-group-repository';
-import { checkStalemate, listMessages, postMessage, type StudyGroupDeps } from '../study-group-service';
+import { checkStalemate, listMessages, mentionsTutor, postMessage, type StudyGroupDeps } from '../study-group-service';
 
 const NOW = new Date('2026-10-20T12:00:00Z');
 const MINUTE = 60_000;
@@ -126,5 +126,62 @@ describe('study-group-service', () => {
     await expect(postMessage(user, AGENDA_ID, 'oi', deps)).rejects.toMatchObject({ status: 422 });
     expect(store).toHaveLength(1);
     expect(await listMessages(user, AGENDA_ID, undefined, deps)).toHaveLength(1);
+  });
+
+  it('intervenção por silêncio não grava interação do aluno', async () => {
+    const old = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - HOUR) });
+    const { deps, chat } = makeDeps(makeAgenda(), [old]);
+    await checkStalemate(AGENDA_ID, user, NOW, deps);
+    expect(chat.mock.calls[0]?.[1].persistInteraction).toBe(false);
+  });
+
+  it('duas chamadas concorrentes de checkStalemate geram uma só intervenção', async () => {
+    const old = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - HOUR) });
+    const { deps, chat, store } = makeDeps(makeAgenda(), [old]);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    chat.mockImplementation(async () => {
+      await gate;
+      return { reply: 'Pergunta?' };
+    });
+    const first = checkStalemate(AGENDA_ID, user, NOW, deps);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await checkStalemate(AGENDA_ID, user, NOW, deps)).toBeNull();
+    release();
+    expect(await first).not.toBeNull();
+    expect(store.filter((m) => m.isAi)).toHaveLength(1);
+  });
+
+  it('checkStalemate aborta se chegou mensagem durante a geração', async () => {
+    const old = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - HOUR) });
+    const { deps, chat, store } = makeDeps(makeAgenda(), [old]);
+    chat.mockImplementation(async () => {
+      await deps.repo.createMessage({ agendaId: AGENDA_ID, authorId: 'stu-2', content: 'voltei', isAi: false });
+      return { reply: 'Pergunta?' };
+    });
+    expect(await checkStalemate(AGENDA_ID, user, NOW, deps)).toBeNull();
+    expect(store.filter((m) => m.isAi)).toHaveLength(0);
+  });
+
+  it('falha da tutora após a mensagem salva não derruba o envio', async () => {
+    const { deps, chat, store } = makeDeps(makeAgenda());
+    chat.mockRejectedValue(new Error('provider fora'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await postMessage(user, AGENDA_ID, '@lucy ajuda', deps);
+    warn.mockRestore();
+    expect(result.message.content).toBe('@lucy ajuda');
+    expect(result.tutorReply).toBeUndefined();
+    expect(store).toHaveLength(1);
+  });
+
+  it('menção respeita fronteira de palavra', () => {
+    expect(mentionsTutor('Ei @Lucy, ajuda')).toBe(true);
+    expect(mentionsTutor('@tutora')).toBe(true);
+    expect(mentionsTutor('oi @luci!')).toBe(true);
+    expect(mentionsTutor('fala @luciana')).toBe(false);
+    expect(mentionsTutor('a@lucy.com')).toBe(false);
+    expect(mentionsTutor('@lucyana')).toBe(false);
   });
 });

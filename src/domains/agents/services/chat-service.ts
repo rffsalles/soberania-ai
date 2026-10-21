@@ -21,6 +21,8 @@ export type ChatInput = {
   message: string;
   history?: ChatHistoryMessage[];
   videoTimestampSeconds?: number;
+  /** Quando false, não grava StudentInteraction (ex.: intervenção automática da tutora). Padrão: true. */
+  persistInteraction?: boolean;
 };
 
 export type ChatResult = {
@@ -30,7 +32,7 @@ export type ChatResult = {
   blockedByExamGuardrail: boolean;
   latencyMs: number;
   fallback: boolean;
-  interactionId: string;
+  interactionId: string | null;
 };
 
 export type ChatDeps = {
@@ -115,7 +117,7 @@ async function runChat(
   if (start.kind === 'blocked') {
     onToken?.(start.refusalMessage);
     const latencyMs = Date.now() - startedAt;
-    const interaction = await deps.createInteraction({
+    const interaction = input.persistInteraction === false ? null : await deps.createInteraction({
       ...base,
       type: InteractionType.QUESTION,
       responseText: start.refusalMessage,
@@ -130,7 +132,7 @@ async function runChat(
       blockedByExamGuardrail: true,
       latencyMs,
       fallback: false,
-      interactionId: interaction.id,
+      interactionId: interaction?.id ?? null,
     };
   }
 
@@ -150,7 +152,7 @@ async function runChat(
   const isSocraticChallenge = reply.endsWith('?');
   const topChunk = start.topChunk;
   const latencyMs = Date.now() - startedAt;
-  const interaction = await deps.createInteraction({
+  const interaction = input.persistInteraction === false ? null : await deps.createInteraction({
     ...base,
     type: isSocraticChallenge ? InteractionType.SOCRATIC_CHALLENGE : InteractionType.QUESTION,
     responseText: reply,
@@ -186,6 +188,6 @@ async function runChat(
     blockedByExamGuardrail: false,
     latencyMs,
     fallback,
-    interactionId: interaction.id,
+    interactionId: interaction?.id ?? null,
   };
 }

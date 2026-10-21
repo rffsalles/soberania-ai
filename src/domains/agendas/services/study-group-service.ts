@@ -12,7 +12,7 @@ import {
   STUDY_GROUP_CONTEXT_MESSAGES,
   STUDY_GROUP_STALEMATE_MINUTES,
   TUTOR_DISPLAY_NAME,
-  TUTOR_MENTIONS,
+  TUTOR_MENTION_PATTERN,
 } from '@/lib/constants/tutor';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from './agenda-service';
 import * as realRepo from './study-group-repository';
@@ -50,6 +50,9 @@ const defaultDeps: StudyGroupDeps = {
 const NOT_STUDY_GROUP = 'Grupo de estudos não encontrado.';
 const MS_PER_MINUTE = 60_000;
 
+/** Agendas com intervenção em andamento neste processo (evita intervenções duplicadas). */
+const stalemateInFlight = new Set<string>();
+
 function toDTO(m: StudyGroupMessageRecord): MessageDTO {
   return {
     id: m.id,
@@ -69,8 +72,7 @@ async function loadStudyGroup(agendaId: string, user: AgendaActor, deps: StudyGr
 }
 
 export function mentionsTutor(content: string): boolean {
-  const lower = content.toLowerCase();
-  return TUTOR_MENTIONS.some((mention) => lower.includes(mention));
+  return TUTOR_MENTION_PATTERN.test(content);
 }
 
 function toHistory(messages: StudyGroupMessageRecord[]): ChatHistoryMessage[] {
@@ -102,9 +104,15 @@ export async function postMessage(
   const message = toDTO(saved);
   if (!mentionsTutor(content)) return { message };
 
-  const { reply } = await deps.chatWithTutor(user, { agendaId, message: content, history: toHistory(previous) });
-  const tutorSaved = await deps.repo.createMessage({ agendaId, authorId: null, content: reply, isAi: true });
-  return { message, tutorReply: toDTO(tutorSaved) };
+  try {
+    const { reply } = await deps.chatWithTutor(user, { agendaId, message: content, history: toHistory(previous) });
+    const tutorSaved = await deps.repo.createMessage({ agendaId, authorId: null, content: reply, isAi: true });
+    return { message, tutorReply: toDTO(tutorSaved) };
+  } catch (err) {
+    // A mensagem humana já foi gravada: falha da tutora não pode invalidar o envio.
+    console.warn('[study-group] tutora indisponível ao responder menção', err);
+    return { message };
+  }
 }
 
 /**
@@ -119,6 +127,22 @@ export async function checkStalemate(
 ): Promise<MessageDTO | null> {
   const agenda = await loadStudyGroup(agendaId, user, deps);
   if (agenda.status !== AgendaStatus.LIVE) return null;
+  if (stalemateInFlight.has(agendaId)) return null;
+  stalemateInFlight.add(agendaId);
+  try {
+    return await intervene(agenda, user, now, deps);
+  } finally {
+    stalemateInFlight.delete(agendaId);
+  }
+}
+
+async function intervene(
+  agenda: AgendaDTO,
+  user: AgendaActor,
+  now: Date,
+  deps: StudyGroupDeps
+): Promise<MessageDTO | null> {
+  const agendaId = agenda.id;
   const last = await deps.repo.findLastMessage(agendaId);
   if (!last || last.isAi) return null;
   if (now.getTime() - last.createdAt.getTime() <= STUDY_GROUP_STALEMATE_MINUTES * MS_PER_MINUTE) return null;
@@ -127,7 +151,15 @@ export async function checkStalemate(
   const prompt =
     `O grupo está em silêncio há mais de ${STUDY_GROUP_STALEMATE_MINUTES} minutos. ` +
     `Faça uma pergunta socrática curta para destravar a discussão sobre: ${agenda.title}`;
-  const { reply } = await deps.chatWithTutor(user, { agendaId, message: prompt, history: toHistory(recent) });
+  const { reply } = await deps.chatWithTutor(user, {
+    agendaId,
+    message: prompt,
+    history: toHistory(recent),
+    persistInteraction: false,
+  });
+  // Outra mensagem pode ter chegado durante a geração: nesse caso a intervenção perdeu o sentido.
+  const latest = await deps.repo.findLastMessage(agendaId);
+  if (!latest || latest.id !== last.id) return null;
   const saved = await deps.repo.createMessage({ agendaId, authorId: null, content: reply, isAi: true });
   return toDTO(saved);
 }

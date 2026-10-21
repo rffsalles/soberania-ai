@@ -35,6 +35,7 @@ export function useStudyGroupMessages(
   const [isSending, setIsSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const lastCreatedAt = React.useRef<string | null>(null);
+  const pollInFlight = React.useRef(false);
 
   const apply = React.useCallback((incoming: MessageDTO[]) => {
     if (incoming.length === 0) return;
@@ -51,10 +52,13 @@ export function useStudyGroupMessages(
   React.useEffect(() => {
     const controller = new AbortController();
     lastCreatedAt.current = null;
+    pollInFlight.current = false;
     setMessages([]);
     setIsLoading(true);
 
     async function load() {
+      if (pollInFlight.current) return;
+      pollInFlight.current = true;
       try {
         const since = lastCreatedAt.current ? `?since=${encodeURIComponent(lastCreatedAt.current)}` : '';
         const res = await fetch(`${messagesUrl(agendaId)}${since}`, { signal: controller.signal });
@@ -69,6 +73,7 @@ export function useStudyGroupMessages(
       } catch {
         if (!controller.signal.aborted) setError(LOAD_ERROR);
       } finally {
+        pollInFlight.current = false;
         if (!controller.signal.aborted) setIsLoading(false);
       }
     }
