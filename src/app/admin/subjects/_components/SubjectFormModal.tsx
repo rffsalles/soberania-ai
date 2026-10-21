@@ -9,7 +9,16 @@ import {
   AdvancedMultiCombobox,
   type ComboboxItem,
 } from '@/components/ui/advanced-combobox';
+import { API_ROUTES } from '@/lib/constants/routes';
 import type { Teacher } from './TeacherCreateModal';
+
+export interface ClassOption {
+  id: string;
+  name: string;
+  code: string;
+  semester: number;
+  year: number;
+}
 
 export interface SubjectItem {
   id: string;
@@ -18,6 +27,8 @@ export interface SubjectItem {
   courseName: string;
   academicLevel: string;
   academicYear: number;
+  classId?: string | null;
+  class?: { id: string; name: string; code: string } | null;
   teacherAssignments: { teacher: Teacher }[];
 }
 
@@ -26,6 +37,7 @@ interface SubjectFormModalProps {
   onOpenChange: (open: boolean) => void;
   editingSubject: SubjectItem | null;
   teachers: Teacher[];
+  classes: ClassOption[];
   selectedTeachers: string[];
   setSelectedTeachers: React.Dispatch<React.SetStateAction<string[]>>;
   onSuccess: () => void;
@@ -37,6 +49,7 @@ export function SubjectFormModal({
   onOpenChange,
   editingSubject,
   teachers,
+  classes,
   selectedTeachers,
   setSelectedTeachers,
   onSuccess,
@@ -45,6 +58,7 @@ export function SubjectFormModal({
   const [name, setName] = React.useState('');
   const [code, setCode] = React.useState('');
   const [courseName, setCourseName] = React.useState('');
+  const [classId, setClassId] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -52,11 +66,13 @@ export function SubjectFormModal({
       setName(editingSubject.name);
       setCode(editingSubject.code);
       setCourseName(editingSubject.courseName);
+      setClassId(editingSubject.classId ?? '');
       setSelectedTeachers(editingSubject.teacherAssignments.map((ta) => ta.teacher.id));
     } else {
       setName('');
       setCode('');
       setCourseName('');
+      setClassId('');
       setSelectedTeachers([]);
     }
   }, [editingSubject, setSelectedTeachers]);
@@ -84,9 +100,11 @@ export function SubjectFormModal({
         academicLevel: 'HIGHER_EDUCATION',
         academicYear: 2026,
         teacherIds: selectedTeachers,
+        // Sem turma a disciplina não gera agendas para alunos; null desvincula.
+        classId: classId || null,
       };
 
-      const res = await fetch('/api/v1/admin/subjects', {
+      const res = await fetch(API_ROUTES.ADMIN_SUBJECTS, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload),
@@ -146,6 +164,23 @@ export function SubjectFormModal({
               className="rounded-xl"
             />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="subject-class-select">Turma</Label>
+          <select
+            id="subject-class-select"
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 cursor-pointer"
+          >
+            <option value="">Sem turma (não aparece para alunos)</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.code})
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-1.5">

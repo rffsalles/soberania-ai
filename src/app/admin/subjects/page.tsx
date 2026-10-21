@@ -30,11 +30,15 @@ import {
   SubjectFormModal,
   type SubjectItem,
 } from './_components/SubjectFormModal';
+import type { ClassOption } from './_components/SubjectFormModal';
+import { API_ROUTES } from '@/lib/constants/routes';
 
 export default function AdminSubjectsPage() {
   const [subjects, setSubjects] = React.useState<SubjectItem[]>([]);
   const [teachers, setTeachers] = React.useState<Teacher[]>([]);
-  const [, setLoading] = React.useState(true);
+  const [classes, setClasses] = React.useState<ClassOption[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isTeacherModalOpen, setIsTeacherModalOpen] = React.useState(false);
@@ -44,37 +48,25 @@ export default function AdminSubjectsPage() {
   const fetchSubjectData = React.useCallback(async () => {
     try {
       setLoading(true);
-      const [resSub, resTeach] = await Promise.all([
-        fetch('/api/v1/admin/subjects'),
-        fetch('/api/v1/admin/teachers'),
+      setLoadError(null);
+      const [resSub, resTeach, resClasses] = await Promise.all([
+        fetch(API_ROUTES.ADMIN_SUBJECTS),
+        fetch(API_ROUTES.ADMIN_TEACHERS),
+        fetch(API_ROUTES.ADMIN_CLASSES),
       ]);
-      const dataSub = await resSub.json();
-      const dataTeach = await resTeach.json();
-
-      if (dataSub.success) setSubjects(dataSub.subjects);
-      if (dataTeach.success) setTeachers(dataTeach.teachers);
+      const [dataSub, dataTeach, dataClasses] = await Promise.all([
+        resSub.json(),
+        resTeach.json(),
+        resClasses.json(),
+      ]);
+      if (!dataSub.success || !dataTeach.success || !dataClasses.success) {
+        throw new Error(dataSub.error || dataTeach.error || dataClasses.error);
+      }
+      setSubjects(dataSub.subjects);
+      setTeachers(dataTeach.teachers);
+      setClasses(dataClasses.classes);
     } catch {
-      // Fallback mock se API offline
-      setSubjects([
-        {
-          id: 'sub-1',
-          name: 'Banco de Dados I',
-          code: 'BD101',
-          courseName: 'Análise e Desenv. de Sistemas',
-          academicLevel: 'HIGHER_EDUCATION',
-          academicYear: 2026,
-          teacherAssignments: [
-            {
-              teacher: {
-                id: 't-1',
-                name: 'Prof. Ricardo Silva',
-                email: 'ricardo@soberania.edu.br',
-                enrollment: 'PROF001',
-              },
-            },
-          ],
-        },
-      ]);
+      setLoadError('Não foi possível carregar disciplinas, professores e turmas. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -217,15 +209,33 @@ export default function AdminSubjectsPage() {
             <TableRow>
               <TableHead>Código & Disciplina</TableHead>
               <TableHead>Curso / Ano</TableHead>
+              <TableHead>Turma</TableHead>
               <TableHead>Nível Acadêmico</TableHead>
               <TableHead>Professores Alocados (N:N)</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredSubjects.length === 0 ? (
+            {loadError ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={6} className="h-24 text-center">
+                  <div role="alert" className="flex flex-col items-center gap-2 text-sm text-red-600">
+                    <span>{loadError}</span>
+                    <Button variant="outline" size="sm" onClick={fetchSubjectData} className="cursor-pointer">
+                      Tentar novamente
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                  Carregando disciplinas...
+                </TableCell>
+              </TableRow>
+            ) : filteredSubjects.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
                   Nenhuma disciplina cadastrada.
                 </TableCell>
               </TableRow>
@@ -239,6 +249,15 @@ export default function AdminSubjectsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm">{sub.courseName}</TableCell>
+                  <TableCell className="text-sm">
+                    {sub.class ? (
+                      <span>
+                        {sub.class.name} <span className="text-xs text-slate-400 font-mono">{sub.class.code}</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-amber-600 italic">Sem turma</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
                       {sub.academicLevel === 'HIGHER_EDUCATION' ? 'Ensino Superior' : 'Ensino Médio'}
@@ -289,6 +308,7 @@ export default function AdminSubjectsPage() {
         }}
         editingSubject={editingSubject}
         teachers={teachers}
+        classes={classes}
         selectedTeachers={selectedTeachers}
         setSelectedTeachers={setSelectedTeachers}
         onSuccess={fetchSubjectData}

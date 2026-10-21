@@ -40,4 +40,13 @@ describe('upsertSubjectSchema', () => {
   it('rejects short name', () => {
     expect(upsertSubjectSchema.safeParse({ ...base, name: 'a' }).success).toBe(false);
   });
+  it('aceita classId cuid opcional ou null', () => {
+    const classId = 'ckx1q2w3e0000abcdxyz12345';
+    expect(upsertSubjectSchema.parse({ ...base, classId }).classId).toBe(classId);
+    expect(upsertSubjectSchema.parse(base).classId).toBeUndefined();
+    expect(upsertSubjectSchema.parse({ ...base, classId: null }).classId).toBeNull();
+  });
+  it('rejeita classId que não é cuid', () => {
+    expect(upsertSubjectSchema.safeParse({ ...base, classId: 'turma 1' }).success).toBe(false);
+  });
 });

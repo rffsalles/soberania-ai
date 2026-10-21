@@ -8,18 +8,20 @@ const subjectWithTeachers = {
 } as const;
 
 export type SubjectData = Omit<Prisma.SubjectCreateInput, 'teacherAssignments'>;
+export type SubjectUpdateData = Omit<Prisma.SubjectUpdateInput, 'teacherAssignments'>;
 
-export function listSubjects() {
+export async function listSubjects() {
   return db.subject.findMany({
     include: {
       ...subjectWithTeachers,
+      class: { select: { id: true, name: true, code: true } },
       teachingPlans: { select: { id: true, status: true, updatedAt: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
 }
 
-export function createSubjectWithTeachers(data: SubjectData, teacherIds: string[]) {
+export async function createSubjectWithTeachers(data: SubjectData, teacherIds: string[]) {
   return db.subject.create({
     data: {
       ...data,
@@ -30,7 +32,7 @@ export function createSubjectWithTeachers(data: SubjectData, teacherIds: string[
 }
 
 /** Atomically updates the subject and re-syncs its N:N teacher assignments. */
-export async function replaceSubjectTeachers(id: string, data: SubjectData, teacherIds: string[]) {
+export async function replaceSubjectTeachers(id: string, data: SubjectUpdateData, teacherIds: string[]) {
   const [, subject] = await db.$transaction([
     db.teacherSubject.deleteMany({ where: { subjectId: id } }),
     db.subject.update({

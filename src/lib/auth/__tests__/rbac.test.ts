@@ -11,6 +11,7 @@ describe('canAccessRoute', () => {
     '/reports',
     '/appliance',
     '/api/v1/admin/teachers',
+    '/api/v1/admin/classes',
     '/api/v1/teacher/plans',
     '/api/v1/library/materials',
     '/api/v1/mcp',
@@ -29,6 +30,7 @@ describe('canAccessRoute', () => {
     '/reports',
     '/api/v1/library/materials',
     '/api/v1/admin/subjects',
+    '/api/v1/admin/classes',
     '/api/v1/academic-periods',
     '/api/v1/appliance/telemetry',
   ])('permite %s para TEACHER', (path) => {
@@ -48,6 +50,7 @@ describe('canAccessRoute', () => {
     '/appliance',
     '/reports',
     '/api/v1/admin/teachers',
+    '/api/v1/admin/classes',
     '/api/v1/appliance/telemetry',
     '/api/v1/mcp',
   ])('permite %s para ADMIN', (path) => {

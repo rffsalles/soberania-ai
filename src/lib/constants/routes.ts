@@ -56,6 +56,8 @@ export const API_ROUTES = {
   MCP: '/api/v1/mcp',
   ADMIN: '/api/v1/admin',
   ADMIN_SUBJECTS: '/api/v1/admin/subjects',
+  ADMIN_TEACHERS: '/api/v1/admin/teachers',
+  ADMIN_CLASSES: '/api/v1/admin/classes',
   ACADEMIC_PERIODS: '/api/v1/academic-periods',
   APPLIANCE: '/api/v1/appliance',
   APPLIANCE_TELEMETRY: '/api/v1/appliance/telemetry',

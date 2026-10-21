@@ -100,15 +100,20 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     teacherId = created.id;
     teacher = { id: teacherId, role: 'TEACHER', classId: null };
 
-    const subject = await createSubject({
-      name: `Banco de Dados E2E ${SUFFIX}`,
-      code: `E2E${SUFFIX}`,
-      courseName: 'ADS',
-      class: { connect: { id: classId } },
-      teacherIds: [teacherId],
-    });
+    // Mesmo shape que POST /admin/subjects aceita: o schema da rota valida o corpo.
+    const { upsertSubjectSchema } = await import('@/lib/validators/admin.validator');
+    const subject = await createSubject(
+      upsertSubjectSchema.parse({
+        name: `Banco de Dados E2E ${SUFFIX}`,
+        code: `E2E${SUFFIX}`,
+        courseName: 'ADS',
+        classId,
+        teacherIds: [teacherId],
+      })
+    );
     subjectId = subject.id;
     expect(subject.teacherAssignments.map((a) => a.teacherId)).toEqual([teacherId]);
+    expect(subject.classId).toBe(classId);
   });
 
   it('teacher uploads a .txt that is chunked and embedded', async () => {

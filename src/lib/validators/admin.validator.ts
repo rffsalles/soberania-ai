@@ -17,6 +17,8 @@ export const upsertSubjectSchema = z.object({
     .default('HIGHER_EDUCATION'),
   academicYear: z.coerce.number().int().default(2026),
   teacherIds: z.array(z.string()).default([]),
+  // Turma que recebe as agendas da disciplina; null desvincula, ausente mantém a atual.
+  classId: z.string().cuid('Turma inválida').nullable().optional(),
 });
 
 export const updateSubjectSchema = upsertSubjectSchema.extend({
