@@ -58,6 +58,7 @@ export const API_ROUTES = {
   ADMIN_SUBJECTS: '/api/v1/admin/subjects',
   ACADEMIC_PERIODS: '/api/v1/academic-periods',
   APPLIANCE: '/api/v1/appliance',
+  APPLIANCE_TELEMETRY: '/api/v1/appliance/telemetry',
 } as const;
 
 /** Link da página de uma agenda, conforme o seu tipo. */

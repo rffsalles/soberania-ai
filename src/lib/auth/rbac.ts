@@ -45,7 +45,8 @@ export const PROTECTED_ROUTE_ROLES: Readonly<Record<string, readonly Role[]>> = 
   [API_ROUTES.ADMIN_SUBJECTS]: STAFF_ROLES,
   [API_ROUTES.ACADEMIC_PERIODS]: STAFF_ROLES,
   [API_ROUTES.ADMIN]: ADMIN_ONLY,
-  [API_ROUTES.APPLIANCE]: ADMIN_ONLY,
+  // Telemetria é somente leitura e alimenta o badge do cabeçalho (TEACHER/ADMIN); a página segue ADMIN_ONLY.
+  [API_ROUTES.APPLIANCE]: STAFF_ROLES,
 };
 
 /** GET/POST /api/v1/teacher/lessons/:id/media — exceção à área restrita a staff. */

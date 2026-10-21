@@ -456,6 +456,7 @@ model InferenceLog {
   promptTokens         Int
   completionTokens     Int
   externalTrafficBytes Int         @default(0)
+  fallback             Boolean     @default(false)
   agendaType           AgendaType?
   createdAt            DateTime    @default(now())
 

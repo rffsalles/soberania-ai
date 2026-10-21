@@ -6,34 +6,47 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { getApplianceTelemetry } from '@/lib/vllm-client';
+import { API_ROUTES } from '@/lib/constants/routes';
+import type { ApplianceStatus } from '@/domains/telemetry/services/telemetry-service';
 import {
   Server,
   ShieldCheck,
   Cpu,
-  HardDrive,
   Zap,
   Activity,
   Lock,
-  Layers,
-  FileCheck2,
   RefreshCw,
-  Clock,
-  Radio,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function ApplianceTelemetryPage() {
-  const [telemetry, setTelemetry] = React.useState(getApplianceTelemetry);
-  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [status, setStatus] = React.useState<ApplianceStatus | null>(null);
+  const [isRefreshing, setIsRefreshing] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const refreshData = () => {
+  const refreshData = React.useCallback(async () => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      setTelemetry(getApplianceTelemetry());
+    setError(null);
+    try {
+      const res = await fetch(API_ROUTES.APPLIANCE_TELEMETRY, { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.status) throw new Error(data?.error ?? 'Falha ao carregar a telemetria.');
+      setStatus(data.status as ApplianceStatus);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao carregar a telemetria.');
+    } finally {
       setIsRefreshing(false);
-    }, 400);
-  };
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshData();
+  }, [refreshData]);
+
+  const w15 = status?.windows.last15m;
+  const w24 = status?.windows.last24h;
+  const gpu = status?.gpu ?? null;
+  const unavailable = 'indisponível';
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
@@ -56,7 +69,7 @@ export default function ApplianceTelemetryPage() {
               Telemetria de Hardware, Inferência & Auditoria LGPD
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Monitoramento em tempo real da GPU NVIDIA, vLLM Engine, latência de tokens e isolamento de rede.
+              Métricas calculadas a partir dos logs de inferência, saúde do provedor e VRAM da GPU NVIDIA.
             </p>
           </div>
 
@@ -69,12 +82,18 @@ export default function ApplianceTelemetryPage() {
               className="gap-1.5 cursor-pointer"
             >
               <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
-              <span>Atualizar Métricas</span>
+              <span>{isRefreshing ? 'Atualizando...' : 'Atualizar Métricas'}</span>
             </Button>
           </div>
         </div>
 
-        {/* 4 Cards: SOBERANIA AIR-GAP, GPU VRAM, TTFT LATENCY, LORA ACTIVE */}
+        {error && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
+
+        {/* 4 Cards: SOBERANIA, GPU VRAM, TTFT LATENCY, PROVEDOR */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Card 1: Air-Gap Zero Egress */}
           <Card className="rounded-2xl border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-xs">
@@ -86,12 +105,12 @@ export default function ApplianceTelemetryPage() {
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
               </div>
               <CardTitle className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400 pt-1">
-                {telemetry.externalTrafficBytes} Bytes
+                {w24 ? `${w24.externalTrafficBytes} Bytes` : unavailable}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80">
-                Zero vazamento para nuvens externas. 100% dos dados retidos no hardware local.
+                Tráfego externo registrado nas inferências das últimas 24 h.
               </p>
             </CardContent>
           </Card>
@@ -101,19 +120,23 @@ export default function ApplianceTelemetryPage() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-500">
-                  NVIDIA RTX 4090 (VRAM)
+                  GPU NVIDIA (VRAM)
                 </span>
                 <Cpu className="h-5 w-5 text-brand-teal" />
               </div>
               <CardTitle className="text-2xl font-bold font-mono text-slate-900 dark:text-white pt-1">
-                {telemetry.gpuVramUsageGb.toFixed(1)} / 24.0 GB
+                {gpu ? `${gpu.usedGb.toFixed(1)} / ${gpu.totalGb.toFixed(1)} GB` : unavailable}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1.5">
-              <Progress value={(telemetry.gpuVramUsageGb / 24) * 100} className="h-2" />
-              <p className="text-[11px] text-slate-500 font-mono text-right">
-                {Math.round((telemetry.gpuVramUsageGb / 24) * 100)}% alocado (AWQ 4-bit)
-              </p>
+              {gpu && (
+                <>
+                  <Progress value={(gpu.usedGb / gpu.totalGb) * 100} className="h-2" />
+                  <p className="text-[11px] text-slate-500 font-mono text-right">
+                    {Math.round((gpu.usedGb / gpu.totalGb) * 100)}% alocado
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -122,40 +145,40 @@ export default function ApplianceTelemetryPage() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-500">
-                  Latência TTFT vLLM
+                  Latência TTFT (15 min)
                 </span>
                 <Zap className="h-5 w-5 text-amber-500" />
               </div>
               <CardTitle className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 pt-1">
-                {telemetry.ttftMs} ms
+                {w15?.avgTtftMs != null ? `${Math.round(w15.avgTtftMs)} ms` : unavailable}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
                 <span>Vazão de Geração:</span>
                 <strong className="text-slate-800 dark:text-slate-200">
-                  {telemetry.tokensPerSecond} tok/s
+                  {w15?.avgTokensPerSecond != null ? `${w15.avgTokensPerSecond.toFixed(1)} tok/s` : unavailable}
                 </strong>
               </div>
             </CardContent>
           </Card>
 
-          {/* Card 4: Adaptador LoRA */}
+          {/* Card 4: Provedor de inferência */}
           <Card className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-xs">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500">
-                  LoRA Dinâmico Ativo
-                </span>
-                <Layers className="h-5 w-5 text-brand-orange" />
+                <span className="text-xs font-semibold text-slate-500">Provedor de Inferência</span>
+                <Server className="h-5 w-5 text-brand-orange" />
               </div>
               <CardTitle className="text-base font-bold font-mono text-brand-orange truncate pt-1">
-                {telemetry.activeLora}
+                {status ? `${status.provider} · ${status.model}` : unavailable}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-slate-500">
-                Persona didática socrática da Tutora Lucy carregada via dynamic adapter.
+                {w24
+                  ? `${w24.calls} chamadas em 24 h · ${w24.fallbackCount} em modo de contingência`
+                  : unavailable}
               </p>
             </CardContent>
           </Card>
@@ -173,35 +196,30 @@ export default function ApplianceTelemetryPage() {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-3">
-                  <div className="h-3 w-3 rounded-full bg-emerald-500 animate-ping" />
+                  <div
+                    className={cn(
+                      'h-3 w-3 rounded-full',
+                      status ? (status.healthy ? 'bg-emerald-500' : 'bg-red-500') : 'bg-slate-300',
+                    )}
+                  />
                   <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white">vLLM Inference Server</p>
-                    <span className="text-[11px] text-slate-500 font-mono">Porta 8000 · Qwen2.5-7B-Instruct</span>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Servidor de Inferência</p>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      {status ? `${status.provider} · ${status.baseUrl}` : unavailable}
+                    </span>
                   </div>
                 </div>
-                <Badge variant="teal" className="text-[10px]">OPERACIONAL</Badge>
+                <Badge variant="teal" className="text-[10px]">
+                  {status ? (status.healthy ? 'OPERACIONAL' : 'INDISPONÍVEL') : '—'}
+                </Badge>
               </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                  <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white">Embedded MCP Server</p>
-                    <span className="text-[11px] text-slate-500 font-mono">JSON-RPC / stdio · 4 Tools Ativas</span>
-                  </div>
-                </div>
-                <Badge variant="teal" className="text-[10px]">CONECTADO</Badge>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-600 dark:text-slate-300">
+                <span>Latência média (15 min)</span>
+                <strong>{w15?.avgLatencyMs != null ? `${Math.round(w15.avgLatencyMs)} ms` : unavailable}</strong>
               </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                  <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white">PostgreSQL + pgvector</p>
-                    <span className="text-[11px] text-slate-500 font-mono">Porta 5432 · HNSW Cosine Index</span>
-                  </div>
-                </div>
-                <Badge variant="teal" className="text-[10px]">ATIVO</Badge>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-600 dark:text-slate-300">
+                <span>Chamadas (15 min)</span>
+                <strong>{w15 ? w15.calls : unavailable}</strong>
               </div>
             </CardContent>
           </Card>
@@ -215,21 +233,9 @@ export default function ApplianceTelemetryPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                Este appliance opera sob política de <strong>Zero Cloud Egress</strong>. Nenhuma gravação de áudio, vídeo de aula, interação de aluno ou arquivo didático trafega para servidores de terceiros ou IAs estrangeiras.
+                Este appliance opera sob política de <strong>Zero Cloud Egress</strong> quando o provedor de inferência é local (vLLM ou Ollama). O tráfego externo registrado aparece no card de isolamento de rede.
               </p>
 
-              <div className="p-4 rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-900/50 space-y-2">
-                <div className="flex items-center gap-2 text-brand-teal font-bold text-xs">
-                  <ShieldCheck className="h-4 w-4" />
-                  Emissão de Laudo de Auditoria LGPD
-                </div>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                  Hash de Validação de Firmware e Integridade Air-Gap:
-                </p>
-                <div className="font-mono text-[10px] bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 truncate">
-                  sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>

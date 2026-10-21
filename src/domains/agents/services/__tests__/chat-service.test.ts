@@ -152,6 +152,7 @@ describe('chatWithTutor', () => {
         promptTokens: 10,
         completionTokens: 5,
         externalTrafficBytes: 0,
+        fallback: true,
         agendaType: AgendaType.CLASSROOM,
       })
     );

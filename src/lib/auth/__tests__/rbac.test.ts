@@ -30,11 +30,12 @@ describe('canAccessRoute', () => {
     '/api/v1/library/materials',
     '/api/v1/admin/subjects',
     '/api/v1/academic-periods',
+    '/api/v1/appliance/telemetry',
   ])('permite %s para TEACHER', (path) => {
     expect(canAccessRoute(path, TEACHER)).toBe(true);
   });
 
-  it.each(['/appliance', '/admin/subjects', '/api/v1/admin/teachers', '/api/v1/appliance/telemetry'])(
+  it.each(['/appliance', '/admin/subjects', '/api/v1/admin/teachers'])(
     'nega %s para TEACHER',
     (path) => {
       expect(canAccessRoute(path, TEACHER)).toBe(false);

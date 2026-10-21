@@ -174,6 +174,7 @@ async function runChat(
         promptTokens: telemetry.promptTokens,
         completionTokens: telemetry.completionTokens,
         externalTrafficBytes: Math.round(telemetry.externalTrafficBytes),
+        fallback,
         agendaType: agenda.type,
       });
     } catch (err) {

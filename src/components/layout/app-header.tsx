@@ -58,7 +58,7 @@ export function AppHeader() {
 
         {/* Global Telemetry Banner */}
         <div className="hidden lg:block">
-          <TelemetryBadge />
+          <TelemetryBadge role={user?.role} />
         </div>
 
         {/* User Role Quick Switch & Auth */}

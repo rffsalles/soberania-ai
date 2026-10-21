@@ -97,6 +97,16 @@ export class AIProviderGateway {
     }
   }
 
+  /** Configuração efetiva do provedor (inclui a chave: não serializar para o cliente). */
+  public getProviderConfig() {
+    return {
+      provider: this.provider,
+      model: this.model,
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKey,
+    };
+  }
+
   public getProviderInfo() {
     return {
       provider: this.provider,
@@ -263,7 +273,7 @@ export class AIProviderGateway {
       promptTokens: promptMessage.split(' ').length,
       completionTokens: tokenCount,
       totalTokens: promptMessage.split(' ').length + tokenCount,
-      provider: this.provider === 'mock' ? 'vllm' : this.provider,
+      provider: this.provider,
       model: this.model,
       externalTrafficBytes: 0, // 100% On-Premises
     };
