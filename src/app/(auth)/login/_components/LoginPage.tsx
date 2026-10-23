@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { getDefaultRouteForRole } from '@/lib/auth/rbac';
 
 // Chunk separado: as credenciais do seed só são baixadas quando o modo demonstração renderiza os atalhos.
 const DemoShortcuts = dynamic(() => import('./DemoShortcuts').then((m) => m.DemoShortcuts));
@@ -65,12 +66,9 @@ export default function LoginPage() {
       // Redirecionamento pós-login
       if (redirectTarget && redirectTarget.startsWith('/')) {
         router.push(redirectTarget);
-      } else if (data.user.role === 'ADMIN') {
-        router.push('/appliance');
-      } else if (data.user.role === 'TEACHER') {
-        router.push('/materials');
       } else {
-        router.push('/dashboard');
+        // Mesma fonte que o middleware usa quando já há sessão: evita telas iniciais divergentes.
+        router.push(getDefaultRouteForRole(data.user.role));
       }
       router.refresh();
     } catch {
