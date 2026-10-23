@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { AppHeader } from '@/components/layout/app-header';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,7 +71,6 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
   if (agendaLoading) {
     return (
       <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-        <AppHeader />
         <main className="mx-auto w-full max-w-7xl px-4 py-10 text-sm text-slate-500">Carregando grupo de estudos...</main>
       </div>
     );
@@ -81,7 +79,6 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
   if (!agenda || notFound) {
     return (
       <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-        <AppHeader />
         <main className="mx-auto w-full max-w-7xl px-4 py-10 text-sm text-slate-600">
           {notFound ? 'Grupo de estudos não encontrado.' : (agendaError ?? 'Não foi possível carregar o grupo de estudos.')}
         </main>
@@ -91,7 +88,6 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-      <AppHeader />
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Top bar */}

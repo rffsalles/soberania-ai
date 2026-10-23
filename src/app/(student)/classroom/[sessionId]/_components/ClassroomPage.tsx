@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { AppHeader } from '@/components/layout/app-header';
 import { InteractiveVideoPlayer, type SocraticCheckpoint } from '@/components/classroom/interactive-video-player';
 import { SocraticChatPanel } from '@/components/classroom/socratic-chat-panel';
 import { DynamicFaqAccordion } from '@/components/classroom/dynamic-faq-accordion';
@@ -44,7 +43,6 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   if (isLoading || !session) {
     return (
       <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-        <AppHeader />
         <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
           {isLoading ? (
             <div className="space-y-4">
@@ -63,7 +61,6 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-      <AppHeader />
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Session Top Bar */}

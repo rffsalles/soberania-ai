@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { AppHeader } from '@/components/layout/app-header';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -64,7 +63,6 @@ const formatTimer = (totalSecs: number) => {
 function StatusCard({ title, message }: { title: string; message: string }) {
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-      <AppHeader />
       <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-12">
         <Card className="rounded-2xl">
           <CardHeader>
@@ -220,7 +218,6 @@ function ExamRunner({ examId, exam }: { examId: string; exam: ExamPayload }) {
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-      <AppHeader />
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Top Exam Status Bar */}

@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { AppHeader } from '@/components/layout/app-header';
 import { AgendaNotFound } from '@/components/agendas/agenda-not-found';
 import { toAgendaSession } from '@/components/agendas/agenda-session';
 import { useAgenda } from '@/components/agendas/use-agenda';
@@ -120,7 +119,6 @@ export default function DraftReviewPage({ agendaId }: DraftReviewPageProps) {
 
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
-      <AppHeader />
 
       <main className="flex-1 mx-auto w-full max-w-4xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {isLoading ? (
