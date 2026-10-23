@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { AdvancedMultiCombobox, type ComboboxItem } from '@/components/ui/advanced-combobox';
 import { CategoryCreateInlineModal, type CategoryOption } from './CategoryCreateInlineModal';
 import type { DocumentReference } from '../types';
+import { useDocumentInspection } from '@/app/teacher/materials/_components/use-document-inspection';
 
 interface ReferenceUploadTabProps {
   categories: CategoryOption[];
@@ -40,8 +41,6 @@ export function ReferenceUploadTab({
   const [text, setText] = React.useState('');
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
-  const [isInspecting, setIsInspecting] = React.useState(false);
-  const [aiInspected, setAiInspected] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -51,32 +50,13 @@ export function ReferenceUploadTab({
     [categories]
   );
 
-  const inspectFileWithAI = async (selectedFile: File) => {
-    try {
-      setIsInspecting(true);
-      setAiInspected(false);
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      const res = await fetch('/api/v1/library/documents/inspect', { method: 'POST', body: formData });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.success && data.metadata) {
-        if (data.metadata.title) setTitle(data.metadata.title);
-        if (data.metadata.author) setAuthor(data.metadata.author);
-        if (Array.isArray(data.metadata.categories) && data.metadata.categories.length > 0) {
-          const matched = categories
-            .filter((c) => data.metadata.categories.some((cat: string) => cat.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(cat.toLowerCase())))
-            .map((c) => c.name);
-          if (matched.length > 0) setSelectedCategories(matched);
-        }
-        setAiInspected(true);
-      }
-    } catch {
-      // Ignore inspection error silently
-    } finally {
-      setIsInspecting(false);
+  const { isInspecting, inspection, inspect: inspectFileWithAI, reset: resetInspection } = useDocumentInspection(
+    (metadata) => {
+      if (metadata.title) setTitle(metadata.title);
+      if (metadata.author) setAuthor(metadata.author);
+      if (metadata.categories.length > 0) setSelectedCategories(metadata.categories);
     }
-  };
+  );
 
   const handleFileChange = (selectedFile: File | null) => {
     if (!selectedFile) return;
@@ -194,16 +174,21 @@ export function ReferenceUploadTab({
                           <Loader2 className="h-3 w-3 animate-spin" /> IA Extraindo...
                         </span>
                       )}
-                      {aiInspected && (
+                      {inspection?.aiApplied && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-brand-teal bg-brand-teal/10 border border-brand-teal/20 px-1.5 py-0.5 rounded-full font-medium">
                           <Sparkles className="h-2.5 w-2.5" /> IA Preenchido
+                        </span>
+                      )}
+                      {inspection && !inspection.aiApplied && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-text-muted bg-surface-elevated/60 border border-border/40 px-1.5 py-0.5 rounded-full font-medium">
+                          Preenchido por heurística
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] text-text-muted">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
                   </div>
                 </div>
-                <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setFile(null); setAiInspected(false); }} disabled={isUploading || isInspecting} className="h-7 w-7 p-0 cursor-pointer text-text-muted hover:text-text-primary">
+                <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setFile(null); resetInspection(); }} disabled={isUploading || isInspecting} className="h-7 w-7 p-0 cursor-pointer text-text-muted hover:text-text-primary">
                   <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -246,6 +231,11 @@ export function ReferenceUploadTab({
             onAddNewClick={() => setIsCategoryModalOpen(true)}
             disabled={isUploading}
           />
+          {inspection?.suggestedCategory && (
+            <p className="text-[11px] text-text-muted">
+              A IA sugere a categoria <span className="font-semibold text-text-primary">{inspection.suggestedCategory}</span>, ainda não cadastrada. Use &quot;+ Cadastrar Nova Categoria&quot; para criá-la.
+            </p>
+          )}
         </div>
 
         {uploadMode === 'text' && (

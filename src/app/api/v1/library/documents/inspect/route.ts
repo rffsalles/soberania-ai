@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateFileSafety, documentInspectorService } from '@/domains/rag';
+import { listCategories } from '@/domains/rag/services/category-repository';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { Role } from '@prisma/client';
@@ -29,11 +30,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // Inspeciona as primeiras 4 páginas via IA / Heurística
-    const metadata = await documentInspectorService.inspectDocumentHeader(
-      fileBuffer,
-      file.name
-    );
+    // Inspeciona o cabeçalho (capa, rosto, ficha catalográfica, sumário) via IA / Heurística,
+    // oferecendo as categorias cadastradas para a IA escolher entre elas.
+    const availableCategories = (await listCategories()).map((c) => c.name);
+    const metadata = await documentInspectorService.inspectDocumentHeader(fileBuffer, file.name, {
+      availableCategories,
+    });
 
     return NextResponse.json({
       success: true,
@@ -41,6 +43,8 @@ export async function POST(req: Request) {
         title: metadata.title,
         author: metadata.author,
         categories: metadata.categories,
+        suggestedCategory: metadata.suggestedCategory,
+        aiApplied: metadata.aiApplied,
         confidence: metadata.confidence,
         summary: metadata.summary,
         originalFilename: file.name,

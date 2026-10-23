@@ -1,7 +1,7 @@
 import path from 'path';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
-import type { RawDocumentPage, ParsedDocumentResult } from './types';
+import type { RawDocumentPage, ParsedDocumentResult, ParseDocumentOptions } from './types';
 import { ocrService } from './ocr-service';
 
 export interface FileValidationResult {
@@ -122,24 +122,41 @@ export function validateFileSafety(
   };
 }
 
+/** Lê Title/Author do dicionário Info do PDF (custo baixo: só metadados, sem páginas). */
+async function readPdfInfo(parser: PDFParse): Promise<ParsedDocumentResult['info']> {
+  try {
+    const infoResult = await parser.getInfo();
+    const raw = (infoResult?.info ?? {}) as Record<string, unknown>;
+    const title = typeof raw.Title === 'string' ? raw.Title.trim() : '';
+    const author = typeof raw.Author === 'string' ? raw.Author.trim() : '';
+    if (!title && !author) return undefined;
+    return { title: title || undefined, author: author || undefined };
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Realiza a extração de conteúdo estruturado de documentos (PDF, DOCX, TXT, MD)
  * Executa fallback automático de OCR se o texto vetorial do PDF for escaneado/vazio
  */
 export async function parseDocumentFile(
   buffer: Buffer,
-  filename: string
+  filename: string,
+  options: ParseDocumentOptions = {}
 ): Promise<ParsedDocumentResult> {
   const ext = path.extname(filename).toLowerCase().replace(/^\./, '');
   const pages: RawDocumentPage[] = [];
   let isOcrApplied = false;
+  let ocrPartial = false;
 
   if (ext === 'pdf') {
     const PDFParseConstructor = (typeof PDFParse === 'function' ? PDFParse : (PDFParse as { PDFParse?: new (opts: { data: Buffer }) => PDFParse })?.PDFParse) || PDFParse;
     const parser = new PDFParseConstructor({ data: buffer });
     try {
-      const textResult = await parser.getText();
+      const textResult = await parser.getText(options.maxPages ? { first: options.maxPages } : {});
       const numPages = textResult.total || (textResult.pages ? textResult.pages.length : 1);
+      const info = await readPdfInfo(parser);
 
       let totalCharCount = 0;
 
@@ -170,23 +187,30 @@ export async function parseDocumentFile(
         });
       }
 
-      // Detecção de PDF escaneado (baixa densidade de caracteres por página)
+      // Detecção de PDF escaneado (baixa densidade de caracteres por página):
       const avgCharsPerPage = pages.length > 0 ? totalCharCount / pages.length : 0;
-      if (avgCharsPerPage < 40 && ocrService.isOcrEnabled()) {
+      // renderiza as primeiras OCR_MAX_PAGES páginas em PNG e reconhece cada uma, preservando a numeração.
+      if (!options.skipOcr && avgCharsPerPage < 40 && ocrService.isOcrEnabled()) {
         try {
-          const ocrText = await ocrService.recognizeText(buffer);
-          if (ocrText && ocrText.length > totalCharCount) {
+          const limit = ocrService.maxPages();
+          const shots = await parser.getScreenshot({ first: limit, scale: 2, imageBuffer: true });
+          const texts = await ocrService.recognizePages(shots.pages.map((p) => p.data));
+          const ocrPages: RawDocumentPage[] = shots.pages
+            .map((p, idx) => ({
+              pageNumber: p.pageNumber,
+              chapter: `Página ${p.pageNumber}`,
+              section: 'Texto Reconhecido por OCR',
+              text: (texts[idx] || '').trim(),
+            }))
+            .filter((p) => p.text);
+          const ocrCharCount = ocrPages.reduce((acc, p) => acc + p.text.length, 0);
+          if (ocrCharCount > totalCharCount) {
             isOcrApplied = true;
+            ocrPartial = (shots.total || numPages) > limit;
             pages.length = 0;
-            const pageSize = 1200;
-            let pNum = 1;
-            for (let i = 0; i < ocrText.length; i += pageSize) {
-              pages.push({
-                pageNumber: pNum++,
-                chapter: `Página OCR ${pNum - 1}`,
-                section: 'Texto Reconhecido por OCR',
-                text: ocrText.slice(i, i + pageSize).trim(),
-              });
+            pages.push(...ocrPages);
+            if (ocrPartial) {
+              console.warn(`[parseDocumentFile] OCR parcial: ${limit} de ${shots.total || numPages} páginas reconhecidas (OCR_MAX_PAGES).`);
             }
           }
         } catch (ocrError) {
@@ -197,7 +221,7 @@ export async function parseDocumentFile(
       await parser.destroy().catch(() => {});
 
       return {
-        totalPages: pages.length || numPages || 1,
+        totalPages: numPages || pages.length || 1,
         pages: pages.length > 0 ? pages : [{
           pageNumber: 1,
           chapter: 'Documento Completo',
@@ -205,7 +229,9 @@ export async function parseDocumentFile(
           text: (textResult.text || '').trim() || `Documento PDF: ${filename}`,
         }],
         isOcrApplied,
+        ocrPartial,
         detectedMimeType: 'application/pdf',
+        info,
       };
     } catch (err) {
       await parser.destroy().catch(() => {});

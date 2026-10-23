@@ -56,3 +56,9 @@ storage/*
 .superpowers/
 tsconfig.tsbuildinfo
 scratch/
+
+# Playwright MCP (logs e snapshots de navegador)
+.playwright-mcp/
+
+# Dicionários baixados pelo tesseract.js (OCR) no diretório de trabalho
+*.traineddata

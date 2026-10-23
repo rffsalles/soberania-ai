@@ -85,7 +85,7 @@ export class AIProviderGateway {
   private getDefaultModel(provider: AIProviderType): string {
     switch (provider) {
       case 'groq':
-        return 'groq/compound-mini';
+        return 'qwen/qwen3.8-27b';
       case 'together':
         return 'meta-llama/Llama-3.2-3B-Instruct-Turbo';
       case 'ollama':

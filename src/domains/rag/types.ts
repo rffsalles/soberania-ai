@@ -64,11 +64,22 @@ export interface IngestionResult {
 }
 
 
+export interface ParseDocumentOptions {
+  /** Limita o parse às primeiras N páginas (PDF). Sem valor, parseia o documento inteiro. */
+  maxPages?: number;
+  /** Não tenta OCR mesmo quando o PDF parece escaneado (inspeção rápida). */
+  skipOcr?: boolean;
+}
+
 export interface ParsedDocumentResult {
   title?: string;
   totalPages: number;
   pages: RawDocumentPage[];
   isOcrApplied: boolean;
+  /** true quando o documento escaneado tinha mais páginas que OCR_MAX_PAGES; o restante ficou sem texto. */
+  ocrPartial?: boolean;
   detectedMimeType: string;
+  /** Metadados embutidos no arquivo (Info do PDF), quando existirem. */
+  info?: { title?: string; author?: string };
 }
 

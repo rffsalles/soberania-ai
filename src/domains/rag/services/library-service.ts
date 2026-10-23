@@ -174,6 +174,7 @@ export async function uploadAndIngest(
       fileSize: material.fileSize,
       originalFilename: material.originalFilename,
       isOcrApplied: material.isOcrApplied,
+      ocrPartial: parsed.ocrPartial ?? false,
       status,
       sampleExcerpt: parsed.pages[0]?.text.slice(0, SAMPLE_EXCERPT_LENGTH) + '...',
       createdAt: material.createdAt,

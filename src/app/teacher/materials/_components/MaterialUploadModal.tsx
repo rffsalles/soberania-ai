@@ -21,6 +21,7 @@ import {
   type CategoryOption,
 } from '@/app/teacher/plans/new/_components/CategoryCreateInlineModal';
 import { formatFileSize } from './materials-constants';
+import { useDocumentInspection } from './use-document-inspection';
 
 interface MaterialUploadModalProps {
   open: boolean;
@@ -43,8 +44,6 @@ export function MaterialUploadModal({
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
-  const [isInspecting, setIsInspecting] = React.useState(false);
-  const [aiInspected, setAiInspected] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -54,32 +53,13 @@ export function MaterialUploadModal({
     [categories]
   );
 
-  const inspectFileWithAI = async (selectedFile: File) => {
-    try {
-      setIsInspecting(true);
-      setAiInspected(false);
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      const res = await fetch('/api/v1/library/documents/inspect', { method: 'POST', body: formData });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.success && data.metadata) {
-        if (data.metadata.title) setTitle(data.metadata.title);
-        if (data.metadata.author) setAuthor(data.metadata.author);
-        if (Array.isArray(data.metadata.categories) && data.metadata.categories.length > 0) {
-          const matched = categories
-            .filter((c) => data.metadata.categories.some((cat: string) => cat.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(cat.toLowerCase())))
-            .map((c) => c.name);
-          if (matched.length > 0) setSelectedCategories(matched);
-        }
-        setAiInspected(true);
-      }
-    } catch {
-      // Ignore inspection error silently
-    } finally {
-      setIsInspecting(false);
+  const { isInspecting, inspection, inspect: inspectFileWithAI, reset: resetInspection } = useDocumentInspection(
+    (metadata) => {
+      if (metadata.title) setTitle(metadata.title);
+      if (metadata.author) setAuthor(metadata.author);
+      if (metadata.categories.length > 0) setSelectedCategories(metadata.categories);
     }
-  };
+  );
 
   const handleFileChange = (selectedFile: File | null) => {
     if (!selectedFile) return;
@@ -107,8 +87,7 @@ export function MaterialUploadModal({
     setSelectedCategories([]);
     setErrorMessage(null);
     setIsUploading(false);
-    setIsInspecting(false);
-    setAiInspected(false);
+    resetInspection();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -194,9 +173,14 @@ export function MaterialUploadModal({
                           <Loader2 className="h-3 w-3 animate-spin" /> IA Extraindo...
                         </span>
                       )}
-                      {aiInspected && (
+                      {inspection?.aiApplied && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-brand-teal bg-brand-teal/10 border border-brand-teal/20 px-1.5 py-0.5 rounded-full font-medium">
                           <Sparkles className="h-2.5 w-2.5" /> IA Preenchido
+                        </span>
+                      )}
+                      {inspection && !inspection.aiApplied && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-text-muted bg-surface-elevated/60 border border-border/40 px-1.5 py-0.5 rounded-full font-medium">
+                          Preenchido por heurística
                         </span>
                       )}
                     </div>
@@ -207,7 +191,7 @@ export function MaterialUploadModal({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={(e) => { e.stopPropagation(); setFile(null); setAiInspected(false); }}
+                  onClick={(e) => { e.stopPropagation(); setFile(null); resetInspection(); }}
                   disabled={isUploading || isInspecting}
                   className="h-8 w-8 p-0 cursor-pointer text-text-muted hover:text-text-primary"
                 >
@@ -256,11 +240,16 @@ export function MaterialUploadModal({
               onAddNewClick={() => setIsCategoryModalOpen(true)}
               disabled={isUploading}
             />
+            {inspection?.suggestedCategory && (
+              <p className="text-[11px] text-text-muted">
+                A IA sugere a categoria <span className="font-semibold text-text-primary">{inspection.suggestedCategory}</span>, ainda não cadastrada. Use &quot;+ Cadastrar Nova Categoria&quot; para criá-la.
+              </p>
+            )}
           </div>
 
           <div className="rounded-xl p-3 bg-brand-teal/5 border border-brand-teal/20 text-xs text-text-secondary flex items-start gap-2">
             <CheckCircle2 className="h-4 w-4 text-brand-teal shrink-0 mt-0.5" />
-            <p>O motor de IA lê automaticamente as primeiras 4 páginas para sugerir Título, Autores e Categorias.</p>
+            <p>O motor de IA lê apenas as primeiras páginas (capa, folha de rosto, ficha catalográfica e sumário) para sugerir Título, Autores e Categorias.</p>
           </div>
 
           {errorMessage && (
