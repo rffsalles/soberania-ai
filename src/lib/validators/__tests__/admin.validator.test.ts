@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema } from '../admin.validator';
+import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema, updateSubjectSchema } from '../admin.validator';
 
 const valid = {
   name: 'Carlos Silva',
@@ -70,5 +70,23 @@ describe('createClassSchema', () => {
   it('updateClassSchema exige id', () => {
     expect(updateClassSchema.safeParse(base).success).toBe(false);
     expect(updateClassSchema.safeParse({ ...base, id: 'c1' }).success).toBe(true);
+  });
+});
+
+describe('updateSubjectSchema', () => {
+  const base = { id: 's1', name: 'Cálculo', code: 'MAT01', courseName: 'Engenharia' };
+  it('não preenche academicYear quando ausente (edição preserva o ano salvo)', () => {
+    expect(updateSubjectSchema.parse(base).academicYear).toBeUndefined();
+  });
+  it('coage academicYear quando informado', () => {
+    expect(updateSubjectSchema.parse({ ...base, academicYear: '2027' }).academicYear).toBe(2027);
+  });
+});
+
+describe('createClassSchema (mensagens do ano)', () => {
+  it('rejeita ano fora do intervalo com mensagem em pt-BR', () => {
+    const r = createClassSchema.safeParse({ name: 'Turma A', code: 'ADS-2026-3A', year: 2019 });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].message).toBe('Informe um ano entre 2020 e 2050');
   });
 });

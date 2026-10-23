@@ -84,7 +84,9 @@ describe('updateSubject', () => {
   });
   it('ao desvincular, zera o semestre e mantém o ano', async () => {
     const { deps, calls } = makeDeps();
-    await updateSubject('s1', { ...base, classId: null }, deps);
-    expect(calls[0].data).toMatchObject({ semester: null, academicYear: 2026 });
+    const { academicYear: _omit, ...semAno } = base;
+    await updateSubject('s1', { ...semAno, classId: null }, deps);
+    expect(calls[0].data).not.toHaveProperty('academicYear');
+    expect(calls[0].data).toMatchObject({ semester: null, class: { disconnect: true } });
   });
 });

@@ -123,6 +123,8 @@ export function ClassFormModal({
             <Input
               id="class-year"
               type="number"
+              min={2020}
+              max={2050}
               value={year}
               onChange={(e) => setYear(e.target.value)}
               required

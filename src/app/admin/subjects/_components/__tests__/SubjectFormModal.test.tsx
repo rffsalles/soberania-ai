@@ -101,6 +101,22 @@ describe('SubjectFormModal', () => {
     expect(screen.getByText('Atualizar disciplina')).toBeTruthy();
   });
 
+  it('limpa o erro ao reabrir o modal com outra disciplina', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: false, error: 'Turma não encontrada.' }), { status: 404 })));
+    const { rerender, props } = renderModal();
+    fireEvent.change(screen.getByLabelText('Nome da Disciplina'), { target: { value: 'Matemática' } });
+    fireEvent.change(screen.getByLabelText('Código'), { target: { value: 'MT01' } });
+    fireEvent.change(screen.getByLabelText('Curso'), { target: { value: 'ADS' } });
+    fireEvent.click(screen.getByText('Salvar disciplina'));
+    await screen.findByRole('alert');
+    const editing: SubjectItem = {
+      id: 's1', name: 'Cálculo', code: 'MAT01', courseName: 'Engenharia', academicLevel: 'HIGHER_EDUCATION',
+      academicYear: 2026, classId: null, class: null, teacherAssignments: [],
+    };
+    rerender(<SubjectFormModal {...props} editingSubject={editing} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('mantém o que foi digitado quando chega uma turma nova e ela fica selecionada', () => {
     const { rerender, props } = renderModal();
     fireEvent.change(screen.getByLabelText('Nome da Disciplina'), { target: { value: 'Matemática' } });

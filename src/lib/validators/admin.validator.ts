@@ -22,6 +22,8 @@ export const upsertSubjectSchema = z.object({
 });
 
 export const updateSubjectSchema = upsertSubjectSchema.extend({
+  // Sem default: editar sem turma preserva o ano letivo salvo.
+  academicYear: z.coerce.number().int().optional(),
   id: z.string().min(1, 'ID é obrigatório'),
 });
 
@@ -31,8 +33,8 @@ export type UpsertSubjectInput = z.infer<typeof upsertSubjectSchema>;
 export const createClassSchema = z.object({
   name: z.string().trim().min(2, 'Informe o nome da turma'),
   code: z.string().trim().min(2, 'Informe o código da turma'),
-  year: z.coerce.number().int().min(2020).max(2050).default(() => new Date().getFullYear()),
-  semester: z.coerce.number().int().min(1).max(4).default(1),
+  year: z.coerce.number().int('Informe um ano válido').min(2020, 'Informe um ano entre 2020 e 2050').max(2050, 'Informe um ano entre 2020 e 2050').default(() => new Date().getFullYear()),
+  semester: z.coerce.number().int('Informe um semestre válido').min(1, 'Informe um semestre entre 1 e 4').max(4, 'Informe um semestre entre 1 e 4').default(1),
 });
 export const updateClassSchema = createClassSchema.extend({ id: z.string().min(1, 'ID é obrigatório') });
 export type CreateClassInput = z.infer<typeof createClassSchema>;

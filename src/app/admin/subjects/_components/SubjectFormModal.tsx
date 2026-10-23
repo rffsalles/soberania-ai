@@ -14,7 +14,6 @@ import { API_ROUTES } from '@/lib/constants/routes';
 import type { Teacher } from './TeacherCreateModal';
 import type { ClassOption } from '../../classes/_components/ClassFormModal';
 
-export type { ClassOption };
 
 type AcademicLevel = 'HIGHER_EDUCATION' | 'HIGH_SCHOOL' | 'ELEMENTARY';
 
@@ -60,7 +59,7 @@ export function SubjectFormModal({
   onSuccess,
   onRequestCreateTeacher,
   onRequestCreateClass,
-}:  SubjectFormModalProps) {
+}: SubjectFormModalProps) {
   const [name, setName] = React.useState('');
   const [code, setCode] = React.useState('');
   const [courseName, setCourseName] = React.useState('');
@@ -69,6 +68,7 @@ export function SubjectFormModal({
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    setError(null);
     if (editingSubject) {
       setName(editingSubject.name);
       setCode(editingSubject.code);
