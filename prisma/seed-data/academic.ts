@@ -1,5 +1,6 @@
 import { generateMeetings } from '../../src/domains/teaching/schedule-generator';
 import {
+  DEFAULT_NDE_COMPLIANCE_STATUS,
   ASSESSMENT_STATUS,
   ASSESSMENT_TYPE,
   INSTITUTION_TIMEZONE,
@@ -29,6 +30,8 @@ export const DEMO_TEACHING_PLAN = {
   totalHours: 80,
   theoryHours: 60,
   practiceHours: 20,
+  // Explícito: nenhum plano de demonstração nasce "alinhado às DCNs" sem parecer humano.
+  ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS,
   status: PLAN_STATUS.DRAFT,
   syllabus:
     'Visão geral da arquitetura de SGBDs relacionais e vetoriais. Modelagem conceitual com Diagramas Entidade-Relacionamento (DER). Mapeamento lógico para esquemas relacionais normalizados (1FN até 3FN). Álgebra Relacional e Linguagem SQL DDL/DML avançada. Transações com propriedades ACID, índices B-Tree/Hash e integração com acervos RAG estruturados.',
