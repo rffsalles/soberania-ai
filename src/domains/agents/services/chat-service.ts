@@ -10,6 +10,7 @@ import { createInferenceLog } from '@/domains/telemetry/services/inference-log-r
 import type { InferenceLogInput } from '@/domains/telemetry/services/inference-log-repository';
 import { aiProvider, type AICompletionOptions, type AIProviderType, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
 import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
+import { isSyntheticChapter } from '@/domains/rag/constants';
 import { startTutorPipeline } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
 
@@ -223,7 +224,8 @@ async function runChat(
     isSocraticChallenge,
     guardrailBlocked: false,
     ragSourceBook: topChunk?.bookTitle ?? null,
-    ragSourcePage: topChunk?.pageNumber ?? null,
+    // Trechos sintéticos (DOCX/TXT/MD) não têm página real: nada de "pág. N" nos relatórios.
+    ragSourcePage: topChunk && !isSyntheticChapter(topChunk.chapter) ? topChunk.pageNumber : null,
     wasCorrect,
     latencyMs,
   });

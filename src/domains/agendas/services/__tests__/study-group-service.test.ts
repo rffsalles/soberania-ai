@@ -87,6 +87,7 @@ describe('study-group-service', () => {
     chat.mockResolvedValue({ reply: 'aviso de indisponibilidade', fallback: true });
     const result = await postMessage(user, AGENDA_ID, 'Ajuda @lucy', deps);
     expect(result.tutorReply).toBeUndefined();
+    expect(result.tutorUnavailable).toBe(true);
     expect(store.filter((m) => m.isAi)).toHaveLength(0);
   });
 
@@ -103,6 +104,7 @@ describe('study-group-service', () => {
     const result = await postMessage(user, AGENDA_ID, 'Vamos dividir as tabelas', deps);
     expect(chat).not.toHaveBeenCalled();
     expect(result.tutorReply).toBeUndefined();
+    expect(result.tutorUnavailable).toBeUndefined();
     expect(store).toHaveLength(1);
   });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { SYNTHETIC_CHAPTER_PATTERN, SYNTHETIC_PAGE_CHARS_TEXT, validateFileSafety, parseDocumentFile } from '../file-parser';
+import { SYNTHETIC_PAGE_CHARS_TEXT, validateFileSafety, parseDocumentFile } from '../file-parser';
+import { SYNTHETIC_CHAPTER_PATTERN } from '../constants';
 
 describe('RAG Domain - File Parser & Safety Validator', () => {
   it('deve validar com sucesso arquivo de texto simples (.txt)', () => {

@@ -137,6 +137,14 @@ describe('uploadAndIngest', () => {
 });
 
 describe('ingestTextDocument', () => {
+  it('rejeita texto vazio com 400 em vez de indexar um resumo inventado', async () => {
+    const { deps, stored, created } = makeDeps();
+    const err = await ingestTextDocument({ title: 'Vazio', author: 'Prof', categories: [], text: '   ' }, deps).catch((e) => e);
+    expect(err).toMatchObject({ status: 400 });
+    expect(stored).toHaveLength(0);
+    expect(created).toHaveLength(0);
+  });
+
   it('persists pasted text through uploadAndIngest as a .txt file', async () => {
     const { deps, stored, created, embedded } = makeDeps();
     const result = await ingestTextDocument(

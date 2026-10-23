@@ -192,7 +192,7 @@ export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: Pedago
           ) : (
             <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
               A IA não estava disponível quando esta ata foi gerada: as métricas acima são reais, mas o parecer
-              textual não foi redigido. Gere a ata novamente com o provedor ativo.
+              textual não foi redigido. Abra a ata novamente quando o provedor de IA estiver ativo.
             </p>
           )}
         </div>

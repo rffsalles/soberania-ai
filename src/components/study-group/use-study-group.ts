@@ -6,6 +6,8 @@ import { STUDY_GROUP_POLL_MS } from '@/lib/constants/tutor';
 import type { MessageDTO } from '@/domains/agendas/services/study-group-service';
 
 const LOAD_ERROR = 'Não foi possível carregar as mensagens do grupo.';
+import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
+
 const SEND_ERROR = 'Não foi possível enviar a mensagem. Tente novamente.';
 const OPTIMISTIC_PREFIX = 'pending-';
 
@@ -125,7 +127,7 @@ export function useStudyGroupMessages(
         }
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         apply([body.message as MessageDTO, ...(body.tutorReply ? [body.tutorReply as MessageDTO] : [])], false);
-        setError(null);
+        setError(body.tutorUnavailable === true ? TUTOR_UNAVAILABLE_MESSAGE : null);
         return true;
       } catch {
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));

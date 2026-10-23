@@ -182,6 +182,21 @@ describe('chatWithTutor', () => {
     expect(f.createInferenceLog).toHaveBeenCalledWith(expect.objectContaining({ fallback: true }));
   });
 
+  it('fonte RAG de DOCX/TXT/MD (trecho sintético) grava ragSourcePage nulo em vez de página inventada', async () => {
+    const f = makeDeps();
+    f.search.mockResolvedValue({
+      query: 'q',
+      chunks: [
+        { id: 'c1', materialId: 'm1', bookTitle: 'Apostila', author: 'A', chapter: 'Trecho 3', pageNumber: 3, content: 'x' },
+      ],
+      latencyMs: 1,
+    } as never);
+    await chatWithTutor(user, { agendaId: 'ag1', message: 'explique join' }, f.deps);
+    expect(f.createInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ ragSourceBook: 'Apostila', ragSourcePage: null })
+    );
+  });
+
   it('persistInteraction false não grava interação, mas ainda registra o log de inferência', async () => {
     const f = makeDeps();
     const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'oi', persistInteraction: false }, f.deps);

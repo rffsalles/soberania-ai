@@ -143,9 +143,6 @@ async function readPdfInfo(parser: PDFParse): Promise<ParsedDocumentResult['info
 /** Formatos sem paginação própria (DOCX, TXT, MD) são fatiados em trechos de tamanho fixo. */
 export const SYNTHETIC_PAGE_CHARS_DOCX = 1000;
 export const SYNTHETIC_PAGE_CHARS_TEXT = 1200;
-/** Rótulo de capítulo dos trechos sintéticos; a citação omite "pág." para eles (ver `formatCitation`). */
-export const SYNTHETIC_CHAPTER_PATTERN = /^Trecho \d+$/;
-
 function syntheticPage(pageNumber: number, text: string): RawDocumentPage {
   return { pageNumber, chapter: `Trecho ${pageNumber}`, section: `Trecho ${pageNumber}`, text: text.trim() };
 }

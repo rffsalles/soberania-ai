@@ -72,8 +72,8 @@ export async function createPlan(user: PlanActor, input: CreatePlanInput, deps: 
     throw new DomainError(400, 'Disciplina e ementa são obrigatórias.');
   }
   const hours = [input.totalHours, input.theoryHours, input.practiceHours].map(toHours);
-  if (hours.some((h) => h === null)) {
-    throw new DomainError(400, 'Informe a carga horária total, teórica e prática.');
+  if (hours.some((h) => h === null) || (hours[0] as number) <= 0) {
+    throw new DomainError(400, 'Informe a carga horária total (maior que zero), teórica e prática.');
   }
   const [totalHours, theoryHours, practiceHours] = hours as number[];
   return deps.repo.insertPlan({

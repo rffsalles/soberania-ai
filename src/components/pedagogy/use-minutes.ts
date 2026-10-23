@@ -79,7 +79,7 @@ async function readMinute(res: Response): Promise<MinuteDTO | null> {
 
 /**
  * Ata do aluno autenticado para a agenda: lê a existente e só pede a geração quando ainda não houver
- * (cada geração custa uma chamada à IA). Professores e administradores recebem um aviso em vez da ata.
+ * ou quando a existente ficou sem parecer da IA (cada geração custa uma chamada à IA). Professores e administradores recebem um aviso em vez da ata.
  */
 export function useGeneratedMinute(agendaId: string, enabled: boolean): {
   minute: MinuteDTO | null;
@@ -104,10 +104,11 @@ export function useGeneratedMinute(agendaId: string, enabled: boolean): {
     const query = buildMinuteQuery({ agendaId });
     fetch(`${API_ROUTES.PEDAGOGY_MINUTES}${query}`, { signal: controller.signal })
       .then(readMinute)
-      .then(
-        (existing) =>
-          existing ??
-          fetch(API_ROUTES.PEDAGOGY_MINUTES, {
+      .then((existing) =>
+        // Ata sem parecer (IA indisponível na hora): pede nova geração; o serviço mantém a atual se a IA seguir fora.
+        existing && existing.aiGenerated
+          ? existing
+          : fetch(API_ROUTES.PEDAGOGY_MINUTES, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ agendaId }),

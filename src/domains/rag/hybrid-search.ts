@@ -1,9 +1,8 @@
 import { embedTexts, EmbeddingUnavailableError } from '@/lib/embeddings';
-import { DEFAULT_TOP_K, RAG_MAX_TOP_K, RAG_MIN_TOP_K, RRF_K } from './constants';
+import { DEFAULT_TOP_K, RAG_MAX_TOP_K, RAG_MIN_TOP_K, RRF_K, isSyntheticChapter } from './constants';
 import * as chunkRepo from './services/chunk-repository';
 import * as categoryRepo from './services/category-repository';
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from './types';
-import { SYNTHETIC_CHAPTER_PATTERN } from './file-parser';
 
 export { RRF_K };
 
@@ -41,7 +40,7 @@ export function rrfMerge(vecIds: string[], lexIds: string[], k = RRF_K): { id: s
  */
 export function formatCitation(chunk: Pick<DidacticChunk, 'bookTitle' | 'chapter' | 'pageNumber'>): string {
   const chapterName = chunk.chapter.split(':')[0];
-  if (SYNTHETIC_CHAPTER_PATTERN.test(chapterName)) return `[${chunk.bookTitle} · ${chapterName}]`;
+  if (isSyntheticChapter(chapterName)) return `[${chunk.bookTitle} · ${chapterName}]`;
   return `[${chunk.bookTitle} · ${chapterName}, pág. ${chunk.pageNumber}]`;
 }
 

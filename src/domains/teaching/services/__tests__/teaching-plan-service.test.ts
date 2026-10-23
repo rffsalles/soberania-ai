@@ -78,6 +78,13 @@ describe('teaching-plan-service', () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  it('createPlan rejects a zero total workload with 400', async () => {
+    const { deps } = makeDeps();
+    await expect(
+      createPlan(teacher, { subjectId: 's1', syllabus: 'x', totalHours: 0, theoryHours: 0, practiceHours: 0 }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   it('createPlan rejects missing subject or syllabus with 400', async () => {
     const { deps } = makeDeps();
     await expect(createPlan(teacher, { syllabus: 'x' }, deps)).rejects.toMatchObject({ status: 400 });

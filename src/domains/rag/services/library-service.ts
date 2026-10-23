@@ -94,6 +94,8 @@ async function indexEmbeddings(
   return status;
 }
 
+const EMPTY_TEXT_ERROR = 'Não foi possível extrair texto do arquivo enviado.';
+
 export async function uploadAndIngest(
   file: { buffer: Buffer; name: string },
   meta: UploadMeta,
@@ -119,7 +121,7 @@ export async function uploadAndIngest(
   // Parse antes do upload: um arquivo sem texto extraível não vira material nem ocupa o storage.
   const parsed = await parseDocumentFile(file.buffer, file.name);
   if (parsed.pages.length === 0) {
-    throw new DomainError(400, 'Não foi possível extrair texto do arquivo enviado.');
+    throw new DomainError(400, EMPTY_TEXT_ERROR);
   }
 
   const stored = await deps.storage.uploadFile(
@@ -223,10 +225,8 @@ export async function ingestTextDocument(input: TextDocumentInput, deps: Library
   } else if (typeof input.text === 'string') {
     content = input.text;
   }
-  if (!content.trim()) {
-    const categories = input.categories.length > 0 ? input.categories.join(', ') : GENERAL_CATEGORY;
-    content = `Documento de referência: ${input.title}, por ${input.author}. Categoria(s): ${categories}.`;
-  }
+  // Sem texto não há o que indexar: um resumo inventado viraria "trecho do acervo" nas citações.
+  if (!content.trim()) throw new DomainError(400, EMPTY_TEXT_ERROR);
 
   return uploadAndIngest(
     { buffer: Buffer.from(content, 'utf-8'), name: textFileName(input.title) },

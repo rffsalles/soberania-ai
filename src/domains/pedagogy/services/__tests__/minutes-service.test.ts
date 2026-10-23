@@ -156,6 +156,48 @@ describe('generateMinute', () => {
   });
 });
 
+describe('generateMinute com IA indisponível', () => {
+  const realMinute = {
+    id: 'm-real',
+    agendaId: 'ag1',
+    studentId: 'stu1',
+    sessionTitle: 'Aula de JOIN',
+    engagementScore: 70,
+    hesitationIndex: 10,
+    topicsMastered: [],
+    topicsStruggled: [],
+    totalQuestionsAsked: 3,
+    socraticChallengesAnswered: 1,
+    rawSummary: 'parecer real da IA',
+    actionableAdvice: 'conselho real',
+    aiFallback: false,
+    createdAt: NOW,
+    student: { name: 'Lucas' },
+    agenda: { subject: 'BD', subjectRef: { name: 'Banco de Dados' }, class: { name: 'Turma A' } },
+  };
+
+  it('regeneração pelo professor preserva o parecer real e atualiza só as métricas', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps({ interactions: [interaction()], fallback: true });
+    listMinutesRepo.mockResolvedValue([realMinute] as never);
+    const minute = await generateMinute(teacher, { agendaId: 'ag1', studentId: 'stu1' }, deps);
+    expect(upsertMinute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rawSummary: 'parecer real da IA',
+        actionableAdvice: 'conselho real',
+        aiFallback: false,
+        totalQuestionsAsked: 1,
+      })
+    );
+    expect(minute.aiGenerated).toBe(true);
+  });
+
+  it('sem ata anterior grava a ata sem parecer', async () => {
+    const { deps, upsertMinute } = makeDeps({ interactions: [interaction()], fallback: true });
+    await generateMinute(teacher, { agendaId: 'ag1', studentId: 'stu1' }, deps);
+    expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ rawSummary: '', aiFallback: true }));
+  });
+});
+
 describe('generateMinutesForAgenda', () => {
   it('gera para cada aluno e segue após falha individual', async () => {
     const { deps, upsertMinute } = makeDeps();

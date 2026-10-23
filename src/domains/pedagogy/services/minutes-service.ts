@@ -136,10 +136,10 @@ export async function generateMinute(
     deps
   );
 
-  if (text === null && options.keepExistingOnFallback) {
-    const [existing] = await deps.listMinutes({ agendaId: agenda.id, studentId });
-    if (existing) return toDTO(existing);
-  }
+  // Sem IA: nunca sobrescrever um parecer real com texto vazio; as métricas, que são reais, seguem atualizadas.
+  const existing = text === null ? (await deps.listMinutes({ agendaId: agenda.id, studentId }))[0] : undefined;
+  if (existing && options.keepExistingOnFallback) return toDTO(existing);
+  const preserved = existing && !existing.aiFallback ? existing : null;
 
   const record = await deps.upsertMinute({
     agendaId: agenda.id,
@@ -151,9 +151,9 @@ export async function generateMinute(
     topicsStruggled: metrics.topicsStruggled,
     totalQuestionsAsked: metrics.totalQuestionsAsked,
     socraticChallengesAnswered: metrics.socraticChallengesAnswered,
-    rawSummary: text?.rawSummary ?? '',
-    actionableAdvice: text?.actionableAdvice ?? '',
-    aiFallback: text === null,
+    rawSummary: text?.rawSummary ?? preserved?.rawSummary ?? '',
+    actionableAdvice: text?.actionableAdvice ?? preserved?.actionableAdvice ?? '',
+    aiFallback: text === null && preserved === null,
   });
   return toDTO(record);
 }

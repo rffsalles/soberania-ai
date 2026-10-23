@@ -98,7 +98,7 @@ export async function postMessage(
   agendaId: string,
   content: string,
   deps: StudyGroupDeps = defaultDeps
-): Promise<{ message: MessageDTO; tutorReply?: MessageDTO }> {
+): Promise<{ message: MessageDTO; tutorReply?: MessageDTO; /** true = menção à tutora sem IA disponível. */ tutorUnavailable?: true }> {
   const agenda = await loadStudyGroup(agendaId, user, deps);
   const window = validateAgendaTimeWindow(agenda as unknown as AgendaSession, deps.now());
   if (!window.isWithinWindow) throw new DomainError(422, window.message);
@@ -111,7 +111,7 @@ export async function postMessage(
   try {
     const { reply, fallback } = await deps.chatWithTutor(user, { agendaId, message: content, history: toHistory(previous) });
     // Sem IA real não há resposta da tutora a gravar: o aviso de indisponibilidade não é uma mensagem dela.
-    if (fallback) return { message };
+    if (fallback) return { message, tutorUnavailable: true };
     const tutorSaved = await deps.repo.createMessage({ agendaId, authorId: null, content: reply, isAi: true });
     return { message, tutorReply: toDTO(tutorSaved) };
   } catch (err) {

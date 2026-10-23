@@ -1,4 +1,4 @@
-import { executeHybridSearch } from '@/domains/rag/hybrid-search';
+import { formatCitation, executeHybridSearch } from '@/domains/rag/hybrid-search';
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
 import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
 import type { AgendaType } from '@/domains/agendas/types';
@@ -72,7 +72,7 @@ export async function startTutorPipeline(
 
   const rag = await (deps.search ?? executeHybridSearch)({ query: message, topK: 2 });
   const ragContext = rag.chunks
-    .map((c) => `[FONTE: ${c.bookTitle} - ${c.chapter}, pág. ${c.pageNumber}]\n${c.content}`)
+    .map((c) => `[FONTE: ${formatCitation(c)}]\n${c.content}`)
     .join('\n\n');
   const systemPrompt = `${getSystemPromptForAgenda(agendaType)}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
 
