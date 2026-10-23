@@ -61,4 +61,13 @@ describe('LoginPage', () => {
     await submitAs('TEACHER');
     expect(nav.push).toHaveBeenCalledWith(ROUTES.TEACHER_MATERIALS);
   });
+
+  it.each(['//evil.example', '/\\evil.example', 'https://evil.example'])(
+    'ignora redirect externo ou protocol-relative (%s) e usa a rota padrão',
+    async (target) => {
+      nav.redirect = target;
+      await submitAs('TEACHER');
+      expect(nav.push).toHaveBeenCalledWith(ROUTES.TEACHER_PLANS);
+    }
+  );
 });

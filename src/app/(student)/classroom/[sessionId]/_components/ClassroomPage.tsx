@@ -42,7 +42,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
 
   if (isLoading || !session) {
     return (
-      <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
+      <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
         <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
           {isLoading ? (
             <div className="space-y-4">
@@ -60,7 +60,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   const timeValidation = validateAgendaTimeWindow(toAgendaSession(session));
 
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
+    <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Session Top Bar */}

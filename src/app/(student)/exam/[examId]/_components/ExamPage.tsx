@@ -62,7 +62,7 @@ const formatTimer = (totalSecs: number) => {
 
 function StatusCard({ title, message }: { title: string; message: string }) {
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
+    <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
       <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-12">
         <Card className="rounded-2xl">
           <CardHeader>
@@ -217,7 +217,7 @@ function ExamRunner({ examId, exam }: { examId: string; exam: ExamPayload }) {
   const handleSelectOption = (key: string) => setSelected((prev) => ({ ...prev, [currentQ.id]: key }));
 
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
+    <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Top Exam Status Bar */}

@@ -64,7 +64,8 @@ export default function LoginPage() {
       }
 
       // Redirecionamento pós-login
-      if (redirectTarget && redirectTarget.startsWith('/')) {
+      // Só caminhos do próprio site: `//host` e `/\host` seriam redirecionamentos externos.
+      if (/^\/(?![\/\\])/.test(redirectTarget)) {
         router.push(redirectTarget);
       } else {
         // Mesma fonte que o middleware usa quando já há sessão: evita telas iniciais divergentes.

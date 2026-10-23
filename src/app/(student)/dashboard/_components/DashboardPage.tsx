@@ -150,7 +150,7 @@ export default function DashboardPage() {
   const totalQuestions = minutesHistory.reduce((sum, m) => sum + m.totalQuestionsAsked, 0);
 
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
+    <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Welcome Header with Multi-Agendas Summary */}
