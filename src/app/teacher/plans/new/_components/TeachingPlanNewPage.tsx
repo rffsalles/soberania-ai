@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PlanHeaderControls } from './PlanHeaderControls';
 import { PlanBibliographyCard } from './PlanBibliographyCard';
-import { PlanEditorForm } from './PlanEditorForm';
+import { PlanEditorForm, type SyllabusSource } from './PlanEditorForm';
 import { PlanNdeComplianceCard } from './PlanNdeComplianceCard';
 import { PlanTelemetryCard } from './PlanTelemetryCard';
 import { PlanFooterDock } from './PlanFooterDock';
@@ -60,6 +60,7 @@ export default function TeachingPlanNewPage() {
 
   // Form Fields
   const [syllabus, setSyllabus] = React.useState('');
+  const [syllabusSource, setSyllabusSource] = React.useState<SyllabusSource>(null);
   const [generalObjectives, setGeneralObjectives] = React.useState('');
   const [bloomBadges, setBloomBadges] = React.useState<string[]>([]);
   const [methodology, setMethodology] = React.useState('');
@@ -122,7 +123,10 @@ export default function TeachingPlanNewPage() {
           const plan = data.plan;
           if (plan.subjectId) setSelectedSubjectId(plan.subjectId);
           if (plan.academicPeriodId) setSelectedPeriodId(plan.academicPeriodId);
-          if (plan.syllabus) setSyllabus(plan.syllabus);
+          if (plan.syllabus) {
+            setSyllabus(plan.syllabus);
+            setSyllabusSource('saved');
+          }
           if (plan.generalObjectives) setGeneralObjectives(plan.generalObjectives);
           if (plan.methodology) setMethodology(plan.methodology);
           if (Array.isArray(plan.basicBibliography) && plan.basicBibliography.length > 0) {
@@ -217,6 +221,7 @@ export default function TeachingPlanNewPage() {
       const data = await res.json();
       if (data.success && data.data) {
         setSyllabus(data.data.syllabus);
+        setSyllabusSource('ai');
         setGeneralObjectives(data.data.generalObjectives);
         if (Array.isArray(data.data.bloomLevels)) {
           setBloomBadges(data.data.bloomLevels);
@@ -322,7 +327,12 @@ export default function TeachingPlanNewPage() {
         <div className="lg:col-span-2 space-y-6">
           <PlanEditorForm
             syllabus={syllabus}
-            onChangeSyllabus={setSyllabus}
+            onChangeSyllabus={(value) => {
+              setSyllabus(value);
+              setSyllabusSource(value.trim() ? 'edited' : null);
+            }}
+            syllabusSource={syllabusSource}
+            citationsCount={citations.length}
             generalObjectives={generalObjectives}
             onChangeGeneralObjectives={setGeneralObjectives}
             bloomBadges={bloomBadges}

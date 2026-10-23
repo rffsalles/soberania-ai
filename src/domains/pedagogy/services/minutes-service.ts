@@ -1,7 +1,7 @@
 import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
-import { aiProvider } from '@/lib/ai-provider';
 import type { AIMessage, AICompletionOptions, StreamChunk } from '@/lib/ai-provider';
+import { loggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import { findTeacherSubjectIds } from '@/domains/agendas/services/agenda-repository';
 import {
@@ -50,7 +50,7 @@ const defaultDeps: MinutesDeps = {
   findTeacherSubjectIds,
   upsertMinute: minuteRepo.upsertMinute,
   listMinutes: minuteRepo.listMinutes,
-  streamChat: (messages, options) => aiProvider.streamChat(messages, options),
+  streamChat: loggedStreamChat,
   now: () => new Date(),
 };
 

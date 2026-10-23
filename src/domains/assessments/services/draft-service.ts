@@ -1,7 +1,8 @@
 import { AgendaType, Role } from '@prisma/client';
 import { z } from 'zod';
 import { DomainError } from '@/lib/api/domain-error';
-import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
+import type { AICompletionOptions, AIMessage, StreamChunk } from '@/lib/ai-provider';
+import { createLoggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
 import {
   getAgendaForUser,
@@ -63,7 +64,7 @@ const defaultDeps: DraftDeps = {
   findRubrics: assessmentRepo.findAssessmentRubrics,
   createDraft: draftRepo.createDraft,
   listDrafts: draftRepo.listDraftsByStudent,
-  streamChat: (messages, options) => aiProvider.streamChat(messages, options),
+  streamChat: createLoggedStreamChat(undefined, 'DRAFT_REVIEW'),
   parseFile: async (buffer, filename) => {
     const parsed = await parseDocumentFile(buffer, filename);
     return parsed.pages.map((p) => p.text).join('\n\n');

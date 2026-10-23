@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { parseDocumentFile } from './file-parser';
 import { aiProvider } from '@/lib/ai-provider';
+import { loggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
 import type { RawDocumentPage } from './types';
 
 /** De onde vieram título/autor: IA, ficha catalográfica, heurística de linhas ou só o nome do arquivo. */
@@ -179,7 +180,7 @@ Responda EXCLUSIVAMENTE em formato JSON estrito conforme a estrutura:
 
     let fullResponse = '';
     try {
-      const stream = aiProvider.streamChat(promptMessages, { temperature: 0.1, maxTokens: 400 });
+      const stream = loggedStreamChat(promptMessages, { temperature: 0.1, maxTokens: 400 });
       for await (const chunk of stream) {
         if (chunk.fallback) return null;
         if (chunk.token) fullResponse += chunk.token;

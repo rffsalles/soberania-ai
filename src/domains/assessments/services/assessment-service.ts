@@ -2,7 +2,8 @@ import { AgendaType, type Prisma } from '@prisma/client';
 import { assertOwner } from '@/domains/teaching/ownership';
 import { z } from 'zod';
 import { DomainError } from '@/lib/api/domain-error';
-import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
+import type { AICompletionOptions, AIMessage, StreamChunk } from '@/lib/ai-provider';
+import { createLoggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
 import { ASSESSMENT_STATUS } from '@/lib/constants/teaching';
 import { executeHybridSearch } from '@/domains/rag/hybrid-search';
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
@@ -57,7 +58,7 @@ const defaultDeps: AssessmentDeps = {
   updateAssessmentById: assessmentRepo.updateAssessmentById,
   claimAssessmentForPublish: assessmentRepo.claimAssessmentForPublish,
   search: executeHybridSearch,
-  streamChat: (messages, options) => aiProvider.streamChat(messages, options),
+  streamChat: createLoggedStreamChat(undefined, 'EXAM'),
   createAgenda: (user, input) => createAgenda(user, input),
 };
 

@@ -6,6 +6,18 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 
+/** De onde veio o texto da ementa: sugestão da IA, digitado/editado pelo professor, carregado de um plano salvo, ou vazio. */
+export type SyllabusSource = 'ai' | 'edited' | 'saved' | null;
+
+export function syllabusBadgeLabel(source: SyllabusSource, citationsCount: number): string {
+  if (source === null) return 'Pendente de Elaboração';
+  if (source === 'edited') return 'Redigida pelo professor';
+  if (source === 'saved') return 'Texto salvo no plano';
+  return citationsCount > 0
+    ? `Sugestão da IA · ${citationsCount} trecho(s) do acervo`
+    : 'Sugestão da IA · sem trechos do acervo';
+}
+
 interface PlanEditorFormProps {
   syllabus: string;
   onChangeSyllabus: (val: string) => void;
@@ -15,6 +27,9 @@ interface PlanEditorFormProps {
   methodology: string;
   onChangeMethodology: (val: string) => void;
   isAiLocked: boolean;
+  syllabusSource: SyllabusSource;
+  /** Trechos do acervo recuperados na última geração; 0 = a IA não se apoiou no acervo. */
+  citationsCount: number;
 }
 
 export function PlanEditorForm({
@@ -26,6 +41,8 @@ export function PlanEditorForm({
   methodology,
   onChangeMethodology,
   isAiLocked,
+  syllabusSource,
+  citationsCount,
 }: PlanEditorFormProps) {
   return (
     <div className="space-y-6">
@@ -38,7 +55,7 @@ export function PlanEditorForm({
               <span>1. Ementa Oficial da Disciplina</span>
             </span>
             <Badge variant="secondary" className="text-[10px]">
-              {syllabus ? 'Fundamentado no RAG Local' : 'Pendente de Elaboração'}
+              {syllabusBadgeLabel(syllabus ? syllabusSource : null, citationsCount)}
             </Badge>
           </CardTitle>
         </CardHeader>

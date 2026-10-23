@@ -136,6 +136,10 @@ export class AIProviderGateway {
     let ttftMs = 0;
     let generatedText = '';
     let tokenCount = 0;
+    // Medido, não estimado: bytes do corpo enviado + bytes recebidos do provedor.
+    let requestBytes = 0;
+    let responseBytes = 0;
+    let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null = null;
 
     const currentProvider = this.provider;
     const currentApiKey = this.apiKey;
@@ -161,8 +165,11 @@ export class AIProviderGateway {
             temperature: options.temperature ?? 0.3,
             max_tokens: options.maxTokens ?? 512,
             stream: true,
+            // Provedores compatíveis com OpenAI devolvem `usage` no último chunk quando solicitado.
+            stream_options: { include_usage: true },
           }),
         };
+        requestBytes = new TextEncoder().encode(String(requestInit.body)).byteLength;
         let doFetch: typeof fetch = fetch;
         // Só aceita certificado autoassinado quando explicitamente habilitado (afeta apenas esta chamada).
         if (process.env.AI_ALLOW_INSECURE_TLS === 'true') {
@@ -193,6 +200,7 @@ export class AIProviderGateway {
               ttftRecorded = true;
             }
 
+            responseBytes += value.byteLength;
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
@@ -205,6 +213,14 @@ export class AIProviderGateway {
 
               try {
                 const parsed = JSON.parse(dataStr);
+                const u = parsed.usage ?? parsed.x_groq?.usage;
+                if (u && typeof u.completion_tokens === 'number') {
+                  usage = {
+                    promptTokens: Number(u.prompt_tokens ?? 0),
+                    completionTokens: Number(u.completion_tokens),
+                    totalTokens: Number(u.total_tokens ?? 0),
+                  };
+                }
                 const deltaToken = parsed.choices?.[0]?.delta?.content || '';
                 if (deltaToken) {
                   tokenCount++;
@@ -221,20 +237,21 @@ export class AIProviderGateway {
           }
 
           const totalLatencyMs = Date.now() - startTime;
-          const tokensPerSec = Number(((tokenCount / (totalLatencyMs / 1000)) || 45).toFixed(1));
+          const tokensPerSec = totalLatencyMs > 0 ? Number((tokenCount / (totalLatencyMs / 1000)).toFixed(1)) : 0;
 
           console.log(`[AIProvider Success] Sucesso Groq/Provider (${tokenCount} tokens gerados em ${totalLatencyMs}ms)`);
 
+          // Sem `usage` do provedor: só o que foi contado de fato (prompt/total ficam 0, nunca estimados).
           const realTelemetry: InferenceTelemetry = {
-            ttftMs: ttftMs || 450,
+            ttftMs,
             totalLatencyMs,
             tokensPerSecond: tokensPerSec,
-            promptTokens: messages.reduce((acc, m) => acc + m.content.split(' ').length, 0),
-            completionTokens: tokenCount,
-            totalTokens: tokenCount + 50,
+            promptTokens: usage?.promptTokens ?? 0,
+            completionTokens: usage?.completionTokens ?? tokenCount,
+            totalTokens: usage?.totalTokens ?? 0,
             provider: currentProvider,
             model: currentModel,
-            externalTrafficBytes: currentProvider === 'vllm' || currentProvider === 'ollama' ? 0 : tokenCount * 4,
+            externalTrafficBytes: isLocalProvider(currentProvider) ? 0 : requestBytes + responseBytes,
           };
           options.onTelemetry?.(realTelemetry);
           yield {
@@ -254,9 +271,8 @@ export class AIProviderGateway {
     const promptMessage = messages.find((m) => m.role === 'user')?.content || '';
     const fallbackWords = this.getDeterministicSocraticTokens(promptMessage, options.citation);
     
-    // Simula TTFT realista (< 800ms)
     await new Promise((resolve) => setTimeout(resolve, 80));
-    ttftMs = 780;
+    ttftMs = Date.now() - startTime;
 
     for (let i = 0; i < fallbackWords.length; i++) {
       tokenCount++;
@@ -270,7 +286,7 @@ export class AIProviderGateway {
     }
 
     const totalLatencyMs = Date.now() - startTime;
-    const tokensPerSec = Number(((tokenCount / (totalLatencyMs / 1000)) || 62.5).toFixed(1));
+    const tokensPerSec = totalLatencyMs > 0 ? Number((tokenCount / (totalLatencyMs / 1000)).toFixed(1)) : 0;
 
     const fallbackTelemetry: InferenceTelemetry = {
       ttftMs,

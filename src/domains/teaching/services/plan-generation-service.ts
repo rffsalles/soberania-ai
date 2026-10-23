@@ -1,5 +1,6 @@
 import { DomainError } from '@/lib/api/domain-error';
-import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
+import type { AICompletionOptions, AIMessage, StreamChunk } from '@/lib/ai-provider';
+import { loggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
 import { executeHybridSearch, formatCitation } from '@/domains/rag/hybrid-search';
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
 import {
@@ -35,7 +36,7 @@ export type PlanGenerationDeps = {
 
 const defaultDeps: PlanGenerationDeps = {
   search: executeHybridSearch,
-  streamChat: (messages, options) => aiProvider.streamChat(messages, options),
+  streamChat: loggedStreamChat,
 };
 
 const PLAN_TEMPERATURE = 0.3;
