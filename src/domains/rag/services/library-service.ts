@@ -354,7 +354,7 @@ export async function listMaterialsWithStats(filter: { category?: string | null;
       totalPages: m.totalPages,
       totalChunks: m._count.chunks,
       filePath: m.filePath,
-      originalFilename: m.originalFilename || `${m.title}.pdf`,
+      originalFilename: m.originalFilename,
       fileSize: m.fileSize || 0,
       mimeType: m.mimeType || 'application/pdf',
       isOcrApplied: m.isOcrApplied,
