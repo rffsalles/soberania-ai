@@ -28,6 +28,8 @@ interface DraftEntry {
   id: string;
   feedback: string | null;
   rubricScores: RubricScore[] | null;
+  /** true = a IA não estava disponível: sem feedback nem notas. */
+  fallback: boolean;
   createdAt: string;
 }
 
@@ -36,8 +38,16 @@ const AI_UNAVAILABLE =
   'A Tutora Lucy não estava disponível: o rascunho foi registrado, mas não recebeu feedback nem notas. Envie novamente mais tarde.';
 const ACCEPT = DRAFT_ALLOWED_EXTENSIONS.join(',');
 
-function FeedbackView({ feedback, rubricScores }: { feedback: string | null; rubricScores: RubricScore[] | null }) {
-  if (!feedback && !rubricScores) {
+function FeedbackView({
+  feedback,
+  rubricScores,
+  fallback,
+}: {
+  feedback: string | null;
+  rubricScores: RubricScore[] | null;
+  fallback: boolean;
+}) {
+  if (fallback) {
     return <p className="text-sm text-amber-700 dark:text-amber-300">{AI_UNAVAILABLE}</p>;
   }
   return (
@@ -75,7 +85,7 @@ export default function DraftReviewPage({ agendaId }: DraftReviewPageProps) {
   const [file, setFile] = React.useState<File | null>(null);
   const [isSending, setIsSending] = React.useState(false);
   const [sendError, setSendError] = React.useState<string | null>(null);
-  const [latest, setLatest] = React.useState<Pick<DraftEntry, 'feedback' | 'rubricScores'> | null>(null);
+  const [latest, setLatest] = React.useState<Pick<DraftEntry, 'feedback' | 'rubricScores' | 'fallback'> | null>(null);
   const [drafts, setDrafts] = React.useState<DraftEntry[]>([]);
   const fileInput = React.useRef<HTMLInputElement>(null);
 
@@ -110,7 +120,7 @@ export default function DraftReviewPage({ agendaId }: DraftReviewPageProps) {
         setSendError(typeof body?.error === 'string' ? body.error : GENERIC_ERROR);
         return;
       }
-      setLatest({ feedback: body.feedback, rubricScores: body.rubricScores });
+      setLatest({ feedback: body.feedback, rubricScores: body.rubricScores, fallback: body.fallback === true });
       setContent('');
       setFile(null);
       if (fileInput.current) fileInput.current.value = '';
@@ -194,7 +204,7 @@ export default function DraftReviewPage({ agendaId }: DraftReviewPageProps) {
                   <CardTitle className="text-base">Feedback da Tutora Lucy</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <FeedbackView feedback={latest.feedback} rubricScores={latest.rubricScores} />
+                  <FeedbackView feedback={latest.feedback} rubricScores={latest.rubricScores} fallback={latest.fallback} />
                 </CardContent>
               </Card>
             )}
@@ -210,7 +220,7 @@ export default function DraftReviewPage({ agendaId }: DraftReviewPageProps) {
                       <p className="text-xs font-mono text-slate-500">
                         {new Date(d.createdAt).toLocaleString('pt-BR')}
                       </p>
-                      <FeedbackView feedback={d.feedback} rubricScores={d.rubricScores} />
+                      <FeedbackView feedback={d.feedback} rubricScores={d.rubricScores} fallback={d.fallback} />
                     </div>
                   ))}
                 </CardContent>

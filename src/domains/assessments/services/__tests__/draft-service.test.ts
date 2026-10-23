@@ -70,7 +70,7 @@ describe('submitDraft', () => {
     expect(result.rubricScores).toHaveLength(DEFAULT_DRAFT_RUBRIC.length);
     expect(result.rubricScores!.map((r) => r.criterion)).toEqual(DEFAULT_DRAFT_RUBRIC.map((r) => r.criterion));
     expect(createDraft).toHaveBeenCalledWith(
-      expect.objectContaining({ agendaId: 'ag1', studentId: 's1', content: LONG_TEXT })
+      expect.objectContaining({ agendaId: 'ag1', studentId: 's1', content: LONG_TEXT, aiFallback: false })
     );
   });
 
@@ -146,7 +146,9 @@ describe('submitDraft com IA', () => {
       streamChat: aiReply('{ não é json }'),
     });
     expect(result).toMatchObject({ fallback: true, feedback: null, rubricScores: null });
-    expect(createDraft).toHaveBeenCalledWith(expect.objectContaining({ feedback: null, rubricScores: null }));
+    expect(createDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ feedback: null, rubricScores: null, aiFallback: true })
+    );
   });
 
   it('registra o rascunho sem feedback nem notas quando o provedor devolve o stream de fallback', async () => {

@@ -21,6 +21,7 @@ describe('useDocumentInspection', () => {
               categories: ['Banco de Dados'],
               suggestedCategory: 'Matemática',
               aiApplied: true,
+              source: 'ai',
             },
           }),
           { status: 200 }
@@ -40,7 +41,7 @@ describe('useDocumentInspection', () => {
       author: 'Fernando Guerra',
       categories: ['Banco de Dados'],
     });
-    expect(result.current.inspection).toEqual({ aiApplied: true, suggestedCategory: 'Matemática' });
+    expect(result.current.inspection).toEqual({ aiApplied: true, source: 'ai', suggestedCategory: 'Matemática' });
   });
 
   it('marca aiApplied=false quando a resposta veio da heurística e limpa no reset', async () => {
@@ -62,7 +63,8 @@ describe('useDocumentInspection', () => {
     await act(async () => {
       await result.current.inspect(new File(['x'], 'doc.pdf'));
     });
-    expect(result.current.inspection).toEqual({ aiApplied: false, suggestedCategory: undefined });
+    // Resposta sem `source` (servidor antigo): o hook assume a origem mais fraca.
+    expect(result.current.inspection).toEqual({ aiApplied: false, source: 'filename', suggestedCategory: undefined });
     expect(onMetadata).toHaveBeenCalledWith({ title: 'doc', author: '', categories: [] });
 
     act(() => result.current.reset());

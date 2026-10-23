@@ -50,6 +50,7 @@ export type DraftDeps = {
     content: string;
     feedback: string | null;
     rubricScores: DraftFeedback['rubricScores'] | null;
+    aiFallback: boolean;
   }): Promise<{ id: string; createdAt: Date }>;
   listDrafts(agendaId: string, studentId: string): Promise<unknown[]>;
   streamChat(messages: AIMessage[], options?: AICompletionOptions): AsyncGenerator<StreamChunk>;
@@ -130,6 +131,7 @@ export async function submitDraft(
     content,
     feedback: evaluation.feedback,
     rubricScores: evaluation.rubricScores,
+    aiFallback: evaluation.fallback,
   });
   return { id: saved.id, createdAt: saved.createdAt, ...evaluation };
 }

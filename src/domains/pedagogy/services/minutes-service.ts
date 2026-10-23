@@ -73,7 +73,7 @@ function toDTO(r: MinuteRecord): MinuteDTO {
     socraticChallengesAnswered: r.socraticChallengesAnswered,
     rawSummary: r.rawSummary,
     actionableAdvice: r.actionableAdvice,
-    aiGenerated: r.rawSummary.trim().length > 0,
+    aiGenerated: !r.aiFallback,
     createdAt: r.createdAt.toISOString(),
     subjectName: r.agenda.subjectRef?.name ?? r.agenda.subject,
     className: r.agenda.class.name,
@@ -100,10 +100,16 @@ async function writeMinuteText(input: MinutesPromptInput, deps: MinutesDeps): Pr
   }
 }
 
+export type GenerateMinuteOptions = {
+  /** Com a IA indisponível, devolve a ata já existente do aluno em vez de regravar uma sem parecer. */
+  keepExistingOnFallback?: boolean;
+};
+
 export async function generateMinute(
   user: AgendaActor,
   input: { agendaId: string; studentId?: string },
-  deps: MinutesDeps = defaultDeps
+  deps: MinutesDeps = defaultDeps,
+  options: GenerateMinuteOptions = {}
 ): Promise<MinuteDTO> {
   const studentId = input.studentId ?? user.id;
   if (user.role === Role.STUDENT && studentId !== user.id) {
@@ -130,6 +136,11 @@ export async function generateMinute(
     deps
   );
 
+  if (text === null && options.keepExistingOnFallback) {
+    const [existing] = await deps.listMinutes({ agendaId: agenda.id, studentId });
+    if (existing) return toDTO(existing);
+  }
+
   const record = await deps.upsertMinute({
     agendaId: agenda.id,
     studentId,
@@ -142,6 +153,7 @@ export async function generateMinute(
     socraticChallengesAnswered: metrics.socraticChallengesAnswered,
     rawSummary: text?.rawSummary ?? '',
     actionableAdvice: text?.actionableAdvice ?? '',
+    aiFallback: text === null,
   });
   return toDTO(record);
 }
@@ -206,8 +218,10 @@ export async function requestMinutes(
   }
   await deps.getAgenda(input.agendaId, user);
   const [existing] = await deps.listMinutes({ agendaId: input.agendaId, studentId: user.id });
-  if (existing) return { kind: 'minute', minute: toDTO(existing) };
-  return { kind: 'minute', minute: await generateMinute(user, { agendaId: input.agendaId }, deps) };
+  if (existing && !existing.aiFallback) return { kind: 'minute', minute: toDTO(existing) };
+  // Sem ata, ou ata anterior sem parecer: tenta de novo; se a IA seguir indisponível, mantém a anterior.
+  const minute = await generateMinute(user, { agendaId: input.agendaId }, deps, { keepExistingOnFallback: true });
+  return { kind: 'minute', minute };
 }
 
 async function scopeWhere(user: AgendaActor, deps: MinutesDeps): Promise<MinuteWhere> {

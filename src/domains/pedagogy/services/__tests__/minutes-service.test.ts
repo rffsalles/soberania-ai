@@ -129,6 +129,7 @@ describe('generateMinute', () => {
     expect(minute.rawSummary).toBe('Resumo IA');
     expect(minute.actionableAdvice).toBe('Conselho IA');
     expect(minute.aiGenerated).toBe(true);
+    expect(deps.upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ aiFallback: false }));
   });
 
   it('grava a ata sem parecer (aiGenerated false) quando a IA devolve lixo', async () => {
@@ -142,7 +143,9 @@ describe('generateMinute', () => {
     expect(minute.actionableAdvice).toBe('');
     expect(minute.aiGenerated).toBe(false);
     expect(minute.totalQuestionsAsked).toBe(1);
-    expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ rawSummary: '', actionableAdvice: '' }));
+    expect(upsertMinute).toHaveBeenCalledWith(
+      expect.objectContaining({ rawSummary: '', actionableAdvice: '', aiFallback: true })
+    );
   });
 
   it('grava a ata sem parecer quando o provedor devolve o stream de fallback', async () => {
@@ -184,6 +187,7 @@ describe('requestMinutes', () => {
     socraticChallengesAnswered: 1,
     rawSummary: 'resumo antigo',
     actionableAdvice: 'conselho antigo',
+    aiFallback: false,
     createdAt: NOW,
     student: { name: 'Lucas' },
     agenda: { subject: 'BD', subjectRef: { name: 'Banco de Dados' }, class: { name: 'Turma A' } },
@@ -220,6 +224,33 @@ describe('requestMinutes', () => {
     expect(res.kind).toBe('minute');
     expect(upsertMinute).toHaveBeenCalledOnce();
     expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ studentId: 'stu1' }));
+  });
+
+  it('aluno com ata anterior em fallback recebe nova geração quando a IA responde', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps({
+      interactions: [interaction()],
+      ai: '{"rawSummary":"Novo resumo","actionableAdvice":"Novo conselho"}',
+      fallback: false,
+    });
+    listMinutesRepo.mockResolvedValue([{ ...storedMinute, aiFallback: true, rawSummary: '', actionableAdvice: '' }] as never);
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res.kind).toBe('minute');
+    expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ aiFallback: false, rawSummary: 'Novo resumo' }));
+  });
+
+  it('aluno com ata anterior em fallback e IA ainda indisponível recebe a ata existente sem regravar', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps({ interactions: [interaction()], fallback: true });
+    listMinutesRepo.mockResolvedValue([{ ...storedMinute, aiFallback: true, rawSummary: '', actionableAdvice: '' }] as never);
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res.kind === 'minute' && res.minute.id).toBe('m-old');
+    expect(upsertMinute).not.toHaveBeenCalled();
+  });
+
+  it('aluno com ata válida não dispara nova geração', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps();
+    listMinutesRepo.mockResolvedValue([storedMinute] as never);
+    await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(upsertMinute).not.toHaveBeenCalled();
   });
 
   it('aluno não pede a ata de outro aluno (403)', async () => {
