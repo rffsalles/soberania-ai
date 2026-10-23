@@ -15,11 +15,14 @@ const defaultDeps: SubjectDeps = { repo: realRepo, classes: classRepo };
 /**
  * `classId` ausente mantém a turma atual (no update); `null` desvincula a turma.
  * Sem turma, a disciplina não gera agendas para alunos.
+ * Com turma vinculada, ano letivo e semestre vêm da turma (o valor informado é ignorado).
  */
 type SubjectInput = Omit<SubjectData, 'class'> & { teacherIds: string[]; classId?: string | null };
 
 async function assertClassExists(classId: string, deps: SubjectDeps) {
-  if (!(await deps.classes.findClassById(classId))) throw new DomainError(404, 'Turma não encontrada.');
+  const klass = await deps.classes.findClassById(classId);
+  if (!klass) throw new DomainError(404, 'Turma não encontrada.');
+  return klass;
 }
 
 export function listSubjects(deps: SubjectDeps = defaultDeps) {
@@ -29,18 +32,25 @@ export function listSubjects(deps: SubjectDeps = defaultDeps) {
 export async function createSubject(input: SubjectInput, deps: SubjectDeps = defaultDeps) {
   const { teacherIds, classId, ...data } = input;
   if (!classId) return deps.repo.createSubjectWithTeachers(data, teacherIds);
-  await assertClassExists(classId, deps);
-  return deps.repo.createSubjectWithTeachers({ ...data, class: { connect: { id: classId } } }, teacherIds);
+  const klass = await assertClassExists(classId, deps);
+  return deps.repo.createSubjectWithTeachers(
+    { ...data, academicYear: klass.year, semester: klass.semester, class: { connect: { id: classId } } },
+    teacherIds
+  );
 }
 
 export async function updateSubject(id: string, input: SubjectInput, deps: SubjectDeps = defaultDeps) {
   const { teacherIds, classId, ...data } = input;
   if (classId === undefined) return deps.repo.replaceSubjectTeachers(id, data, teacherIds);
   if (classId === null) {
-    return deps.repo.replaceSubjectTeachers(id, { ...data, class: { disconnect: true } }, teacherIds);
+    return deps.repo.replaceSubjectTeachers(id, { ...data, semester: null, class: { disconnect: true } }, teacherIds);
   }
-  await assertClassExists(classId, deps);
-  return deps.repo.replaceSubjectTeachers(id, { ...data, class: { connect: { id: classId } } }, teacherIds);
+  const klass = await assertClassExists(classId, deps);
+  return deps.repo.replaceSubjectTeachers(
+    id,
+    { ...data, academicYear: klass.year, semester: klass.semester, class: { connect: { id: classId } } },
+    teacherIds
+  );
 }
 
 export type TeacherDeps = { repo: Pick<typeof teacherRepo, 'listTeachersWithSubjects' | 'createTeacher'> };

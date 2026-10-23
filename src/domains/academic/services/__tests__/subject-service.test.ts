@@ -52,6 +52,11 @@ describe('createSubject', () => {
     await expect(createSubject({ ...base, classId: 'nope' }, deps)).rejects.toMatchObject({ status: 404 });
     expect(calls).toHaveLength(0);
   });
+  it('grava ano letivo e semestre da turma vinculada', async () => {
+    const { deps, calls } = makeDeps();
+    await createSubject({ ...base, academicYear: 2020, classId: 'c1' }, deps);
+    expect(calls[0].data).toMatchObject({ academicYear: 2026, semester: 1 });
+  });
 });
 
 describe('updateSubject', () => {
@@ -71,5 +76,15 @@ describe('updateSubject', () => {
     const { deps, calls } = makeDeps();
     await updateSubject('s1', base, deps);
     expect(calls[0].data).not.toHaveProperty('class');
+  });
+  it('ao trocar de turma, grava ano letivo e semestre da nova turma', async () => {
+    const { deps, calls } = makeDeps();
+    await updateSubject('s1', { ...base, academicYear: 2020, classId: 'c1' }, deps);
+    expect(calls[0].data).toMatchObject({ academicYear: 2026, semester: 1 });
+  });
+  it('ao desvincular, zera o semestre e mantém o ano', async () => {
+    const { deps, calls } = makeDeps();
+    await updateSubject('s1', { ...base, classId: null }, deps);
+    expect(calls[0].data).toMatchObject({ semester: null, academicYear: 2026 });
   });
 });
