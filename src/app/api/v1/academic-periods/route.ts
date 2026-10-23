@@ -15,7 +15,8 @@ const createPeriodSchema = z.object({
 
 export async function GET(req: Request) {
   try {
-    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    // Alunos leem o período letivo ativo (painel); criar continua restrito ao ADMIN.
+    await requireUser(req, [Role.STUDENT, Role.TEACHER, Role.ADMIN]);
     const periods = await listPeriods();
     return NextResponse.json({ success: true, periods });
   } catch (error) {

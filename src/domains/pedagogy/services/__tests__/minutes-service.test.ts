@@ -94,10 +94,10 @@ describe('generateMinute', () => {
     });
   });
 
-  it('sem interações: engajamento 40 e tópicos vazios', async () => {
+  it('sem interações: engajamento 0 e tópicos vazios', async () => {
     const { deps, upsertMinute } = makeDeps();
     const minute = await generateMinute(student, { agendaId: 'ag1' }, deps);
-    expect(minute.engagementScore).toBe(40);
+    expect(minute.engagementScore).toBe(0);
     expect(minute.hesitationIndex).toBe(0);
     expect(minute.topicsStruggled).toEqual([]);
     expect(minute.sessionTitle).toBe('Aula de JOIN');
@@ -122,23 +122,34 @@ describe('generateMinute', () => {
       fallback: false,
     });
     const minute = await generateMinute(teacher, { agendaId: 'ag1', studentId: 'stu1' }, deps);
-    expect(minute.engagementScore).toBe(56);
+    expect(minute.engagementScore).toBe(16);
     expect(minute.totalQuestionsAsked).toBe(1);
     expect(minute.socraticChallengesAnswered).toBe(1);
     expect(minute.topicsStruggled).toEqual(['BD, pág. 9']);
     expect(minute.rawSummary).toBe('Resumo IA');
     expect(minute.actionableAdvice).toBe('Conselho IA');
+    expect(minute.aiGenerated).toBe(true);
   });
 
-  it('usa fallback determinístico quando a IA devolve lixo', async () => {
-    const { deps } = makeDeps({
+  it('grava a ata sem parecer (aiGenerated false) quando a IA devolve lixo', async () => {
+    const { deps, upsertMinute } = makeDeps({
       interactions: [interaction()],
       ai: 'não é json',
       fallback: false,
     });
     const minute = await generateMinute(teacher, { agendaId: 'ag1', studentId: 'stu1' }, deps);
-    expect(minute.rawSummary.length).toBeGreaterThan(0);
-    expect(minute.actionableAdvice.length).toBeGreaterThan(0);
+    expect(minute.rawSummary).toBe('');
+    expect(minute.actionableAdvice).toBe('');
+    expect(minute.aiGenerated).toBe(false);
+    expect(minute.totalQuestionsAsked).toBe(1);
+    expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ rawSummary: '', actionableAdvice: '' }));
+  });
+
+  it('grava a ata sem parecer quando o provedor devolve o stream de fallback', async () => {
+    const { deps } = makeDeps({ interactions: [interaction()], ai: '{"rawSummary":"x","actionableAdvice":"y"}' });
+    const minute = await generateMinute(teacher, { agendaId: 'ag1', studentId: 'stu1' }, deps);
+    expect(minute.aiGenerated).toBe(false);
+    expect(minute.rawSummary).toBe('');
   });
 });
 

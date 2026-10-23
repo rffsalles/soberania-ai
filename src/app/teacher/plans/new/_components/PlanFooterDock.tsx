@@ -22,7 +22,7 @@ export function PlanFooterDock({
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 glass rounded-xl border border-slate-200 dark:border-slate-800">
       <span className="text-xs text-slate-500 dark:text-slate-400">
-        {saveStatusMessage || '● Rascunho integrado com acervo acadêmico local'}
+        {saveStatusMessage}
       </span>
 
       <div className="flex items-center gap-3 w-full sm:w-auto justify-end">

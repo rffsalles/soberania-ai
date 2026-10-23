@@ -140,6 +140,16 @@ async function readPdfInfo(parser: PDFParse): Promise<ParsedDocumentResult['info
  * Realiza a extração de conteúdo estruturado de documentos (PDF, DOCX, TXT, MD)
  * Executa fallback automático de OCR se o texto vetorial do PDF for escaneado/vazio
  */
+/** Formatos sem paginação própria (DOCX, TXT, MD) são fatiados em trechos de tamanho fixo. */
+export const SYNTHETIC_PAGE_CHARS_DOCX = 1000;
+export const SYNTHETIC_PAGE_CHARS_TEXT = 1200;
+/** Rótulo de capítulo dos trechos sintéticos; a citação omite "pág." para eles (ver `formatCitation`). */
+export const SYNTHETIC_CHAPTER_PATTERN = /^Trecho \d+$/;
+
+function syntheticPage(pageNumber: number, text: string): RawDocumentPage {
+  return { pageNumber, chapter: `Trecho ${pageNumber}`, section: `Trecho ${pageNumber}`, text: text.trim() };
+}
+
 export async function parseDocumentFile(
   buffer: Buffer,
   filename: string,
@@ -220,14 +230,10 @@ export async function parseDocumentFile(
 
       await parser.destroy().catch(() => {});
 
+      // Sem texto extraível devolve zero páginas: nada de indexar o nome do arquivo como conteúdo.
       return {
-        totalPages: numPages || pages.length || 1,
-        pages: pages.length > 0 ? pages : [{
-          pageNumber: 1,
-          chapter: 'Documento Completo',
-          section: 'Texto Principal',
-          text: (textResult.text || '').trim() || `Documento PDF: ${filename}`,
-        }],
+        totalPages: numPages || pages.length,
+        pages,
         isOcrApplied,
         ocrPartial,
         detectedMimeType: 'application/pdf',
@@ -253,36 +259,19 @@ export async function parseDocumentFile(
       const cleanPara = para.trim();
       if (!cleanPara) continue;
 
-      if (currentText.length + cleanPara.length > 1000 && currentText.length > 0) {
-        pages.push({
-          pageNumber: currentPage++,
-          chapter: `Seção ${currentPage - 1}`,
-          section: `Página ${currentPage - 1}`,
-          text: currentText.trim(),
-        });
+      if (currentText.length + cleanPara.length > SYNTHETIC_PAGE_CHARS_DOCX && currentText.length > 0) {
+        pages.push(syntheticPage(currentPage++, currentText));
         currentText = cleanPara;
       } else {
         currentText = currentText ? `${currentText}\n\n${cleanPara}` : cleanPara;
       }
     }
 
-    if (currentText.trim()) {
-      pages.push({
-        pageNumber: currentPage,
-        chapter: `Seção ${currentPage}`,
-        section: `Página ${currentPage}`,
-        text: currentText.trim(),
-      });
-    }
+    if (currentText.trim()) pages.push(syntheticPage(currentPage, currentText));
 
     return {
-      totalPages: pages.length || 1,
-      pages: pages.length > 0 ? pages : [{
-        pageNumber: 1,
-        chapter: 'Documento Word',
-        section: 'Texto Principal',
-        text: fullText || `Documento DOCX: ${filename}`,
-      }],
+      totalPages: pages.length,
+      pages,
       isOcrApplied: false,
       detectedMimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     };
@@ -290,26 +279,15 @@ export async function parseDocumentFile(
 
   // TXT ou Markdown
   const textContent = buffer.toString('utf-8').trim();
-  const chunkSize = 1200;
   let pageNum = 1;
 
-  for (let i = 0; i < textContent.length; i += chunkSize) {
-    pages.push({
-      pageNumber: pageNum++,
-      chapter: ext === 'md' ? 'Notas / Documentação' : 'Texto',
-      section: `Página ${pageNum - 1}`,
-      text: textContent.slice(i, i + chunkSize).trim(),
-    });
+  for (let i = 0; i < textContent.length; i += SYNTHETIC_PAGE_CHARS_TEXT) {
+    pages.push(syntheticPage(pageNum++, textContent.slice(i, i + SYNTHETIC_PAGE_CHARS_TEXT)));
   }
 
   return {
-    totalPages: pages.length || 1,
-    pages: pages.length > 0 ? pages : [{
-      pageNumber: 1,
-      chapter: 'Texto',
-      section: 'Documento',
-      text: textContent || filename,
-    }],
+    totalPages: pages.length,
+    pages,
     isOcrApplied: false,
     detectedMimeType: ext === 'md' ? 'text/markdown' : 'text/plain',
   };

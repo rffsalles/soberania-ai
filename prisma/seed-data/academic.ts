@@ -26,6 +26,9 @@ export const DEMO_SUBJECT = {
 export const DEMO_PERIOD_CODE = '2026.1';
 
 export const DEMO_TEACHING_PLAN = {
+  totalHours: 80,
+  theoryHours: 60,
+  practiceHours: 20,
   status: PLAN_STATUS.DRAFT,
   syllabus:
     'Visão geral da arquitetura de SGBDs relacionais e vetoriais. Modelagem conceitual com Diagramas Entidade-Relacionamento (DER). Mapeamento lógico para esquemas relacionais normalizados (1FN até 3FN). Álgebra Relacional e Linguagem SQL DDL/DML avançada. Transações com propriedades ACID, índices B-Tree/Hash e integração com acervos RAG estruturados.',

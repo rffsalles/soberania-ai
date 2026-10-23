@@ -58,10 +58,10 @@ describe('getApplianceStatus', () => {
     expect(res.windows.last15m.calls).toBe(0);
   });
 
-  it('provider mock é saudável sem checar a rede', async () => {
+  it('provider mock não é saudável (não há inferência real) e não sonda a rede', async () => {
     const f = makeDeps({ getProviderConfig: () => ({ provider: 'mock', model: 'm', baseUrl: 'u', apiKey: '' }) });
     const res = await getApplianceStatus(ADMIN_VIEW, f.deps);
-    expect(res.healthy).toBe(true);
+    expect(res.healthy).toBe(false);
     expect(f.deps.checkHealth).not.toHaveBeenCalled();
   });
 

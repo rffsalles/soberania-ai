@@ -1,8 +1,12 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 
-export function createDraft(data: Prisma.DraftSubmissionUncheckedCreateInput) {
-  return db.draftSubmission.create({ data });
+type DraftCreateInput = Omit<Prisma.DraftSubmissionUncheckedCreateInput, 'rubricScores'> & {
+  rubricScores: Prisma.InputJsonValue | null;
+};
+
+export function createDraft({ rubricScores, ...data }: DraftCreateInput) {
+  return db.draftSubmission.create({ data: { ...data, rubricScores: rubricScores ?? Prisma.DbNull } });
 }
 
 export function listDraftsByStudent(agendaId: string, studentId: string) {

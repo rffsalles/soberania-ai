@@ -3,7 +3,8 @@ import { AgendaStatus, AgendaType, InteractionType, Role } from '@prisma/client'
 import { DomainError } from '@/lib/api/domain-error';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import type { AIMessage, InferenceTelemetry, StreamChunk } from '@/lib/ai-provider';
-import { chatWithTutor, type ChatDeps } from '../chat-service';
+import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
+import { chatWithTutor, startChat, type ChatDeps } from '../chat-service';
 
 const NOW = new Date('2026-10-20T12:00:00.000Z');
 const user = { id: 'stu1', role: Role.STUDENT, classId: 'c1' };
@@ -127,7 +128,7 @@ describe('chatWithTutor', () => {
   });
 
   it('sucesso grava interação e log de inferência', async () => {
-    const f = makeDeps({ fallback: true });
+    const f = makeDeps({ fallback: false });
     const res = await chatWithTutor(
       user,
       { agendaId: 'ag1', message: 'explique join', videoTimestampSeconds: 42 },
@@ -135,7 +136,7 @@ describe('chatWithTutor', () => {
     );
     expect(res.reply).toBe('Qual a diferença entre INNER e LEFT JOIN?');
     expect(res.isSocraticChallenge).toBe(true);
-    expect(res.fallback).toBe(true);
+    expect(res.fallback).toBe(false);
     expect(res.interactionId).toBe('int1');
     expect(f.createInteraction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -159,10 +160,26 @@ describe('chatWithTutor', () => {
         promptTokens: 10,
         completionTokens: 5,
         externalTrafficBytes: 0,
-        fallback: true,
+        fallback: false,
         agendaType: AgendaType.CLASSROOM,
       })
     );
+  });
+
+  it('fallback do provedor: devolve aviso de indisponibilidade, não repassa tokens nem grava interação', async () => {
+    const f = makeDeps({ fallback: true });
+    const tokens: string[] = [];
+    const res = await (await startChat(user, { agendaId: 'ag1', message: 'explique join' }, f.deps)).run((t) => {
+      tokens.push(t);
+    });
+    expect(res.reply).toBe(TUTOR_UNAVAILABLE_MESSAGE);
+    expect(res.fallback).toBe(true);
+    expect(res.isSocraticChallenge).toBe(false);
+    expect(res.interactionId).toBeNull();
+    expect(res.citations).toEqual([]);
+    expect(tokens).toEqual([]);
+    expect(f.createInteraction).not.toHaveBeenCalled();
+    expect(f.createInferenceLog).toHaveBeenCalledWith(expect.objectContaining({ fallback: true }));
   });
 
   it('persistInteraction false não grava interação, mas ainda registra o log de inferência', async () => {

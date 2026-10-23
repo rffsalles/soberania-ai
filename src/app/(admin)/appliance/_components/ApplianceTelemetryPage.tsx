@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ProviderBadge } from '@/components/layout/provider-badge';
 
 export default function ApplianceTelemetryPage() {
   const [status, setStatus] = React.useState<ApplianceStatus | null>(null);
@@ -59,9 +60,7 @@ export default function ApplianceTelemetryPage() {
                 <Server className="h-3.5 w-3.5" />
                 Console de Administração do Appliance
               </Badge>
-              <Badge variant="outline" className="text-xs font-mono text-emerald-600 border-emerald-300">
-                100% SOBERANO & AIR-GAPPED
-              </Badge>
+              <ProviderBadge />
             </div>
             <h1 className="text-2xl font-bold font-heading text-slate-900 dark:text-white">
               Telemetria de Hardware, Inferência & Auditoria LGPD

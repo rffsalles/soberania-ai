@@ -358,7 +358,7 @@ export default function TeacherReportsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 dark:text-slate-300 max-w-sm">
-                      {m.rawSummary}
+                      {m.aiGenerated ? m.rawSummary : <span className="text-amber-600">Parecer pendente (IA indisponível)</span>}
                     </TableCell>
                   </TableRow>
                 ))}

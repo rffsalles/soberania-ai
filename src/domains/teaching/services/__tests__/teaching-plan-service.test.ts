@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { updateTeachingPlanSchema } from '@/lib/validators/teaching-plan.validator';
-import { PLAN_STATUS } from '@/lib/constants/teaching';
+import { DEFAULT_NDE_COMPLIANCE_STATUS, PLAN_STATUS } from '@/lib/constants/teaching';
 import {
   createPlan,
   getPlan,
@@ -57,10 +57,25 @@ describe('teaching-plan-service', () => {
     expect(await listPlansForTeacher(admin, {}, deps)).toHaveLength(2);
   });
 
-  it('createPlan stores teacherId = user.id and defaults', async () => {
+  it('createPlan stores teacherId = user.id, the given hours and a pending NDE status', async () => {
     const { deps, plans } = makeDeps();
-    await createPlan(teacher, { subjectId: 's1', syllabus: 'x' }, deps);
-    expect(plans[0]).toMatchObject({ teacherId: 't1', status: PLAN_STATUS.DRAFT, totalHours: 80 });
+    await createPlan(teacher, { subjectId: 's1', syllabus: 'x', totalHours: '72', theoryHours: 48, practiceHours: 24 }, deps);
+    expect(plans[0]).toMatchObject({
+      teacherId: 't1',
+      status: PLAN_STATUS.DRAFT,
+      totalHours: 72,
+      theoryHours: 48,
+      practiceHours: 24,
+      ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS,
+    });
+  });
+
+  it('createPlan rejects missing hours with 400 instead of inventing 80/60/20', async () => {
+    const { deps } = makeDeps();
+    await expect(createPlan(teacher, { subjectId: 's1', syllabus: 'x' }, deps)).rejects.toMatchObject({ status: 400 });
+    await expect(
+      createPlan(teacher, { subjectId: 's1', syllabus: 'x', totalHours: 80, theoryHours: 60 }, deps)
+    ).rejects.toMatchObject({ status: 400 });
   });
 
   it('createPlan rejects missing subject or syllabus with 400', async () => {

@@ -97,8 +97,9 @@ export function SubjectFormModal({
         name,
         code,
         courseName,
-        academicLevel: 'HIGHER_EDUCATION',
-        academicYear: 2026,
+        // Editar preserva o que está salvo; criar usa o ano corrente.
+        academicLevel: editingSubject?.academicLevel ?? 'HIGHER_EDUCATION',
+        academicYear: editingSubject?.academicYear ?? new Date().getFullYear(),
         teacherIds: selectedTeachers,
         // Sem turma a disciplina não gera agendas para alunos; null desvincula.
         classId: classId || null,

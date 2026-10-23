@@ -17,7 +17,8 @@ export type MetricInteraction = {
 
 const SCORE_MIN = 0;
 const SCORE_MAX = 100;
-const ENGAGEMENT_BASE = 40;
+/** Sem interação o engajamento é 0: nenhum ponto de partida inventado. */
+const ENGAGEMENT_BASE = 0;
 const ENGAGEMENT_PER_QUESTION = 6;
 const ENGAGEMENT_PER_CHALLENGE = 10;
 const ENGAGEMENT_PER_BLOCK = 15;

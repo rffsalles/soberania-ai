@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AgendaType, Role } from '@prisma/client';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
-import { DEFAULT_DRAFT_RUBRIC, DRAFT_FALLBACK_SCORE, DRAFT_MAX_CHARS, DRAFT_MIN_CHARS } from '@/lib/constants/assessments';
+import { DEFAULT_DRAFT_RUBRIC, DRAFT_MAX_CHARS, DRAFT_MIN_CHARS } from '@/lib/constants/assessments';
 import { listMyDrafts, submitDraft, type DraftDeps } from '../draft-service';
 
 const student = { id: 's1', role: Role.STUDENT, classId: 'c1' };
@@ -11,8 +11,19 @@ const END = new Date('2026-10-20T12:00:00Z');
 const INSIDE = new Date('2026-10-20T11:00:00Z');
 const AFTER = new Date('2026-10-20T13:00:00Z');
 const LONG_TEXT = 'Normalização reduz redundância (SILBERSCHATZ, 2020). '.repeat(10).trim();
+const AI_OK = JSON.stringify({
+  feedback: 'Bom texto.',
+  rubricScores: [
+    { criterion: 'Coesão', score: 8, comment: 'a' },
+    { criterion: 'Coerência', score: 7, comment: 'b' },
+    { criterion: 'Fontes', score: 9, comment: 'c' },
+    { criterion: 'Argumentação', score: 6, comment: 'd' },
+  ],
+});
 
-function makeDeps(opts: { now?: Date; assessmentId?: string; rubrics?: unknown; type?: AgendaType } = {}) {
+function makeDeps(
+  opts: { now?: Date; assessmentId?: string; rubrics?: unknown; type?: AgendaType; aiText?: string } = {}
+) {
   const agenda = {
     id: 'ag1',
     title: 'Orientação',
@@ -29,7 +40,7 @@ function makeDeps(opts: { now?: Date; assessmentId?: string; rubrics?: unknown; 
   const createDraft = vi.fn(async (data: { content: string }) => ({ id: 'd1', createdAt: INSIDE, ...data }));
   const parseFile = vi.fn(async () => LONG_TEXT);
   const streamChat = vi.fn(async function* () {
-    yield { token: 'sem json', isComplete: true, fallback: true };
+    yield { token: opts.aiText ?? AI_OK, isComplete: true, fallback: false };
   });
   const deps: DraftDeps = {
     getAgenda: async () => agenda,
@@ -55,8 +66,9 @@ describe('submitDraft', () => {
   it('usa a rubrica padrão de 3 critérios quando a agenda não tem avaliação', async () => {
     const { deps, createDraft } = makeDeps();
     const result = await submitDraft(student, { agendaId: 'ag1', content: LONG_TEXT }, deps);
+    expect(result.fallback).toBe(false);
     expect(result.rubricScores).toHaveLength(DEFAULT_DRAFT_RUBRIC.length);
-    expect(result.rubricScores.map((r) => r.criterion)).toEqual(DEFAULT_DRAFT_RUBRIC.map((r) => r.criterion));
+    expect(result.rubricScores!.map((r) => r.criterion)).toEqual(DEFAULT_DRAFT_RUBRIC.map((r) => r.criterion));
     expect(createDraft).toHaveBeenCalledWith(
       expect.objectContaining({ agendaId: 'ag1', studentId: 's1', content: LONG_TEXT })
     );
@@ -66,7 +78,7 @@ describe('submitDraft', () => {
     const rubrics = [{ criterion: 'Argumentação', description: 'x', weight: 2 }];
     const { deps } = makeDeps({ assessmentId: 'as1', rubrics });
     const result = await submitDraft(student, { agendaId: 'ag1', content: LONG_TEXT }, deps);
-    expect(result.rubricScores.map((r) => r.criterion)).toEqual(['Argumentação']);
+    expect(result.rubricScores!.map((r) => r.criterion)).toEqual(['Argumentação']);
   });
 
   it('converte o arquivo .docx antes de avaliar', async () => {
@@ -105,7 +117,7 @@ describe('submitDraft com IA', () => {
       yield { token: json, isComplete: true, fallback };
     };
 
-  it('limita nota a 10, descarta critério inventado e preenche faltante', async () => {
+  it('limita nota a 10, descarta critério inventado e deixa o faltante sem nota', async () => {
     const { deps } = makeDeps();
     const reply = `Segue:\n\`\`\`json\n${JSON.stringify({
       feedback: 'Bom texto.',
@@ -122,18 +134,28 @@ describe('submitDraft com IA', () => {
     expect(result.feedback).toBe('Bom texto.');
     expect(result.rubricScores).toEqual([
       { criterion: 'Coesão', score: 10, comment: 'Ótima' },
-      expect.objectContaining({ criterion: 'Coerência', score: DRAFT_FALLBACK_SCORE }),
+      expect.objectContaining({ criterion: 'Coerência', score: null }),
       { criterion: 'Fontes', score: 7.3, comment: 'Ok' },
     ]);
   });
 
-  it('usa o fallback quando o JSON é inválido', async () => {
-    const { deps } = makeDeps();
+  it('registra o rascunho sem feedback nem notas quando o JSON é inválido', async () => {
+    const { deps, createDraft } = makeDeps();
     const result = await submitDraft(student, { agendaId: 'ag1', content: LONG_TEXT }, {
       ...deps,
       streamChat: aiReply('{ não é json }'),
     });
-    expect(result.rubricScores.every((r) => r.score === DRAFT_FALLBACK_SCORE)).toBe(true);
+    expect(result).toMatchObject({ fallback: true, feedback: null, rubricScores: null });
+    expect(createDraft).toHaveBeenCalledWith(expect.objectContaining({ feedback: null, rubricScores: null }));
+  });
+
+  it('registra o rascunho sem feedback nem notas quando o provedor devolve o stream de fallback', async () => {
+    const { deps } = makeDeps();
+    const result = await submitDraft(student, { agendaId: 'ag1', content: LONG_TEXT }, {
+      ...deps,
+      streamChat: aiReply(AI_OK, true),
+    });
+    expect(result).toMatchObject({ fallback: true, feedback: null, rubricScores: null });
   });
 
   it('rejeita texto acima do limite (400)', async () => {

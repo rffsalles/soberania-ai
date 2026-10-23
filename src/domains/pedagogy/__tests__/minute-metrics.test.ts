@@ -27,8 +27,9 @@ function make(o: Partial<MetricInteraction>): MetricInteraction {
 
 describe('minute-metrics', () => {
   it('computeEngagement aplica a fórmula e limita a 0..100', () => {
-    expect(computeEngagement({ questions: 3, challengesAnswered: 2, guardrailBlocks: 0 })).toBe(78);
-    expect(computeEngagement({ questions: 0, challengesAnswered: 0, guardrailBlocks: 2 })).toBe(10);
+    expect(computeEngagement({ questions: 0, challengesAnswered: 0, guardrailBlocks: 0 })).toBe(0);
+    expect(computeEngagement({ questions: 3, challengesAnswered: 2, guardrailBlocks: 0 })).toBe(38);
+    expect(computeEngagement({ questions: 1, challengesAnswered: 0, guardrailBlocks: 2 })).toBe(0);
     expect(computeEngagement({ questions: 0, challengesAnswered: 0, guardrailBlocks: 10 })).toBe(0);
     expect(computeEngagement({ questions: 50, challengesAnswered: 0, guardrailBlocks: 0 })).toBe(100);
   });

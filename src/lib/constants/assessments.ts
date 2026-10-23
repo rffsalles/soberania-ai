@@ -12,5 +12,4 @@ export const DEFAULT_DRAFT_RUBRIC = ['Coesão', 'Coerência', 'Fontes'].map((cri
 export const DRAFT_MIN_CHARS = 200;
 export const DRAFT_MAX_CHARS = 20000;
 export const DRAFT_MAX_SCORE = 10;
-export const DRAFT_FALLBACK_SCORE = 6;
 export const DRAFT_ALLOWED_EXTENSIONS = ['.txt', '.md', '.docx'] as const;

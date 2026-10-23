@@ -6,7 +6,14 @@ export const PLAN_STATUS = {
 
 export type PlanStatus = (typeof PLAN_STATUS)[keyof typeof PLAN_STATUS];
 
-export const DEFAULT_NDE_COMPLIANCE_STATUS = '100% OK - Alinhado DCNs';
+/** Parecer NDE/DCN: nenhum plano nasce "alinhado"; o status só muda por decisão humana. */
+export const NDE_COMPLIANCE_STATUS = {
+  PENDING: 'Pendente de Avaliação Colegiado',
+  ADJUSTING: 'Em Adequação com NDE',
+  OK: '100% OK - Alinhado DCNs',
+  PERIODIC_REVIEW: 'Revisão Periódica',
+} as const;
+export const DEFAULT_NDE_COMPLIANCE_STATUS = NDE_COMPLIANCE_STATUS.PENDING;
 
 export const LESSON_MEDIA_TYPE = { NONE: 'NONE', YOUTUBE: 'YOUTUBE', S3_UPLOAD: 'S3_UPLOAD' } as const;
 export type LessonMediaType = (typeof LESSON_MEDIA_TYPE)[keyof typeof LESSON_MEDIA_TYPE];

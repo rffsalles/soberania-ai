@@ -9,6 +9,7 @@ import type { InteractionInput, LastInteraction } from '@/domains/pedagogy/servi
 import { createInferenceLog } from '@/domains/telemetry/services/inference-log-repository';
 import type { InferenceLogInput } from '@/domains/telemetry/services/inference-log-repository';
 import { aiProvider, type AICompletionOptions, type AIProviderType, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
+import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
 import { startTutorPipeline } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
 
@@ -32,6 +33,7 @@ export type ChatResult = {
   isSocraticChallenge: boolean;
   blockedByExamGuardrail: boolean;
   latencyMs: number;
+  /** true = o provedor não respondeu; `reply` é o aviso de indisponibilidade e nada foi gravado como interação. */
   fallback: boolean;
   interactionId: string | null;
   /** Veredito do juiz sobre a resposta do aluno ao desafio anterior; null quando não houve desafio ou juiz. */
@@ -102,6 +104,32 @@ export async function chatWithTutor(
   return (await startChat(user, input, deps)).run();
 }
 
+async function logInference(
+  deps: ChatDeps,
+  telemetry: StreamChunk['telemetry'],
+  fallback: boolean,
+  agendaType: AgendaDTO['type']
+) {
+  if (!telemetry) return;
+  // Interação já salva: falha no log de inferência não pode derrubar o chat.
+  try {
+    await deps.createInferenceLog({
+      provider: telemetry.provider,
+      model: telemetry.model,
+      ttftMs: Math.round(telemetry.ttftMs),
+      totalLatencyMs: Math.round(telemetry.totalLatencyMs),
+      tokensPerSecond: telemetry.tokensPerSecond,
+      promptTokens: telemetry.promptTokens,
+      completionTokens: telemetry.completionTokens,
+      externalTrafficBytes: Math.round(telemetry.externalTrafficBytes),
+      fallback,
+      agendaType,
+    });
+  } catch (err) {
+    console.warn('[chat] falha ao gravar InferenceLog', err);
+  }
+}
+
 async function runChat(
   user: AgendaActor,
   agenda: AgendaDTO,
@@ -155,14 +183,29 @@ async function runChat(
   let fallback = false;
   let telemetry: StreamChunk['telemetry'];
   for await (const chunk of start.stream) {
-    if (chunk.token) {
+    if (chunk.fallback) fallback = true;
+    // Tokens do stream determinístico nunca chegam ao aluno como se fossem da tutora.
+    if (chunk.token && !chunk.fallback) {
       reply += chunk.token;
       onToken?.(chunk.token);
     }
-    if (chunk.fallback) fallback = true;
     if (chunk.telemetry) telemetry = chunk.telemetry;
   }
   reply = reply.trim();
+
+  if (fallback) {
+    await logInference(deps, telemetry, true, agenda.type);
+    return {
+      reply: TUTOR_UNAVAILABLE_MESSAGE,
+      citations: [],
+      isSocraticChallenge: false,
+      blockedByExamGuardrail: false,
+      latencyMs: Date.now() - startedAt,
+      fallback: true,
+      interactionId: null,
+      wasCorrect: null,
+    };
+  }
 
   const isSocraticChallenge = isSocraticChallengeText(reply);
   const wasCorrect = previous?.isSocraticChallenge
@@ -184,25 +227,7 @@ async function runChat(
     wasCorrect,
     latencyMs,
   });
-  if (telemetry) {
-    // Interação já salva: falha no log de inferência não pode derrubar o chat.
-    try {
-      await deps.createInferenceLog({
-        provider: telemetry.provider,
-        model: telemetry.model,
-        ttftMs: Math.round(telemetry.ttftMs),
-        totalLatencyMs: Math.round(telemetry.totalLatencyMs),
-        tokensPerSecond: telemetry.tokensPerSecond,
-        promptTokens: telemetry.promptTokens,
-        completionTokens: telemetry.completionTokens,
-        externalTrafficBytes: Math.round(telemetry.externalTrafficBytes),
-        fallback,
-        agendaType: agenda.type,
-      });
-    } catch (err) {
-      console.warn('[chat] falha ao gravar InferenceLog', err);
-    }
-  }
+  await logInference(deps, telemetry, fallback, agenda.type);
 
   return {
     reply,

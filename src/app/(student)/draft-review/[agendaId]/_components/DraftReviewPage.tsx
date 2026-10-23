@@ -20,7 +20,7 @@ interface DraftReviewPageProps {
 
 interface RubricScore {
   criterion: string;
-  score: number;
+  score: number | null;
   comment: string;
 }
 
@@ -32,9 +32,14 @@ interface DraftEntry {
 }
 
 const GENERIC_ERROR = 'Não foi possível concluir a operação. Tente novamente.';
+const AI_UNAVAILABLE =
+  'A Tutora Lucy não estava disponível: o rascunho foi registrado, mas não recebeu feedback nem notas. Envie novamente mais tarde.';
 const ACCEPT = DRAFT_ALLOWED_EXTENSIONS.join(',');
 
 function FeedbackView({ feedback, rubricScores }: { feedback: string | null; rubricScores: RubricScore[] | null }) {
+  if (!feedback && !rubricScores) {
+    return <p className="text-sm text-amber-700 dark:text-amber-300">{AI_UNAVAILABLE}</p>;
+  }
   return (
     <div className="space-y-3">
       {feedback && <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-line">{feedback}</p>}
@@ -52,7 +57,7 @@ function FeedbackView({ feedback, rubricScores }: { feedback: string | null; rub
               <TableRow key={r.criterion}>
                 <TableCell className="font-medium">{r.criterion}</TableCell>
                 <TableCell>
-                  {r.score}/{DRAFT_MAX_SCORE}
+                  {r.score === null ? '—' : `${r.score}/${DRAFT_MAX_SCORE}`}
                 </TableCell>
                 <TableCell className="text-xs text-slate-600 dark:text-slate-300">{r.comment}</TableCell>
               </TableRow>

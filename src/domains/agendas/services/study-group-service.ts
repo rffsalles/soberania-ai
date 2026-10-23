@@ -37,7 +37,7 @@ export type StudyGroupDeps = {
     createMessage(data: realRepo.NewStudyGroupMessage): Promise<StudyGroupMessageRecord>;
     findLastMessage(agendaId: string): Promise<StudyGroupMessageRecord | null>;
   };
-  chatWithTutor(user: AgendaActor, input: ChatInput): Promise<Pick<ChatResult, 'reply'>>;
+  chatWithTutor(user: AgendaActor, input: ChatInput): Promise<Pick<ChatResult, 'reply' | 'fallback'>>;
   now: () => Date;
 };
 
@@ -109,7 +109,9 @@ export async function postMessage(
   if (!mentionsTutor(content)) return { message };
 
   try {
-    const { reply } = await deps.chatWithTutor(user, { agendaId, message: content, history: toHistory(previous) });
+    const { reply, fallback } = await deps.chatWithTutor(user, { agendaId, message: content, history: toHistory(previous) });
+    // Sem IA real não há resposta da tutora a gravar: o aviso de indisponibilidade não é uma mensagem dela.
+    if (fallback) return { message };
     const tutorSaved = await deps.repo.createMessage({ agendaId, authorId: null, content: reply, isAi: true });
     return { message, tutorReply: toDTO(tutorSaved) };
   } catch (err) {
@@ -162,12 +164,13 @@ async function intervene(
   const prompt =
     `O grupo está em silêncio há mais de ${STUDY_GROUP_STALEMATE_MINUTES} minutos. ` +
     `Faça uma pergunta socrática curta para destravar a discussão sobre: ${agenda.title}`;
-  const { reply } = await deps.chatWithTutor(user, {
+  const { reply, fallback } = await deps.chatWithTutor(user, {
     agendaId,
     message: prompt,
     history: toHistory(recent),
     persistInteraction: false,
   });
+  if (fallback) return null;
   // Outra mensagem pode ter chegado durante a geração: nesse caso a intervenção perdeu o sentido.
   const latest = await deps.repo.findLastMessage(agendaId);
   if (!latest || latest.id !== last.id) return null;

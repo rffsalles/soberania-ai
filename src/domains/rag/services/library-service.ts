@@ -116,13 +116,17 @@ export async function uploadAndIngest(
 
   const categoryIds = await registerCategories(categoriesList, deps);
 
+  // Parse antes do upload: um arquivo sem texto extraível não vira material nem ocupa o storage.
+  const parsed = await parseDocumentFile(file.buffer, file.name);
+  if (parsed.pages.length === 0) {
+    throw new DomainError(400, 'Não foi possível extrair texto do arquivo enviado.');
+  }
+
   const stored = await deps.storage.uploadFile(
     file.buffer,
     validation.sanitizedFilename,
     validation.mimeType
   );
-
-  const parsed = await parseDocumentFile(file.buffer, file.name);
 
   const material = await deps.materials.createMaterial({
     title,

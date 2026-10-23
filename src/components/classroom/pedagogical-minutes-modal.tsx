@@ -101,8 +101,8 @@ export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: Pedago
           <div>
             <span className="text-xs text-slate-500 font-medium">Status</span>
             <div className="pt-0.5">
-              <Badge variant="teal" className="text-xs">
-                Ata Homologada
+              <Badge variant={minute.aiGenerated ? 'teal' : 'amber'} className="text-xs">
+                {minute.aiGenerated ? 'Ata emitida' : 'Parecer pendente'}
               </Badge>
             </div>
           </div>
@@ -180,12 +180,21 @@ export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: Pedago
             <BookOpen className="h-4 w-4" />
             Parecer Formativo da Tutora Lucy (Apoio Docente)
           </span>
-          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-            {minute.rawSummary}
-          </p>
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-brand-orange font-medium">
-            💡 <strong>Próximo Passo:</strong> {minute.actionableAdvice}
-          </div>
+          {minute.aiGenerated ? (
+            <>
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                {minute.rawSummary}
+              </p>
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-brand-orange font-medium">
+                💡 <strong>Próximo Passo:</strong> {minute.actionableAdvice}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+              A IA não estava disponível quando esta ata foi gerada: as métricas acima são reais, mas o parecer
+              textual não foi redigido. Gere a ata novamente com o provedor ativo.
+            </p>
+          )}
         </div>
       </div>
       )}

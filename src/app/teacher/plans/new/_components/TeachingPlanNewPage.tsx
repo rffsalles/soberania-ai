@@ -9,12 +9,38 @@ import { PlanNdeComplianceCard } from './PlanNdeComplianceCard';
 import { PlanTelemetryCard } from './PlanTelemetryCard';
 import { PlanFooterDock } from './PlanFooterDock';
 import { ReferenceSelectionModal } from './ReferenceSelectionModal';
+import { DEFAULT_NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
 import type {
   SubjectOption,
   AcademicPeriodOption,
   DocumentReference,
   NdeComplianceData,
 } from '../types';
+
+/**
+ * A bibliografia é salva como texto "Título (Autor) [Categoria]"; ao reabrir o plano, procura cada obra no acervo
+ * pelo título para recuperar o material real (id, autor, categoria). O que não existe mais no acervo fica sem id.
+ */
+async function restoreReferences(bibliography: string[]): Promise<DocumentReference[]> {
+  const parsed = bibliography.map((item, index) => ({
+    id: `ref-loaded-${index}`,
+    title: item.replace(/\s*\(.*?\).*/, '').trim() || item,
+    author: item.match(/\((.*?)\)/)?.[1] || '',
+    category: item.match(/\[(.*?)\]/)?.[1] || 'Geral',
+  }));
+  try {
+    const res = await fetch('/api/v1/library/documents');
+    const data = await res.json();
+    const library: DocumentReference[] = data.success && Array.isArray(data.documents) ? data.documents : [];
+    return parsed.map((ref) => {
+      const match = library.find((doc) => doc.title.trim().toLowerCase() === ref.title.toLowerCase());
+      return match ? { ...ref, id: match.id, author: match.author, category: match.category } : ref;
+    });
+  } catch (err) {
+    console.warn('Não foi possível conferir as referências no acervo:', err);
+    return parsed;
+  }
+}
 
 export default function TeachingPlanNewPage() {
   const router = useRouter();
@@ -39,12 +65,12 @@ export default function TeachingPlanNewPage() {
   const [methodology, setMethodology] = React.useState('');
   const [citations, setCitations] = React.useState<string[]>([]);
 
-  // Conformidade NDE / MEC
+  // Conformidade NDE / MEC: valores iniciais do formulário, editáveis pelo professor antes de salvar.
   const [ndeCompliance, setNdeCompliance] = React.useState<NdeComplianceData>({
     totalHours: 80,
     theoryHours: 60,
     practiceHours: 20,
-    ndeComplianceStatus: '100% OK - Alinhado DCNs',
+    ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS,
   });
 
   // UI Loading & feedback states
@@ -100,21 +126,13 @@ export default function TeachingPlanNewPage() {
           if (plan.generalObjectives) setGeneralObjectives(plan.generalObjectives);
           if (plan.methodology) setMethodology(plan.methodology);
           if (Array.isArray(plan.basicBibliography) && plan.basicBibliography.length > 0) {
-            const loadedRefs: DocumentReference[] = plan.basicBibliography.map(
-              (item: string, index: number) => ({
-                id: `ref-loaded-${index}`,
-                title: item.replace(/\s*\(.*?\).*/, '').trim() || item,
-                author: item.match(/\((.*?)\)/)?.[1] || 'Autor no acervo',
-                category: item.match(/\[(.*?)\]/)?.[1] || 'Geral',
-              })
-            );
-            setReferences(loadedRefs);
+            void restoreReferences(plan.basicBibliography).then(setReferences);
           }
           setNdeCompliance({
-            totalHours: plan.totalHours || 80,
-            theoryHours: plan.theoryHours || 60,
-            practiceHours: plan.practiceHours || 20,
-            ndeComplianceStatus: plan.ndeComplianceStatus || '100% OK - Alinhado DCNs',
+            totalHours: plan.totalHours ?? 0,
+            theoryHours: plan.theoryHours ?? 0,
+            practiceHours: plan.practiceHours ?? 0,
+            ndeComplianceStatus: plan.ndeComplianceStatus || DEFAULT_NDE_COMPLIANCE_STATUS,
           });
         }
       })
@@ -143,17 +161,9 @@ export default function TeachingPlanNewPage() {
     return undefined;
   }, [selectedSubjectId, selectedPeriodId, references.length]);
 
-  // Helper to update citations from selected references
+  // As citações refletem a última geração da IA; ao mudar as referências elas deixam de corresponder.
   const updateCitationsFromReferences = (refs: DocumentReference[]) => {
-    if (refs.length === 0) {
-      setCitations([]);
-      return;
-    }
-    const generated = refs.flatMap((ref, index) => [
-      `[${ref.title} · ${ref.author}, pág. ${24 + (index * 34) % 120}]`,
-      `[${ref.title} · ${ref.author}, pág. ${85 + (index * 19) % 90}]`,
-    ]);
-    setCitations(generated);
+    if (refs.length === 0) setCitations([]);
   };
 
   // Handler: Add references from modal
@@ -193,8 +203,14 @@ export default function TeachingPlanNewPage() {
         body: JSON.stringify({
           subjectName: activeSubject.name,
           courseName: activeSubject.courseName,
-          academicPeriod: activePeriod?.name || '2026.1',
-          selectedReferences: references,
+          academicPeriod: activePeriod?.name,
+          // Referências recarregadas de um plano salvo não têm id de material no acervo.
+          selectedReferences: references.map(({ id, title, author, category }) => ({
+            id: id.startsWith('ref-loaded-') ? undefined : id,
+            title,
+            author,
+            category,
+          })),
         }),
       });
 
@@ -206,14 +222,20 @@ export default function TeachingPlanNewPage() {
           setBloomBadges(data.data.bloomLevels);
         }
         setMethodology(data.data.methodology);
-        if (Array.isArray(data.data.citations) && data.data.citations.length > 0) {
-          setCitations(data.data.citations);
-        }
-        setSaveStatusMessage('Plano fundamentado com sucesso nas referências RAG!');
-        setTimeout(() => setSaveStatusMessage(null), 4000);
+        setCitations(Array.isArray(data.data.citations) ? data.data.citations : []);
+        setSaveStatusMessage(
+          data.data.citations?.length > 0
+            ? 'Sugestão gerada pela IA com base nos trechos do acervo.'
+            : 'Sugestão gerada pela IA. Nenhum trecho indexado foi encontrado para as referências selecionadas.'
+        );
+      } else {
+        setSaveStatusMessage(data.error || 'Falha ao gerar sugestão com a IA.');
       }
+      setTimeout(() => setSaveStatusMessage(null), 6000);
     } catch (err) {
       console.error('Falha ao gerar plano com IA:', err);
+      setSaveStatusMessage('Falha ao contatar o servidor para gerar a sugestão.');
+      setTimeout(() => setSaveStatusMessage(null), 6000);
     } finally {
       setIsGeneratingAI(false);
     }

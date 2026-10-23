@@ -47,7 +47,7 @@ export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps)
                     isTeacher
                       ? 'bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
                       : 'bg-brand-teal text-white',
-                    msg.isGuardrailViolation && 'border-amber-300 bg-amber-50 dark:bg-amber-950/30',
+                    (msg.isGuardrailViolation || msg.fallback) && 'border-amber-300 bg-amber-50 dark:bg-amber-950/30',
                     msg.failed && 'border-rose-300 bg-rose-50 dark:bg-rose-950/30'
                   )}
                 >
@@ -67,6 +67,11 @@ export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps)
                     </div>
                   )}
 
+                  {msg.fallback && (
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                      Tutora indisponível
+                    </p>
+                  )}
                   <p className="whitespace-pre-line">{msg.text}</p>
 
                   {msg.citation && (

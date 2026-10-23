@@ -10,7 +10,6 @@ import {
 } from '@/domains/agendas/services/agenda-service';
 import {
   buildDraftFeedbackMessages,
-  buildFallbackDraftFeedback,
   parseDraftFeedback,
   reconcileRubricScores,
   type DraftFeedback,
@@ -33,7 +32,14 @@ const FEEDBACK_MAX_TOKENS = 2000;
 export type DraftFile = { buffer: Buffer; name: string };
 export type DraftInput = { agendaId: string; content?: string; file?: DraftFile };
 
-export type DraftResult = DraftFeedback & { id: string; createdAt: Date };
+/** Sem IA real o rascunho é registrado com `feedback`/`rubricScores` nulos e `fallback: true`. */
+export type DraftResult = {
+  id: string;
+  createdAt: Date;
+  feedback: string | null;
+  rubricScores: DraftFeedback['rubricScores'] | null;
+  fallback: boolean;
+};
 
 export type DraftDeps = {
   getAgenda(id: string, user: AgendaActor): Promise<AgendaDTO>;
@@ -42,8 +48,8 @@ export type DraftDeps = {
     agendaId: string;
     studentId: string;
     content: string;
-    feedback: string;
-    rubricScores: DraftFeedback['rubricScores'];
+    feedback: string | null;
+    rubricScores: DraftFeedback['rubricScores'] | null;
   }): Promise<{ id: string; createdAt: Date }>;
   listDrafts(agendaId: string, studentId: string): Promise<unknown[]>;
   streamChat(messages: AIMessage[], options?: AICompletionOptions): AsyncGenerator<StreamChunk>;
@@ -90,7 +96,7 @@ async function askModel(content: string, rubric: DraftRubricItem[], deps: DraftD
     }
     return fallback ? null : parseDraftFeedback(text);
   } catch (err) {
-    console.warn('[drafts] falha ao gerar feedback com a IA, usando fallback', err);
+    console.warn('[drafts] falha ao gerar feedback com a IA', err);
     return null;
   }
 }
@@ -113,9 +119,10 @@ export async function submitDraft(
 
   const rubric = await resolveRubric(agenda, deps);
   const ai = await askModel(content, rubric, deps);
+  // Sem IA real o rascunho fica registrado sem avaliação: uma nota inventada seria pior do que nenhuma.
   const evaluation = ai
-    ? { feedback: ai.feedback, rubricScores: reconcileRubricScores(rubric, ai.rubricScores) }
-    : buildFallbackDraftFeedback(content, rubric);
+    ? { feedback: ai.feedback, rubricScores: reconcileRubricScores(rubric, ai.rubricScores), fallback: false }
+    : { feedback: null, rubricScores: null, fallback: true };
 
   const saved = await deps.createDraft({
     agendaId: agenda.id,

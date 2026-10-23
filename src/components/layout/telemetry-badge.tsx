@@ -4,9 +4,8 @@ import * as React from 'react';
 import { Role } from '@prisma/client';
 import { Cpu } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { API_ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils';
-import type { ApplianceStatus } from '@/domains/telemetry/services/telemetry-service';
+import { useApplianceStatus } from './use-appliance-status';
 
 interface TelemetryBadgeProps {
   role?: Role;
@@ -14,21 +13,7 @@ interface TelemetryBadgeProps {
 
 export function TelemetryBadge({ role }: TelemetryBadgeProps) {
   const allowed = role === Role.TEACHER || role === Role.ADMIN;
-  const [status, setStatus] = React.useState<ApplianceStatus | null>(null);
-
-  React.useEffect(() => {
-    if (!allowed) return;
-    let cancelled = false;
-    fetch(API_ROUTES.APPLIANCE_TELEMETRY)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.status) setStatus(data.status as ApplianceStatus);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [allowed]);
+  const status = useApplianceStatus(allowed);
 
   if (!allowed || !status) return null;
 

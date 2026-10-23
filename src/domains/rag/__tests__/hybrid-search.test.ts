@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EmbeddingUnavailableError } from '@/lib/embeddings';
-import { executeHybridSearch, rrfMerge, RRF_K, type HybridSearchDeps } from '../hybrid-search';
+import { executeHybridSearch, formatCitation, rrfMerge, RRF_K, type HybridSearchDeps } from '../hybrid-search';
 import { RAG_MAX_TOP_K } from '../constants';
 import type { DidacticChunk } from '../types';
 
@@ -132,5 +132,10 @@ describe('executeHybridSearch', () => {
     const result = await executeHybridSearch({ query: 'nada' }, deps);
     expect(result.chunks).toEqual([]);
     expect(result.primaryCitation).toBeUndefined();
+  });
+
+  it('formatCitation omite "pág." para trechos sintéticos de DOCX/TXT/MD', () => {
+    expect(formatCitation({ bookTitle: 'Apostila', chapter: 'Cap. 2: ER', pageNumber: 31 })).toBe('[Apostila · Cap. 2, pág. 31]');
+    expect(formatCitation({ bookTitle: 'Apostila', chapter: 'Trecho 3', pageNumber: 3 })).toBe('[Apostila · Trecho 3]');
   });
 });

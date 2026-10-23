@@ -15,7 +15,7 @@ export const upsertSubjectSchema = z.object({
   academicLevel: z
     .enum(['HIGHER_EDUCATION', 'HIGH_SCHOOL', 'ELEMENTARY'])
     .default('HIGHER_EDUCATION'),
-  academicYear: z.coerce.number().int().default(2026),
+  academicYear: z.coerce.number().int().default(() => new Date().getFullYear()),
   teacherIds: z.array(z.string()).default([]),
   // Turma que recebe as agendas da disciplina; null desvincula, ausente mantém a atual.
   classId: z.string().cuid('Turma inválida').nullable().optional(),

@@ -17,6 +17,7 @@ function minute(studentId: string, struggled: string[]): MinuteDTO {
     socraticChallengesAnswered: 1,
     rawSummary: '',
     actionableAdvice: '',
+    aiGenerated: false,
     createdAt: '2026-10-20T10:00:00.000Z',
     subjectName: 'BD',
     className: 'ADS-3A',

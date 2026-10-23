@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Clock, AlertCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
 import type { NdeComplianceData } from '../types';
 
 interface PlanNdeComplianceCardProps {
@@ -88,10 +89,11 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
             onChange={(e) => handleFieldChange('ndeComplianceStatus', e.target.value)}
             className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1.5 font-medium cursor-pointer text-slate-900 dark:text-white"
           >
-            <option value="100% OK - Alinhado DCNs">100% OK - Alinhado DCNs</option>
-            <option value="Em Adequação com NDE">Em Adequação com NDE</option>
-            <option value="Pendente de Avaliação Colegiado">Pendente de Avaliação Colegiado</option>
-            <option value="Revisão Periódica">Revisão Periódica</option>
+            {Object.values(NDE_COMPLIANCE_STATUS).map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
           </select>
         </div>
 

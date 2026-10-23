@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ProviderBadge } from '@/components/layout/provider-badge';
 import {
   Table,
   TableBody,
@@ -113,9 +114,7 @@ export default function AdminSubjectsPage() {
             <Badge variant="outline" className="text-brand-teal border-brand-teal/30">
               Etapa 0 • Governança N:N
             </Badge>
-            <Badge variant="secondary" className="text-xs">
-              Appliance 100% On-Premises
-            </Badge>
+            <ProviderBadge />
           </div>
           <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white mt-1">
             Gestão N:N de Professores & Disciplinas

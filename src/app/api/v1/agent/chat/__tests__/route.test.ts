@@ -32,6 +32,8 @@ vi.mock('@/domains/telemetry/services/inference-log-repository', () => ({
   createInferenceLog: (...args: unknown[]) => createInferenceLog(...args),
 }));
 
+import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
+import { aiProvider, type StreamChunk } from '@/lib/ai-provider';
 import { POST } from '../route';
 import { POST as STREAM_POST } from '../stream/route';
 
@@ -59,6 +61,9 @@ function chatRequest(body: unknown, path = 'chat') {
 }
 
 beforeEach(() => {
+  // Sem provedor real o gateway devolve o stream de fallback: o teste não depende do .env nem da rede.
+  process.env.AI_PROVIDER = 'mock';
+
   getAgendaForUser.mockReset();
   createInteraction.mockClear();
   createInferenceLog.mockClear();
@@ -111,13 +116,14 @@ describe('POST /api/v1/agent/chat', () => {
     expect(res.status).toBe(400);
   });
 
-  it('responde e grava interação e log em agenda CLASSROOM', async () => {
+  it('com provedor mock responde indisponibilidade, grava só o log de inferência (CLASSROOM)', async () => {
     getAgendaForUser.mockResolvedValue(agendaOf(AgendaType.CLASSROOM));
     const res = await POST(chatRequest({ agendaId: 'ag1', message: 'explique join' }));
     const data = await res.json();
     expect(data.blockedByExamGuardrail).toBe(false);
     expect(data.fallback).toBe(true);
-    expect(createInteraction).toHaveBeenCalledTimes(1);
+    expect(data.reply).toBe(TUTOR_UNAVAILABLE_MESSAGE);
+    expect(createInteraction).not.toHaveBeenCalled();
     expect(createInferenceLog).toHaveBeenCalledTimes(1);
   });
 
@@ -133,8 +139,18 @@ describe('POST /api/v1/agent/chat', () => {
   });
 });
 
+/** Simula um provedor real: tokens sem a flag de fallback. */
+function liveStream() {
+  return vi.spyOn(aiProvider, 'streamChat').mockImplementation(async function* (): AsyncGenerator<StreamChunk> {
+    yield { token: 'Qual a diferença ', isComplete: false };
+    yield { token: 'entre INNER e LEFT JOIN?', isComplete: false };
+    yield { token: '', isComplete: true };
+  });
+}
+
 describe('POST /api/v1/agent/chat/stream', () => {
   it('emite eventos token e um done final com o ChatResult', async () => {
+    const spy = liveStream();
     getAgendaForUser.mockResolvedValue(agendaOf(AgendaType.CLASSROOM));
     const res = await STREAM_POST(chatRequest({ agendaId: 'ag1', message: 'explique join' }, 'chat/stream'));
     expect(res.headers.get('content-type')).toContain('text/event-stream');
@@ -144,9 +160,20 @@ describe('POST /api/v1/agent/chat/stream', () => {
     const result = JSON.parse(done.trim());
     expect(result.interactionId).toBe('int1');
     expect(result.reply.length).toBeGreaterThan(0);
+    spy.mockRestore();
+  });
+
+  it('com provedor em fallback não emite tokens do texto de modelo, só o done com o aviso', async () => {
+    getAgendaForUser.mockResolvedValue(agendaOf(AgendaType.CLASSROOM));
+    const res = await STREAM_POST(chatRequest({ agendaId: 'ag1', message: 'explique join' }, 'chat/stream'));
+    const text = await res.text();
+    expect(text).not.toContain('event: token');
+    const result = JSON.parse(text.split('event: done\ndata: ')[1]!.trim());
+    expect(result).toMatchObject({ fallback: true, reply: TUTOR_UNAVAILABLE_MESSAGE, interactionId: null });
   });
 
   it('falha após o início do stream termina com frame error sem rejeitar o handler', async () => {
+    const spy = liveStream();
     getAgendaForUser.mockResolvedValue(agendaOf(AgendaType.CLASSROOM));
     createInteraction.mockRejectedValueOnce(new Error('db down'));
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -157,6 +184,7 @@ describe('POST /api/v1/agent/chat/stream', () => {
     expect(text).toContain('event: error\ndata: {"error":');
     expect(text).not.toContain('event: done');
     errSpy.mockRestore();
+    spy.mockRestore();
   });
 
   it('erros antes do stream saem como JSON via apiError', async () => {

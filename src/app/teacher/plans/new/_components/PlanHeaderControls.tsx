@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Sparkles, GraduationCap, Calendar, Loader2, Lock, ShieldCheck, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ProviderBadge } from '@/components/layout/provider-badge';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
 import { PeriodCreateInlineModal } from './PeriodCreateInlineModal';
 import type { SubjectOption, AcademicPeriodOption } from '../types';
@@ -77,10 +78,7 @@ export function PlanHeaderControls({
             <Badge variant="outline" className="text-brand-teal border-brand-teal/30">
               Etapa 1 do Pipeline Pedagógico
             </Badge>
-            <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 flex items-center gap-1">
-              <Cpu className="h-3 w-3" />
-              <span>vLLM Local: Conectado (100% On-Premise)</span>
-            </Badge>
+            <ProviderBadge />
             {effectivePeriodName && (
               <Badge variant="secondary" className="text-[10px] text-slate-600 dark:text-slate-300">
                 Período: {effectivePeriodName}

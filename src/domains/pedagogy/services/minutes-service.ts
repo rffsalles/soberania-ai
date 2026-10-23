@@ -5,7 +5,6 @@ import type { AIMessage, AICompletionOptions, StreamChunk } from '@/lib/ai-provi
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import { findTeacherSubjectIds } from '@/domains/agendas/services/agenda-repository';
 import {
-  buildFallbackMinutesText,
   buildMinutesMessages,
   parseMinutesText,
   type MinutesPromptInput,
@@ -74,14 +73,15 @@ function toDTO(r: MinuteRecord): MinuteDTO {
     socraticChallengesAnswered: r.socraticChallengesAnswered,
     rawSummary: r.rawSummary,
     actionableAdvice: r.actionableAdvice,
+    aiGenerated: r.rawSummary.trim().length > 0,
     createdAt: r.createdAt.toISOString(),
     subjectName: r.agenda.subjectRef?.name ?? r.agenda.subject,
     className: r.agenda.class.name,
   };
 }
 
-async function writeMinuteText(input: MinutesPromptInput, deps: MinutesDeps): Promise<MinutesText> {
-  const fallback = buildFallbackMinutesText(input);
+/** Texto da ata redigido pela IA; null sem IA real (as métricas continuam válidas, o parecer fica em branco). */
+async function writeMinuteText(input: MinutesPromptInput, deps: MinutesDeps): Promise<MinutesText | null> {
   try {
     let text = '';
     let usedFallback = false;
@@ -92,11 +92,11 @@ async function writeMinuteText(input: MinutesPromptInput, deps: MinutesDeps): Pr
       text += chunk.token;
       if (chunk.fallback) usedFallback = true;
     }
-    if (usedFallback) return fallback;
-    return parseMinutesText(text) ?? fallback;
+    if (usedFallback) return null;
+    return parseMinutesText(text);
   } catch (err) {
-    console.warn('[minutes] falha ao redigir texto da ata, usando fallback', err);
-    return fallback;
+    console.warn('[minutes] falha ao redigir texto da ata', err);
+    return null;
   }
 }
 
@@ -140,8 +140,8 @@ export async function generateMinute(
     topicsStruggled: metrics.topicsStruggled,
     totalQuestionsAsked: metrics.totalQuestionsAsked,
     socraticChallengesAnswered: metrics.socraticChallengesAnswered,
-    rawSummary: text.rawSummary,
-    actionableAdvice: text.actionableAdvice,
+    rawSummary: text?.rawSummary ?? '',
+    actionableAdvice: text?.actionableAdvice ?? '',
   });
   return toDTO(record);
 }

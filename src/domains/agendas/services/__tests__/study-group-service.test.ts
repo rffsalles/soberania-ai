@@ -43,7 +43,7 @@ function makeMessage(over: Partial<StudyGroupMessageRecord> & { id: string }): S
 function makeDeps(agenda: AgendaDTO, seed: StudyGroupMessageRecord[] = []) {
   const store = [...seed];
   let seq = 0;
-  const chat = vi.fn<StudyGroupDeps['chatWithTutor']>(async () => ({ reply: 'E se separarmos o cliente?' }));
+  const chat = vi.fn<StudyGroupDeps['chatWithTutor']>(async () => ({ reply: 'E se separarmos o cliente?', fallback: false }));
   const deps: StudyGroupDeps = {
     now: () => NOW,
     getAgenda: async () => agenda,
@@ -80,6 +80,22 @@ describe('study-group-service', () => {
     expect(chat).toHaveBeenCalledTimes(1);
     expect(result.tutorReply).toMatchObject({ isAi: true, authorId: null, authorName: 'Tutora Lucy' });
     expect(store.filter((m) => m.isAi)).toHaveLength(1);
+  });
+
+  it('menção com o provedor em fallback não grava mensagem da IA', async () => {
+    const { deps, chat, store } = makeDeps(makeAgenda());
+    chat.mockResolvedValue({ reply: 'aviso de indisponibilidade', fallback: true });
+    const result = await postMessage(user, AGENDA_ID, 'Ajuda @lucy', deps);
+    expect(result.tutorReply).toBeUndefined();
+    expect(store.filter((m) => m.isAi)).toHaveLength(0);
+  });
+
+  it('intervenção por silêncio com o provedor em fallback não grava nada', async () => {
+    const last = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - (STUDY_GROUP_STALEMATE_MINUTES + 1) * MINUTE) });
+    const { deps, chat, store } = makeDeps(makeAgenda(), [last]);
+    chat.mockResolvedValue({ reply: 'aviso', fallback: true });
+    expect(await checkStalemate(AGENDA_ID, user, NOW, deps)).toBeNull();
+    expect(store).toHaveLength(1);
   });
 
   it('sem menção não chama a tutora', async () => {
@@ -144,7 +160,7 @@ describe('study-group-service', () => {
     });
     chat.mockImplementation(async () => {
       await gate;
-      return { reply: 'Pergunta?' };
+      return { reply: 'Pergunta?', fallback: false };
     });
     const first = checkStalemate(AGENDA_ID, user, NOW, deps);
     await new Promise((r) => setTimeout(r, 0));
@@ -159,7 +175,7 @@ describe('study-group-service', () => {
     const { deps, chat, store } = makeDeps(makeAgenda(), [old]);
     chat.mockImplementation(async () => {
       await deps.repo.createMessage({ agendaId: AGENDA_ID, authorId: 'stu-2', content: 'voltei', isAi: false });
-      return { reply: 'Pergunta?' };
+      return { reply: 'Pergunta?', fallback: false };
     });
     expect(await checkStalemate(AGENDA_ID, user, NOW, deps)).toBeNull();
     expect(store.filter((m) => m.isAi)).toHaveLength(0);

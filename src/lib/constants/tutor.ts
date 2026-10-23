@@ -7,6 +7,10 @@ export const TUTOR_MENTION_PATTERN = new RegExp(
   'iu'
 );
 
+/** Resposta devolvida ao aluno quando o provedor de IA não está disponível (nunca um texto de modelo). */
+export const TUTOR_UNAVAILABLE_MESSAGE =
+  'A Tutora Lucy está indisponível no momento. Sua pergunta não foi respondida; tente novamente em instantes ou procure o professor.';
+
 /** Nome exibido nas mensagens da Tutora. */
 export const TUTOR_DISPLAY_NAME = 'Tutora Lucy';
 

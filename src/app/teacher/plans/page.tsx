@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
 import {
   Table,
   TableBody,
@@ -32,6 +33,7 @@ interface TeachingPlan {
   totalHours?: number;
   theoryHours?: number;
   practiceHours?: number;
+  ndeComplianceStatus?: string;
   createdAt: string;
   updatedAt: string;
   subject?: {
@@ -78,8 +80,12 @@ export default function TeacherPlansListPage() {
   });
 
   const totalMappedHours = React.useMemo(() => {
-    return plans.reduce((acc, p) => acc + (p.totalHours || 80), 0);
+    return plans.reduce((acc, p) => acc + (p.totalHours ?? 0), 0);
   }, [plans]);
+
+  // Parecer registrado pelo professor no plano: a única fonte de "aderência" que existe hoje.
+  const ndeAlignedCount = plans.filter((p) => p.ndeComplianceStatus === NDE_COMPLIANCE_STATUS.OK).length;
+  const ndeAlignedPercent = plans.length > 0 ? Math.round((ndeAlignedCount / plans.length) * 100) : null;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -87,14 +93,14 @@ export default function TeacherPlansListPage() {
         return (
           <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 gap-1">
             <CheckCircle2 className="h-3 w-3" />
-            <span>Aprovado NDE</span>
+            <span>Aprovado pelo professor</span>
           </Badge>
         );
       case 'IN_REVIEW':
         return (
           <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
             <Clock className="h-3 w-3" />
-            <span>Em Análise NDE</span>
+            <span>Em Análise</span>
           </Badge>
         );
       default:
@@ -146,12 +152,12 @@ export default function TeacherPlansListPage() {
           <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
             {plans.filter((p) => p.status === 'DRAFT').length} Planos
           </p>
-          <span className="text-[11px] text-brand-teal font-medium">Aguardando envio ao NDE</span>
+          <span className="text-[11px] text-brand-teal font-medium">Rascunhos</span>
         </div>
 
         <div className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Aprovados pelo NDE</span>
+            <span className="text-xs text-slate-500 font-medium">Aprovados</span>
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>
           <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
@@ -168,18 +174,20 @@ export default function TeacherPlansListPage() {
           <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
             {totalMappedHours}h
           </p>
-          <span className="text-[11px] text-slate-500 font-medium">Soma total de disciplinas ativas</span>
+          <span className="text-[11px] text-slate-500 font-medium">Soma das cargas horárias informadas</span>
         </div>
 
         <div className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Aderência RAG / DCN</span>
+            <span className="text-xs text-slate-500 font-medium">Parecer NDE alinhado às DCNs</span>
             <Sparkles className="h-4 w-4 text-brand-orange" />
           </div>
           <p className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
-            {plans.length > 0 ? '100%' : '0%'}
+            {ndeAlignedPercent === null ? '—' : `${ndeAlignedPercent}%`}
           </p>
-          <span className="text-[11px] text-emerald-600 font-medium">Conformidade IA Validada</span>
+          <span className="text-[11px] text-slate-500 font-medium">
+            {ndeAlignedCount} de {plans.length} plano(s) com parecer registrado como alinhado
+          </span>
         </div>
       </div>
 
@@ -231,7 +239,7 @@ export default function TeacherPlansListPage() {
                         {plan.subject?.name || 'Disciplina não informada'}
                       </span>
                       <span className="text-xs text-brand-teal font-mono">
-                        {plan.subject?.code || 'COD-SLM'}
+                        {plan.subject?.code || '—'}
                       </span>
                     </div>
                   </TableCell>
@@ -240,7 +248,7 @@ export default function TeacherPlansListPage() {
                   </TableCell>
                   <TableCell>{getStatusBadge(plan.status)}</TableCell>
                   <TableCell className="text-sm text-slate-600 font-medium">
-                    {plan.totalHours ? `${plan.totalHours}h` : '80h'}
+                    {plan.totalHours != null ? `${plan.totalHours}h` : '—'}
                   </TableCell>
                   <TableCell className="text-xs text-slate-500">
                     {new Date(plan.updatedAt).toLocaleDateString('pt-BR')}

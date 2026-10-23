@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateFileSafety, parseDocumentFile } from '../file-parser';
+import { SYNTHETIC_CHAPTER_PATTERN, SYNTHETIC_PAGE_CHARS_TEXT, validateFileSafety, parseDocumentFile } from '../file-parser';
 
 describe('RAG Domain - File Parser & Safety Validator', () => {
   it('deve validar com sucesso arquivo de texto simples (.txt)', () => {
@@ -74,5 +74,18 @@ describe('RAG Domain - File Parser & Safety Validator', () => {
     expect(parsed.detectedMimeType).toBe('text/plain');
     expect(parsed.pages[0].pageNumber).toBe(1);
     expect(parsed.pages[0].text).toBe(textContent);
+  });
+
+  it('rotula fatias de TXT/MD como trechos sintéticos, nunca como páginas', async () => {
+    const parsed = await parseDocumentFile(Buffer.from('x'.repeat(SYNTHETIC_PAGE_CHARS_TEXT + 10)), 'notas.md');
+    expect(parsed.totalPages).toBe(2);
+    expect(parsed.pages.map((p) => p.chapter)).toEqual(['Trecho 1', 'Trecho 2']);
+    expect(parsed.pages.every((p) => SYNTHETIC_CHAPTER_PATTERN.test(p.chapter ?? ''))).toBe(true);
+  });
+
+  it('arquivo de texto vazio devolve zero páginas em vez de indexar o nome do arquivo', async () => {
+    const parsed = await parseDocumentFile(Buffer.from('   '), 'vazio.txt');
+    expect(parsed.pages).toEqual([]);
+    expect(parsed.totalPages).toBe(0);
   });
 });

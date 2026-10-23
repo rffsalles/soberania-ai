@@ -13,6 +13,12 @@
 
 export type AIProviderType = 'groq' | 'together' | 'ollama' | 'vllm' | 'mock';
 
+/** Provedores que rodam dentro do appliance: nenhum dado sai da rede da instituição. */
+export const LOCAL_PROVIDERS: readonly AIProviderType[] = ['vllm', 'ollama'];
+export function isLocalProvider(provider: string): boolean {
+  return (LOCAL_PROVIDERS as readonly string[]).includes(provider);
+}
+
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;

@@ -92,8 +92,8 @@ export async function getApplianceStatus(
   const [last15m, last24h, healthy, gpu] = await Promise.all([
     deps.getStats(new Date(nowMs - FIFTEEN_MINUTES_MS)),
     deps.getStats(new Date(nowMs - TWENTY_FOUR_HOURS_MS)),
-    // Provider mock não tem servidor para sondar.
-    provider === 'mock' ? Promise.resolve(true) : deps.checkHealth(baseUrl, apiKey),
+    // Provider mock não tem servidor: não há inferência real, logo não está "saudável".
+    provider === 'mock' ? Promise.resolve(false) : deps.checkHealth(baseUrl, apiKey),
     deps.readGpu(),
   ]);
 

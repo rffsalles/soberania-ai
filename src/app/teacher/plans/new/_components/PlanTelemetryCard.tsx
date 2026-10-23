@@ -3,12 +3,16 @@
 import * as React from 'react';
 import { BookMarked, CheckCircle2, FileSearch } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { isLocalProvider } from '@/lib/ai-provider';
+import { useApplianceStatus } from '@/components/layout/use-appliance-status';
 
 interface PlanTelemetryCardProps {
   citations: string[];
 }
 
 export function PlanTelemetryCard({ citations }: PlanTelemetryCardProps) {
+  const status = useApplianceStatus();
+  const local = status ? isLocalProvider(status.provider) : null;
   return (
     <div className="space-y-6">
       {/* RAG Citations Card */}
@@ -47,14 +51,24 @@ export function PlanTelemetryCard({ citations }: PlanTelemetryCardProps) {
         </CardContent>
       </Card>
 
-      {/* Privacy & LGPD Guarantee */}
-      <div className="p-4 rounded-xl border border-brand-teal/30 bg-brand-teal/5 space-y-2">
-        <div className="flex items-center gap-2 text-brand-teal font-semibold text-xs sm:text-sm">
+      {/* Onde a inferência acontece: lido da telemetria, não afirmado de antemão */}
+      <div
+        className={
+          local === false
+            ? 'p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2'
+            : 'p-4 rounded-xl border border-brand-teal/30 bg-brand-teal/5 space-y-2'
+        }
+      >
+        <div className={`flex items-center gap-2 font-semibold text-xs sm:text-sm ${local === false ? 'text-amber-700' : 'text-brand-teal'}`}>
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>Privacidade & LGPD Garantidas</span>
+          <span>Onde a IA processa este plano</span>
         </div>
         <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-          Toda a ementa, referências e objetivos gerados permanecem 100% dentro do appliance local da faculdade. Zero vazamento de propriedade intelectual ou dados pedagógicos para nuvens externas.
+          {local === null
+            ? 'Verificando o provedor de inferência configurado...'
+            : local
+              ? `Inferência em ${status?.provider} dentro do appliance da instituição: ementa, referências e objetivos não saem da rede local.`
+              : `Inferência em ${status?.provider} (nuvem): o conteúdo enviado para gerar a sugestão sai do appliance. Use vLLM ou Ollama locais para processamento on-premises.`}
         </p>
       </div>
     </div>

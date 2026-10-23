@@ -36,6 +36,13 @@ export type CreatePlanInput = {
   ndeComplianceStatus?: string;
 };
 
+/** Inteiro não negativo informado pelo professor; null quando ausente ou inválido (sem valor inventado). */
+function toHours(value: number | string | undefined): number | null {
+  if (value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 function assertOwnsPlan(user: PlanActor, plan: { teacherId: string }) {
   if (user.role === Role.TEACHER && plan.teacherId !== user.id) {
     throw new DomainError(403, 'Você não tem acesso a este plano de ensino.');
@@ -64,6 +71,11 @@ export async function createPlan(user: PlanActor, input: CreatePlanInput, deps: 
   if (!input.subjectId || !input.syllabus) {
     throw new DomainError(400, 'Disciplina e ementa são obrigatórias.');
   }
+  const hours = [input.totalHours, input.theoryHours, input.practiceHours].map(toHours);
+  if (hours.some((h) => h === null)) {
+    throw new DomainError(400, 'Informe a carga horária total, teórica e prática.');
+  }
+  const [totalHours, theoryHours, practiceHours] = hours as number[];
   return deps.repo.insertPlan({
     subjectId: input.subjectId,
     teacherId: user.id,
@@ -77,9 +89,9 @@ export async function createPlan(user: PlanActor, input: CreatePlanInput, deps: 
     basicBibliography: input.basicBibliography || [],
     complementaryBiblio: input.complementaryBiblio || [],
     status: input.status || PLAN_STATUS.DRAFT,
-    totalHours: input.totalHours ? Number(input.totalHours) : 80,
-    theoryHours: input.theoryHours ? Number(input.theoryHours) : 60,
-    practiceHours: input.practiceHours ? Number(input.practiceHours) : 20,
+    totalHours,
+    theoryHours,
+    practiceHours,
     ndeComplianceStatus: input.ndeComplianceStatus || DEFAULT_NDE_COMPLIANCE_STATUS,
   });
 }

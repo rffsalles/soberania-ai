@@ -4,6 +4,7 @@ import { localMcpServer } from '@/lib/mcp/mcp-server';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { DomainError } from '@/lib/api/domain-error';
+import { aiProvider, isLocalProvider } from '@/lib/ai-provider';
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,10 +31,16 @@ export async function GET(req: NextRequest) {
   try {
     await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const tools = localMcpServer.listTools();
+    const { provider, model, isConfigured } = aiProvider.getProviderInfo();
     return NextResponse.json({
       status: 'online',
       protocol: 'model-context-protocol/v1',
-      runtime: 'on-premises-appliance',
+      inference: {
+        provider,
+        model,
+        configured: isConfigured,
+        runtime: provider === 'mock' ? 'none' : isLocalProvider(provider) ? 'on-premises' : 'cloud',
+      },
       tools,
     });
   } catch (error) {

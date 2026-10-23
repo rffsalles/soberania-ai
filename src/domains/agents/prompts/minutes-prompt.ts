@@ -45,19 +45,3 @@ export function parseMinutesText(raw: string): MinutesText | null {
     return null;
   }
 }
-
-/** Texto determinístico montado a partir dos números, usado sem IA real. */
-export function buildFallbackMinutesText(input: MinutesPromptInput): MinutesText {
-  const { studentName, totalQuestionsAsked, socraticChallengesAnswered, engagementScore } = input;
-  const mastered = input.topicsMastered.length
-    ? ` Tópicos consolidados: ${input.topicsMastered.join('; ')}.`
-    : '';
-  const rawSummary =
-    totalQuestionsAsked + socraticChallengesAnswered === 0
-      ? `${studentName} não registrou interações com a tutora nesta sessão.`
-      : `${studentName} fez ${totalQuestionsAsked} pergunta(s) e respondeu ${socraticChallengesAnswered} desafio(s) socrático(s), com engajamento de ${engagementScore}%.${mastered}`;
-  const actionableAdvice = input.topicsStruggled.length
-    ? `Revisar: ${input.topicsStruggled.join('; ')}.`
-    : 'Sem pontos de atenção identificados; manter o ritmo de estudo e explorar os desafios socráticos.';
-  return { rawSummary, actionableAdvice };
-}

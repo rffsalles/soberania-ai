@@ -10,8 +10,11 @@ export interface ClassMinuteData {
   topicsStruggled: string[];
   totalQuestionsAsked: number;
   socraticChallengesAnswered: number;
+  /** Vazios quando a IA não estava disponível ao gerar a ata (ver `aiGenerated`). */
   rawSummary: string;
   actionableAdvice: string;
+  /** false = métricas reais, mas o parecer textual não foi redigido pela IA. */
+  aiGenerated: boolean;
   createdAt: string;
 }
 

@@ -211,10 +211,10 @@ model TeachingPlan {
   basicBibliography   String[] // Bibliografia básica
   complementaryBiblio String[] // Bibliografia complementar
   status              String   @default("DRAFT") // DRAFT, APPROVED
-  totalHours          Int      @default(80)
-  theoryHours         Int      @default(60)
-  practiceHours       Int      @default(20)
-  ndeComplianceStatus String   @default("100% OK - Alinhado DCNs")
+  totalHours          Int
+  theoryHours         Int
+  practiceHours       Int
+  ndeComplianceStatus String   @default("Pendente de Avaliação Colegiado")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

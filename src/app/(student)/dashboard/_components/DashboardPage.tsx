@@ -11,7 +11,7 @@ import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minu
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAgendas } from '@/components/agendas/use-agenda';
 import { useCurrentUser } from '@/components/layout/use-current-user';
-import { getAgendaLink } from '@/lib/constants/routes';
+import { API_ROUTES, getAgendaLink } from '@/lib/constants/routes';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import { useMinutes } from '@/components/pedagogy/use-minutes';
 import { RetentionScore } from '@/components/pedagogy/retention-score';
@@ -133,8 +133,29 @@ function AgendaGroup({ title, agendas }: { title: string; agendas: AgendaDTO[] }
   );
 }
 
+/** Período letivo ativo mais recente cadastrado pela coordenação; null quando não há nenhum. */
+function useActivePeriodName(): string | null {
+  const [name, setName] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch(API_ROUTES.ACADEMIC_PERIODS)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success && Array.isArray(data.periods) && data.periods[0]?.name) {
+          setName(data.periods[0].name as string);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return name;
+}
+
 export default function DashboardPage() {
   const [selectedMinuteAgenda, setSelectedMinuteAgenda] = React.useState<string | null>(null);
+  const activePeriodName = useActivePeriodName();
   const { agendas, isLoading: agendasLoading, error: agendasError } = useAgendas();
   const { user } = useCurrentUser();
   const { data: minutesHistory, isLoading: minutesLoading, error: minutesError } = useMinutes();
@@ -157,7 +178,7 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-brand-teal via-brand-teal-dark to-slate-900 text-white shadow-md">
           <div className="space-y-1.5">
             <Badge className="bg-white/20 hover:bg-white/25 text-white border-0 text-xs font-semibold backdrop-blur-xs">
-              Semestre Letivo 2026.2
+              {activePeriodName ?? 'Período letivo não cadastrado'}
             </Badge>
             <h1 className="text-2xl sm:text-3xl font-bold font-heading">
               {user ? `Bem-vindo, ${user.name}!` : 'Bem-vindo!'}
@@ -228,7 +249,7 @@ export default function DashboardPage() {
           <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-medium">Atas Homologadas</p>
+                <p className="text-xs text-slate-500 font-medium">Atas Pedagógicas</p>
                 <h3 className="text-2xl font-bold font-heading text-slate-900 dark:text-white mt-1">
                   {minutesHistory.length} Emitidas
                 </h3>
@@ -276,7 +297,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <Award className="h-5 w-5 text-brand-orange" />
               <h2 className="text-lg font-bold font-heading text-slate-900 dark:text-white">
-                Histórico de Atas Pedagógicas Homologadas
+                Histórico de Atas Pedagógicas
               </h2>
             </div>
           </div>
@@ -344,7 +365,7 @@ export default function DashboardPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 dark:text-slate-300 max-w-xs truncate">
-                      {m.actionableAdvice}
+                      {m.aiGenerated ? m.actionableAdvice : <span className="text-amber-600">Parecer pendente (IA indisponível)</span>}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
