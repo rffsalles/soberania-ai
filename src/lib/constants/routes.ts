@@ -31,6 +31,7 @@ export const ROUTES = {
   TEACHER_MATERIALS: '/teacher/materials',
   ADMIN: '/admin',
   ADMIN_SUBJECTS: '/admin/subjects',
+  ADMIN_CLASSES: '/admin/classes',
 } as const;
 
 /** Prefixos das rotas de API protegidas pelo RBAC. */

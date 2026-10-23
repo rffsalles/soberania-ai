@@ -40,9 +40,10 @@ describe('NAV_LINKS_BY_ROLE', () => {
   });
 
   it('admin vê gestão seguida da lista completa do professor', () => {
-    expect(labels(Role.ADMIN)).toEqual(['Disciplinas', 'Telemetria', ...labels(Role.TEACHER)]);
-    expect(NAV_LINKS_BY_ROLE[Role.ADMIN].slice(0, 2).map((l) => l.href)).toEqual([
+    expect(labels(Role.ADMIN)).toEqual(['Disciplinas', 'Turmas', 'Telemetria', ...labels(Role.TEACHER)]);
+    expect(NAV_LINKS_BY_ROLE[Role.ADMIN].slice(0, 3).map((l) => l.href)).toEqual([
       ROUTES.ADMIN_SUBJECTS,
+      ROUTES.ADMIN_CLASSES,
       ROUTES.APPLIANCE,
     ]);
   });

@@ -8,6 +8,7 @@ describe('canAccessRoute', () => {
   it.each([
     '/teacher/plans',
     '/admin/subjects',
+    '/admin/classes',
     '/reports',
     '/appliance',
     '/api/v1/admin/teachers',
@@ -37,7 +38,7 @@ describe('canAccessRoute', () => {
     expect(canAccessRoute(path, TEACHER)).toBe(true);
   });
 
-  it.each(['/appliance', '/admin/subjects', '/api/v1/admin/teachers'])(
+  it.each(['/appliance', '/admin/subjects', '/admin/classes', '/api/v1/admin/teachers'])(
     'nega %s para TEACHER',
     (path) => {
       expect(canAccessRoute(path, TEACHER)).toBe(false);
@@ -47,6 +48,7 @@ describe('canAccessRoute', () => {
   it.each([
     '/teacher/plans',
     '/admin/subjects',
+    '/admin/classes',
     '/appliance',
     '/reports',
     '/api/v1/admin/teachers',
