@@ -29,7 +29,10 @@ import {
   SubjectFormModal,
   type SubjectItem,
 } from './_components/SubjectFormModal';
-import type { ClassOption } from './_components/SubjectFormModal';
+import {
+  ClassFormModal,
+  type ClassOption,
+} from '../classes/_components/ClassFormModal';
 import { API_ROUTES } from '@/lib/constants/routes';
 
 export default function AdminSubjectsPage() {
@@ -43,6 +46,8 @@ export default function AdminSubjectsPage() {
   const [isTeacherModalOpen, setIsTeacherModalOpen] = React.useState(false);
   const [editingSubject, setEditingSubject] = React.useState<SubjectItem | null>(null);
   const [selectedTeachers, setSelectedTeachers] = React.useState<string[]>([]);
+  const [isClassModalOpen, setIsClassModalOpen] = React.useState(false);
+  const [selectedClassId, setSelectedClassId] = React.useState<string | null>(null);
 
   const fetchSubjectData = React.useCallback(async () => {
     try {
@@ -78,18 +83,25 @@ export default function AdminSubjectsPage() {
   const handleOpenCreateModal = () => {
     setEditingSubject(null);
     setSelectedTeachers([]);
+    setSelectedClassId(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (sub: SubjectItem) => {
     setEditingSubject(sub);
     setSelectedTeachers(sub.teacherAssignments.map((ta) => ta.teacher.id));
+    setSelectedClassId(sub.classId ?? null);
     setIsModalOpen(true);
   };
 
   const handleTeacherCreated = (newTeacher: Teacher) => {
     fetchSubjectData();
     setSelectedTeachers((prev) => [...prev, newTeacher.id]);
+  };
+
+  const handleClassCreated = (klass: ClassOption) => {
+    fetchSubjectData();
+    setSelectedClassId(klass.id);
   };
 
   const subjectCount = subjects.length;
@@ -191,7 +203,7 @@ export default function AdminSubjectsPage() {
           <TableHeader className="bg-slate-50/80 dark:bg-slate-900/80">
             <TableRow>
               <TableHead>Código & Disciplina</TableHead>
-              <TableHead>Curso / Ano</TableHead>
+              <TableHead>Curso</TableHead>
               <TableHead>Turma</TableHead>
               <TableHead>Nível Acadêmico</TableHead>
               <TableHead>Professores Alocados (N:N)</TableHead>
@@ -283,6 +295,13 @@ export default function AdminSubjectsPage() {
         onSuccess={handleTeacherCreated}
       />
 
+      <ClassFormModal
+        open={isClassModalOpen}
+        onOpenChange={setIsClassModalOpen}
+        editingClass={null}
+        onSuccess={handleClassCreated}
+      />
+
       <SubjectFormModal
         open={isModalOpen}
         onOpenChange={(open) => {
@@ -294,8 +313,11 @@ export default function AdminSubjectsPage() {
         classes={classes}
         selectedTeachers={selectedTeachers}
         setSelectedTeachers={setSelectedTeachers}
+        selectedClassId={selectedClassId}
+        setSelectedClassId={setSelectedClassId}
         onSuccess={fetchSubjectData}
         onRequestCreateTeacher={() => setIsTeacherModalOpen(true)}
+        onRequestCreateClass={() => setIsClassModalOpen(true)}
       />
     </div>
   );
