@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTeacherSchema, upsertSubjectSchema } from '../admin.validator';
+import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema } from '../admin.validator';
 
 const valid = {
   name: 'Carlos Silva',
@@ -48,5 +48,27 @@ describe('upsertSubjectSchema', () => {
   });
   it('rejeita classId que não é cuid', () => {
     expect(upsertSubjectSchema.safeParse({ ...base, classId: 'turma 1' }).success).toBe(false);
+  });
+});
+
+describe('createClassSchema', () => {
+  const base = { name: '3º Semestre · ADS', code: 'ADS-2026-3A' };
+  it('aplica padrões de ano atual e semestre 1', () => {
+    expect(createClassSchema.parse(base)).toMatchObject({ year: new Date().getFullYear(), semester: 1 });
+  });
+  it('coage ano e semestre vindos como string', () => {
+    expect(createClassSchema.parse({ ...base, year: '2027', semester: '3' })).toMatchObject({ year: 2027, semester: 3 });
+  });
+  it('remove espaços nas bordas de nome e código', () => {
+    expect(createClassSchema.parse({ name: '  Turma A ', code: '  ADS-2026-3A ' })).toMatchObject({ name: 'Turma A', code: 'ADS-2026-3A' });
+  });
+  it('rejeita semestre fora de 1 a 4 e código curto', () => {
+    expect(createClassSchema.safeParse({ ...base, semester: 5 }).success).toBe(false);
+    expect(createClassSchema.safeParse({ ...base, semester: 0 }).success).toBe(false);
+    expect(createClassSchema.safeParse({ ...base, code: 'A' }).success).toBe(false);
+  });
+  it('updateClassSchema exige id', () => {
+    expect(updateClassSchema.safeParse(base).success).toBe(false);
+    expect(updateClassSchema.safeParse({ ...base, id: 'c1' }).success).toBe(true);
   });
 });
