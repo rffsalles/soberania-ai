@@ -52,7 +52,7 @@ describe('RAG Domain - DocumentInspectorService', () => {
     expect(result.title).toBe('Engenharia de Software Moderna');
     expect(result.author).toBe('Marco Tulio Valente');
     expect(result.categories).toEqual(['Engenharia de Software', 'Computação']);
-    expect(result.confidence).toBe(0.95);
+    expect(result.source).toBe('ai');
     expect(result.aiApplied).toBe(true);
   });
 
@@ -70,8 +70,29 @@ describe('RAG Domain - DocumentInspectorService', () => {
     expect(result.title).toBe('Inteligência Artificial na Educação');
     expect(result.author).toBe('Prof. Dr. Carlos Santos');
     expect(result.categories).toEqual([]);
-    expect(result.confidence).toBe(0.7);
+    expect(result.source).toBe('heuristic');
     expect(result.aiApplied).toBe(false);
+  });
+
+  it('heurística sem autor devolve author vazio, nunca um placeholder', async () => {
+    vi.spyOn(aiProvider, 'streamChat').mockImplementation(async function* () {
+      throw new Error('offline');
+    });
+    const buffer = Buffer.from('Introdução à Lógica\n\nCapítulo 1: Proposições e conectivos lógicos.', 'utf-8');
+    const result = await new DocumentInspectorService().inspectDocumentHeader(buffer, 'logica.txt');
+    expect(result.author).toBe('');
+    expect(result.source).toBe('heuristic');
+    expect(result.aiApplied).toBe(false);
+  });
+
+  it('IA que devolve título sem autor mantém author vazio e source ai', async () => {
+    mockAiJson({ title: 'Cálculo I', author: '', categories: [], summary: 'x' });
+    const result = await documentInspectorService.inspectDocumentHeader(
+      Buffer.from('Cálculo I\nUniversidade\nSumário\n1. Limites', 'utf-8'),
+      'calculo.txt'
+    );
+    expect(result.author).toBe('');
+    expect(result.source).toBe('ai');
   });
 
   it('deve retornar metadados de fallback padrão se o arquivo for vazio', async () => {
@@ -83,7 +104,7 @@ describe('RAG Domain - DocumentInspectorService', () => {
     expect(result.title).toBe('documento_vazio');
     expect(result.author).toBe('');
     expect(result.categories).toEqual([]);
-    expect(result.confidence).toBe(0.3);
+    expect(result.source).toBe('filename');
     expect(result.aiApplied).toBe(false);
   });
 
@@ -196,7 +217,7 @@ describe('heurística com ficha catalográfica', () => {
     expect(result.title).toBe('Matemática básica');
     expect(result.author).toBe('Fernando Guerra e Inder Jeet Taneja');
     expect(result.aiApplied).toBe(false);
-    expect(result.confidence).toBe(0.8);
+    expect(result.source).toBe('catalog-entry');
   });
 });
 

@@ -3,6 +3,9 @@ import { parseDocumentFile } from './file-parser';
 import { aiProvider } from '@/lib/ai-provider';
 import type { RawDocumentPage } from './types';
 
+/** De onde vieram título/autor: IA, ficha catalográfica, heurística de linhas ou só o nome do arquivo. */
+export type MetadataSource = 'ai' | 'catalog-entry' | 'heuristic' | 'filename';
+
 export interface ExtractedDocumentMetadata {
   title: string;
   author: string;
@@ -10,7 +13,7 @@ export interface ExtractedDocumentMetadata {
   categories: string[];
   /** Categoria nova sugerida pela IA quando nenhuma cadastrada cobre a obra. */
   suggestedCategory?: string;
-  confidence: number;
+  source: MetadataSource;
   summary: string;
   /** true somente quando a resposta veio de um provedor de IA real (não mock/fallback). */
   aiApplied: boolean;
@@ -205,10 +208,10 @@ Responda EXCLUSIVAMENTE em formato JSON estrito conforme a estrutura:
 
     return {
       title: data.title.trim() || cleanFilename,
-      author: data.author.trim() || 'Autor não identificado',
+      author: data.author.trim(),
       categories,
       suggestedCategory,
-      confidence: 0.95,
+      source: 'ai',
       summary: data.summary.trim() || `Material didático: ${cleanFilename}`,
       aiApplied: true,
     };
@@ -251,7 +254,7 @@ Responda EXCLUSIVAMENTE em formato JSON estrito conforme a estrutura:
         title: catalogEntry[1].trim(),
         author: catalogEntry[2].trim(),
         categories: [],
-        confidence: 0.8,
+        source: 'catalog-entry',
         summary: `Documento de referência: ${defaultTitle}`,
         aiApplied: false,
       };
@@ -271,9 +274,9 @@ Responda EXCLUSIVAMENTE em formato JSON estrito conforme a estrutura:
 
     return {
       title: extractedTitle,
-      author: extractedAuthor || 'Autor a especificar',
+      author: extractedAuthor,
       categories: [],
-      confidence: extractedAuthor ? 0.7 : 0.5,
+      source: 'heuristic',
       summary: `Documento de referência: ${defaultTitle}`,
       aiApplied: false,
     };
@@ -284,7 +287,7 @@ Responda EXCLUSIVAMENTE em formato JSON estrito conforme a estrutura:
       title: cleanFilename,
       author: '',
       categories: [],
-      confidence: 0.3,
+      source: 'filename',
       summary: `Documento didático: ${cleanFilename}`,
       aiApplied: false,
     };

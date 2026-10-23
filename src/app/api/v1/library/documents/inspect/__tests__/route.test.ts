@@ -19,7 +19,7 @@ describe('POST /api/v1/library/documents/inspect', () => {
       author: 'Fernando Guerra',
       categories: [],
       suggestedCategory: 'Matemática',
-      confidence: 0.95,
+      source: 'ai',
       summary: 'Resumo',
       aiApplied: true,
     });

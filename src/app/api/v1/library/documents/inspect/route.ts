@@ -45,7 +45,7 @@ export async function POST(req: Request) {
         categories: metadata.categories,
         suggestedCategory: metadata.suggestedCategory,
         aiApplied: metadata.aiApplied,
-        confidence: metadata.confidence,
+        source: metadata.source,
         summary: metadata.summary,
         originalFilename: file.name,
         fileSize: fileBuffer.length,

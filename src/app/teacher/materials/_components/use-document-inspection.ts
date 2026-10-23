@@ -9,9 +9,14 @@ export interface InspectedMetadata {
   categories: string[];
 }
 
+const METADATA_SOURCES = ['ai', 'catalog-entry', 'heuristic', 'filename'] as const;
+type MetadataSource = (typeof METADATA_SOURCES)[number];
+
 export interface DocumentInspection {
   /** false quando os campos vieram da heurística local (provedor de IA indisponível). */
   aiApplied: boolean;
+  /** Origem dos metadados preenchidos. */
+  source: MetadataSource;
   suggestedCategory?: string;
 }
 
@@ -45,6 +50,7 @@ export function useDocumentInspection(onMetadata: (metadata: InspectedMetadata) 
       });
       setInspection({
         aiApplied: m.aiApplied === true,
+        source: (METADATA_SOURCES as readonly string[]).includes(m.source) ? (m.source as MetadataSource) : 'filename',
         suggestedCategory: typeof m.suggestedCategory === 'string' && m.suggestedCategory ? m.suggestedCategory : undefined,
       });
     } catch {
