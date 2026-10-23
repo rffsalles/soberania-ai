@@ -23,7 +23,10 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
     });
   };
 
-  const isHoursSumValid = data.theoryHours + data.practiceHours === data.totalHours;
+  // Campo vazio = null; só valida a soma quando as três horas foram informadas.
+  const parseHours = (raw: string): number | null => (raw.trim() === '' ? null : Math.max(0, Math.trunc(Number(raw)) || 0));
+  const allInformed = data.totalHours !== null && data.theoryHours !== null && data.practiceHours !== null;
+  const isHoursSumValid = !allInformed || (data.theoryHours ?? 0) + (data.practiceHours ?? 0) === data.totalHours;
 
   return (
     <Card className="glass rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
@@ -43,8 +46,8 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
             id="total-hours-input"
             type="number"
             min={1}
-            value={data.totalHours}
-            onChange={(e) => handleFieldChange('totalHours', Number(e.target.value) || 0)}
+            value={data.totalHours ?? ''}
+            onChange={(e) => handleFieldChange('totalHours', parseHours(e.target.value))}
             className="h-8 text-xs rounded-lg font-mono bg-white dark:bg-slate-900"
           />
         </div>
@@ -58,8 +61,8 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
               id="theory-hours-input"
               type="number"
               min={0}
-              value={data.theoryHours}
-              onChange={(e) => handleFieldChange('theoryHours', Number(e.target.value) || 0)}
+              value={data.theoryHours ?? ''}
+              onChange={(e) => handleFieldChange('theoryHours', parseHours(e.target.value))}
               className="h-8 text-xs rounded-lg font-mono bg-white dark:bg-slate-900"
             />
           </div>
@@ -72,8 +75,8 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
               id="practice-hours-input"
               type="number"
               min={0}
-              value={data.practiceHours}
-              onChange={(e) => handleFieldChange('practiceHours', Number(e.target.value) || 0)}
+              value={data.practiceHours ?? ''}
+              onChange={(e) => handleFieldChange('practiceHours', parseHours(e.target.value))}
               className="h-8 text-xs rounded-lg font-mono bg-white dark:bg-slate-900"
             />
           </div>

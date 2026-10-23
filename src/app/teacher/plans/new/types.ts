@@ -35,10 +35,11 @@ export interface AcademicPeriodOption {
   type?: string;
 }
 
+/** Horas em null = ainda não informadas pelo professor (plano novo começa vazio, sem valores inventados). */
 export interface NdeComplianceData {
-  totalHours: number;
-  theoryHours: number;
-  practiceHours: number;
+  totalHours: number | null;
+  theoryHours: number | null;
+  practiceHours: number | null;
   ndeComplianceStatus: string;
 }
 

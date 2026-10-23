@@ -54,6 +54,27 @@ export function listChunksByMaterial(materialId: string): Promise<StoredChunk[]>
   });
 }
 
+/** Primeiros `limit` trechos do material na ordem das páginas, no formato de busca (DidacticChunk). */
+export async function sampleChunksByMaterial(materialId: string, limit: number): Promise<DidacticChunk[]> {
+  const rows = await db.materialChunk.findMany({
+    where: { materialId },
+    orderBy: [{ pageNumber: 'asc' }, { createdAt: 'asc' }],
+    take: limit,
+    include: { material: { select: { title: true, author: true, subject: true } } },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    materialId: r.materialId,
+    bookTitle: r.material.title,
+    author: r.material.author,
+    chapter: r.chapter,
+    section: r.section ?? undefined,
+    pageNumber: r.pageNumber,
+    content: r.content,
+    category: r.material.subject ?? undefined,
+  }));
+}
+
 /** Stores embeddings in `material_chunks.embedding` (vector column, not mapped by Prisma). */
 export async function setEmbeddings(rows: ChunkEmbedding[]): Promise<void> {
   for (let i = 0; i < rows.length; i += SET_EMBEDDINGS_BATCH_SIZE) {

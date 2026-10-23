@@ -66,11 +66,11 @@ export default function TeachingPlanNewPage() {
   const [methodology, setMethodology] = React.useState('');
   const [citations, setCitations] = React.useState<string[]>([]);
 
-  // Conformidade NDE / MEC: valores iniciais do formulário, editáveis pelo professor antes de salvar.
+  // Conformidade NDE / MEC: plano novo começa sem carga horária; o professor informa.
   const [ndeCompliance, setNdeCompliance] = React.useState<NdeComplianceData>({
-    totalHours: 80,
-    theoryHours: 60,
-    practiceHours: 20,
+    totalHours: null,
+    theoryHours: null,
+    practiceHours: null,
     ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS,
   });
 
@@ -85,11 +85,9 @@ export default function TeachingPlanNewPage() {
     fetch('/api/v1/admin/subjects')
       .then((res) => res.json())
       .then((data) => {
+        // Plano novo não pré-seleciona disciplina: a escolha é do professor e define o conteúdo gerado.
         if (data.success && Array.isArray(data.subjects) && data.subjects.length > 0) {
           setSubjects(data.subjects);
-          if (!editingPlanId) {
-            setSelectedSubjectId(data.subjects[0].id);
-          }
         }
       })
       .catch((err) => {
@@ -102,9 +100,6 @@ export default function TeachingPlanNewPage() {
       .then((data) => {
         if (data.success && Array.isArray(data.periods) && data.periods.length > 0) {
           setPeriods(data.periods);
-          if (!editingPlanId) {
-            setSelectedPeriodId(data.periods[0].id);
-          }
         }
       })
       .catch((err) => {
@@ -133,9 +128,9 @@ export default function TeachingPlanNewPage() {
             void restoreReferences(plan.basicBibliography).then(setReferences);
           }
           setNdeCompliance({
-            totalHours: plan.totalHours ?? 0,
-            theoryHours: plan.theoryHours ?? 0,
-            practiceHours: plan.practiceHours ?? 0,
+            totalHours: plan.totalHours ?? null,
+            theoryHours: plan.theoryHours ?? null,
+            practiceHours: plan.practiceHours ?? null,
             ndeComplianceStatus: plan.ndeComplianceStatus || DEFAULT_NDE_COMPLIANCE_STATUS,
           });
         }
