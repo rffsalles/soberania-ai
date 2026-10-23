@@ -43,7 +43,7 @@ export const PROTECTED_ROUTE_ROLES: Readonly<Record<string, readonly Role[]>> = 
   [API_ROUTES.MCP]: STAFF_ROLES,
   // Escrita restrita a ADMIN fica em requireUser na rota.
   [API_ROUTES.ADMIN_SUBJECTS]: STAFF_ROLES,
-  // Somente leitura: turmas existentes para vincular disciplinas.
+  // Escrita restrita a ADMIN fica em requireUser na rota.
   [API_ROUTES.ADMIN_CLASSES]: STAFF_ROLES,
   [API_ROUTES.ACADEMIC_PERIODS]: STAFF_ROLES,
   [API_ROUTES.ADMIN]: ADMIN_ONLY,
