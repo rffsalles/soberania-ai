@@ -46,6 +46,15 @@ const input = {
   references: [{ id: 'm1', title: 'Sistemas de Banco de Dados', author: 'Elmasri', category: 'Livros' }],
 };
 
+describe('generatePlanSuggestion carga horária', () => {
+  it('repassa a carga horária da matriz ao prompt', async () => {
+    const { deps } = makeDeps();
+    const streamChat = vi.spyOn(deps, 'streamChat');
+    await generatePlanSuggestion({ ...input, workloadHours: 80 }, deps);
+    expect(streamChat.mock.calls[0][0][1].content).toContain('Carga horária: 80h');
+  });
+});
+
 describe('isReferencePertinent', () => {
   it('título ou categoria cobrindo todas as palavras da disciplina (ignorando numerais e conectivos)', () => {
     expect(isReferencePertinent('Banco de Dados I', { title: 'Sistemas de Banco de Dados', category: 'Livros' })).toBe(true);

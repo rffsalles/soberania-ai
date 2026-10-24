@@ -22,6 +22,7 @@ export type GeneratePlanInput = {
   subjectName: string;
   courseName?: string;
   academicPeriod?: string;
+  workloadHours?: number;
   references: PlanGenerationReference[];
 };
 
@@ -148,6 +149,7 @@ export async function generatePlanSuggestion(
     subjectName: input.subjectName,
     courseName: input.courseName,
     academicPeriod: input.academicPeriod,
+    workloadHours: input.workloadHours,
     references: input.references.map(({ title, author }) => ({ title, author })),
     chunks,
   });

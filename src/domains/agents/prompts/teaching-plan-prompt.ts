@@ -16,6 +16,7 @@ export type TeachingPlanPromptInput = {
   subjectName: string;
   courseName?: string;
   academicPeriod?: string;
+  workloadHours?: number;
   references: TeachingPlanReference[];
   chunks: DidacticChunk[];
 };
@@ -24,6 +25,7 @@ export function buildTeachingPlanMessages(input: TeachingPlanPromptInput): AIMes
   const lines = [`Disciplina: ${input.subjectName}`];
   if (input.courseName) lines.push(`Curso: ${input.courseName}`);
   if (input.academicPeriod) lines.push(`Período letivo: ${input.academicPeriod}`);
+  if (input.workloadHours) lines.push(`Carga horária: ${input.workloadHours}h`);
   const references = input.references.map((r) => `- ${r.title} (${r.author})`).join('\n');
   lines.push(`\nReferências selecionadas pelo professor:\n${references || '- (nenhuma)'}`);
   const context = input.chunks.map((c) => `${formatCitation(c)} ${c.content}`).join('\n');

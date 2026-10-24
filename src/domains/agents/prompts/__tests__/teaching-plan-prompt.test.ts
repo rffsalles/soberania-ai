@@ -37,6 +37,12 @@ describe('teaching-plan-prompt', () => {
     expect(user.content).toContain('Filosofia Antiga');
     expect(user.content).not.toContain('undefined');
     expect(user.content).not.toContain('2026.1');
+    expect(user.content).not.toContain('Carga horária');
+  });
+
+  it('buildTeachingPlanMessages inclui a carga horária quando informada', () => {
+    const [, user] = buildTeachingPlanMessages({ subjectName: 'Banco de Dados', workloadHours: 80, references: [], chunks: [] });
+    expect(user.content).toContain('Carga horária: 80h');
   });
 
   it('parseTeachingPlanText extrai o JSON mesmo com texto ao redor', () => {

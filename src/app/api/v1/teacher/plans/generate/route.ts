@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { Role } from '@prisma/client';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
+import { getOfferingContext } from '@/domains/academic/services/subject-service';
 import { generatePlanSuggestion } from '@/domains/teaching/services/plan-generation-service';
 
 const generatePlanSchema = z.object({
-  subjectName: z.string().trim().min(1, 'Nome da disciplina é obrigatório para geração.'),
-  courseName: z.string().trim().min(1).optional(),
-  academicPeriod: z.string().trim().min(1).optional(),
+  subjectId: z
+    .string({ required_error: 'Selecione a oferta para gerar.' })
+    .min(1, 'Selecione a oferta para gerar.'),
   selectedReferences: z
     .array(
       z.object({
@@ -23,14 +24,17 @@ const generatePlanSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
-    const body = generatePlanSchema.parse(await req.json());
-    const data = await generatePlanSuggestion({
-      subjectName: body.subjectName,
-      courseName: body.courseName,
-      academicPeriod: body.academicPeriod,
-      references: body.selectedReferences,
-    });
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    const parsed = generatePlanSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: parsed.error.issues[0].message, details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const body = parsed.data;
+    const context = await getOfferingContext(body.subjectId, user);
+    const data = await generatePlanSuggestion({ ...context, references: body.selectedReferences });
     return NextResponse.json({ success: true, data });
   } catch (error) {
     return apiError(error);
