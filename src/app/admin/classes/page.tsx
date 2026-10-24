@@ -106,7 +106,7 @@ export default function AdminClassesPage() {
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Código</TableHead>
-              <TableHead>Ano</TableHead>
+              <TableHead>Período letivo</TableHead>
               <TableHead>Semestre</TableHead>
               <TableHead>Alunos</TableHead>
               <TableHead>Disciplinas</TableHead>

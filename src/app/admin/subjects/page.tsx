@@ -95,14 +95,6 @@ export default function AdminSubjectsPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (offering: OfferingRow) => {
-    const sub = offering as unknown as SubjectItem;
-    setEditingSubject(sub);
-    setSelectedTeachers(sub.teacherAssignments.map((ta) => ta.teacher.id));
-    setSelectedClassId(sub.classId ?? null);
-    setIsModalOpen(true);
-  };
-
   const handleTeacherCreated = (newTeacher: Teacher) => {
     fetchSubjectData();
     setSelectedTeachers((prev) => [...prev, newTeacher.id]);
@@ -284,7 +276,8 @@ export default function AdminSubjectsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleOpenEditModal(sub)}
+                      disabled
+                      title="Edição de ofertas disponível na fase 2"
                       className="text-xs text-brand-teal hover:text-brand-teal/80 cursor-pointer"
                     >
                       Editar Vínculo
