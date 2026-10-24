@@ -1,8 +1,6 @@
 import { z } from 'zod';
 
 export const updateTeachingPlanSchema = z.object({
-  subjectId: z.string().optional(),
-  academicPeriodId: z.string().nullable().optional(),
   syllabus: z.string().optional(),
   generalObjectives: z.string().optional(),
   specificObjectives: z.string().optional(),
@@ -18,4 +16,16 @@ export const updateTeachingPlanSchema = z.object({
   ndeComplianceStatus: z.string().optional(),
 });
 
+// Horas: a UI envia null/string quando vazio; a regra e a mensagem pt-BR ficam em createPlan.
+const hoursInput = z.union([z.number(), z.string()]).nullable().optional();
+
+export const createTeachingPlanSchema = updateTeachingPlanSchema.extend({
+  subjectId: z.string({ required_error: 'Selecione a oferta' }).min(1, 'Selecione a oferta'),
+  syllabus: z.string({ required_error: 'Informe a ementa' }).min(1, 'Informe a ementa'),
+  totalHours: hoursInput,
+  theoryHours: hoursInput,
+  practiceHours: hoursInput,
+});
+
+export type CreateTeachingPlanInput = z.infer<typeof createTeachingPlanSchema>;
 export type UpdateTeachingPlanInput = z.infer<typeof updateTeachingPlanSchema>;

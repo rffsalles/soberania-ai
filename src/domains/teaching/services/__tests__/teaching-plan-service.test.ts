@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
-import { updateTeachingPlanSchema } from '@/lib/validators/teaching-plan.validator';
 import { DEFAULT_NDE_COMPLIANCE_STATUS, PLAN_STATUS } from '@/lib/constants/teaching';
 import {
   createPlan,
@@ -16,7 +15,7 @@ const teacher = { id: 't1', role: Role.TEACHER };
 const otherTeacher = { id: 't2', role: Role.TEACHER };
 const admin = { id: 'a1', role: Role.ADMIN };
 
-function makeDeps(initial: Partial<PlanRecord>[] = []) {
+function makeDeps(initial: Partial<PlanRecord>[] = [], opts: { offerings?: string[]; assigned?: [string, string][] } = {}) {
   const plans = initial.map((p) => ({ ...p })) as PlanRecord[];
   const deps: TeachingPlanDeps = {
     repo: {
@@ -35,6 +34,10 @@ function makeDeps(initial: Partial<PlanRecord>[] = []) {
         Object.assign(rec, data);
         return rec;
       },
+    },
+    offerings: { findSubjectById: async (id) => ((opts.offerings ?? ['s1']).includes(id) ? { id } : null) },
+    assignments: {
+      isTeacherAssigned: async (t, s) => (opts.assigned ?? [['t1', 's1']]).some(([a, b]) => a === t && b === s),
     },
   };
   return { deps, plans };
@@ -115,20 +118,40 @@ describe('teaching-plan-service', () => {
     expect((await getPlan('p1', teacher, deps)).id).toBe('p1');
   });
 
-  it('partial update leaves unspecified fields untouched and null clears academicPeriodId', async () => {
-    const { deps, plans } = makeDeps([
-      { id: 'p1', teacherId: 't1', subjectId: 's1', syllabus: 'a', methodology: 'm', academicPeriodId: 'ap1' },
-    ]);
+  it('partial update leaves unspecified fields untouched', async () => {
+    const { deps, plans } = makeDeps([{ id: 'p1', teacherId: 't1', subjectId: 's1', syllabus: 'a', methodology: 'm' }]);
     await updatePlan('p1', teacher, { syllabus: 'new' }, deps);
-    expect(plans[0]).toMatchObject({ syllabus: 'new', methodology: 'm', academicPeriodId: 'ap1', subjectId: 's1' });
-    await updatePlan('p1', teacher, { academicPeriodId: null }, deps);
-    expect(plans[0].academicPeriodId).toBeNull();
-    expect(plans[0].syllabus).toBe('new');
+    expect(plans[0]).toMatchObject({ syllabus: 'new', methodology: 'm', subjectId: 's1' });
   });
 
-  it('update schema rejects null for non-nullable columns', () => {
-    expect(updateTeachingPlanSchema.safeParse({ syllabus: null }).success).toBe(false);
-    expect(updateTeachingPlanSchema.safeParse({ subjectId: null }).success).toBe(false);
-    expect(updateTeachingPlanSchema.safeParse({ academicPeriodId: null }).success).toBe(true);
+  const valid = { subjectId: 's1', syllabus: 'x', totalHours: 80, theoryHours: 60, practiceHours: 20 };
+
+  it('createPlan rejeita professor não alocado com 403', async () => {
+    const { deps, plans } = makeDeps();
+    await expect(createPlan(otherTeacher, valid, deps)).rejects.toMatchObject({ status: 403, message: 'Você não está alocado a esta oferta.' });
+    expect(plans).toHaveLength(0);
+  });
+  it('createPlan rejeita oferta inexistente com 404', async () => {
+    const { deps } = makeDeps();
+    await expect(createPlan(teacher, { ...valid, subjectId: 'nope' }, deps)).rejects.toMatchObject({ status: 404, message: 'Oferta não encontrada.' });
+  });
+  it('ADMIN cria plano sem alocação', async () => {
+    const { deps, plans } = makeDeps();
+    await createPlan(admin, valid, deps);
+    expect(plans[0]).toMatchObject({ teacherId: 'a1', subjectId: 's1' });
+  });
+  it('insertPlan nunca recebe academicPeriodId', async () => {
+    const { deps, plans } = makeDeps();
+    await createPlan(teacher, { ...valid, academicPeriodId: 'ap1' } as never, deps);
+    expect(plans[0]).not.toHaveProperty('academicPeriodId');
+  });
+  it('createPlan responde em pt-BR quando a UI envia horas null', async () => {
+    const { deps } = makeDeps();
+    await expect(createPlan(teacher, { ...valid, totalHours: null, theoryHours: null, practiceHours: null }, deps))
+      .rejects.toMatchObject({ status: 400, message: 'Informe a carga horária total (maior que zero), teórica e prática.' });
+  });
+  it('createPlan usa a mensagem de oferta e ementa obrigatórias', async () => {
+    const { deps } = makeDeps();
+    await expect(createPlan(teacher, { syllabus: 'x' }, deps)).rejects.toMatchObject({ status: 400, message: 'Oferta e ementa são obrigatórias.' });
   });
 });

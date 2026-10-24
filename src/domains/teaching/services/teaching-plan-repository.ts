@@ -1,14 +1,17 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 
+const subjectContext = {
+  include: { discipline: true, class: { include: { course: true, academicPeriod: true } } },
+} as const;
+
 const planFull = {
-  subject: { include: { class: { select: { id: true, name: true } } } },
-  academicPeriod: true,
+  subject: subjectContext,
   schedules: { include: { lessonPlans: true } },
   assessments: true,
 } as const;
 
-const planBasic = { subject: true, academicPeriod: true } as const;
+const planBasic = { subject: subjectContext } as const;
 
 export function findPlans(filter: { teacherId?: string; subjectId?: string }) {
   return db.teachingPlan.findMany({

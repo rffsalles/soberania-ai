@@ -3,6 +3,9 @@ import { DomainError } from '@/lib/api/domain-error';
 import { DEFAULT_NDE_COMPLIANCE_STATUS, PLAN_STATUS } from '@/lib/constants/teaching';
 import type { UpdateTeachingPlanInput } from '@/lib/validators/teaching-plan.validator';
 import * as realRepo from './teaching-plan-repository';
+import * as subjectRepo from '@/domains/academic/services/subject-repository';
+import * as teacherSubjectRepo from '@/domains/academic/services/teacher-subject-repository';
+import { assertTeacherAssigned } from '@/domains/academic/services/subject-service';
 
 export type PlanRecord = TeachingPlan;
 export type PlanActor = { id: string; role: Role };
@@ -14,13 +17,14 @@ export type TeachingPlanDeps = {
     insertPlan(data: Prisma.TeachingPlanUncheckedCreateInput): Promise<PlanRecord>;
     updatePlanById(id: string, data: Prisma.TeachingPlanUncheckedUpdateInput): Promise<PlanRecord>;
   };
+  offerings: { findSubjectById(id: string): Promise<{ id: string } | null> };
+  assignments: { isTeacherAssigned(teacherId: string, subjectId: string): Promise<boolean> };
 };
 
-const defaultDeps: TeachingPlanDeps = { repo: realRepo };
+const defaultDeps: TeachingPlanDeps = { repo: realRepo, offerings: subjectRepo, assignments: teacherSubjectRepo };
 
 export type CreatePlanInput = {
   subjectId?: string;
-  academicPeriodId?: string | null;
   syllabus?: string;
   generalObjectives?: string;
   specificObjectives?: string;
@@ -30,15 +34,15 @@ export type CreatePlanInput = {
   basicBibliography?: string[];
   complementaryBiblio?: string[];
   status?: string;
-  totalHours?: number | string;
-  theoryHours?: number | string;
-  practiceHours?: number | string;
+  totalHours?: number | string | null;
+  theoryHours?: number | string | null;
+  practiceHours?: number | string | null;
   ndeComplianceStatus?: string;
 };
 
 /** Inteiro não negativo informado pelo professor; null quando ausente ou inválido (sem valor inventado). */
-function toHours(value: number | string | undefined): number | null {
-  if (value === undefined || value === '') return null;
+function toHours(value: number | string | null | undefined): number | null {
+  if (value === undefined || value === null || value === '') return null;
   const n = Number(value);
   return Number.isInteger(n) && n >= 0 ? n : null;
 }
@@ -69,17 +73,20 @@ export async function getPlan(id: string, user: PlanActor, deps: TeachingPlanDep
 
 export async function createPlan(user: PlanActor, input: CreatePlanInput, deps: TeachingPlanDeps = defaultDeps) {
   if (!input.subjectId || !input.syllabus) {
-    throw new DomainError(400, 'Disciplina e ementa são obrigatórias.');
+    throw new DomainError(400, 'Oferta e ementa são obrigatórias.');
   }
   const hours = [input.totalHours, input.theoryHours, input.practiceHours].map(toHours);
   if (hours.some((h) => h === null) || (hours[0] as number) <= 0) {
     throw new DomainError(400, 'Informe a carga horária total (maior que zero), teórica e prática.');
   }
   const [totalHours, theoryHours, practiceHours] = hours as number[];
+  if (!(await deps.offerings.findSubjectById(input.subjectId))) {
+    throw new DomainError(404, 'Oferta não encontrada.');
+  }
+  await assertTeacherAssigned(user, input.subjectId, deps);
   return deps.repo.insertPlan({
     subjectId: input.subjectId,
     teacherId: user.id,
-    academicPeriodId: input.academicPeriodId || null,
     syllabus: input.syllabus,
     generalObjectives: input.generalObjectives || '',
     specificObjectives: input.specificObjectives || '',
