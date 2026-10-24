@@ -52,20 +52,26 @@ describe('upsertSubjectSchema', () => {
 });
 
 describe('createClassSchema', () => {
-  const base = { name: '3º Semestre · ADS', code: 'ADS-2026-3A' };
-  it('aplica padrões de ano atual e semestre 1', () => {
-    expect(createClassSchema.parse(base)).toMatchObject({ year: new Date().getFullYear(), semester: 1 });
+  const base = { name: '3º Semestre · ADS', code: 'ADS-2026-3A', courseId: 'ccourse00001', academicPeriodId: 'cperiod00001' };
+  it('aplica posição 1 por padrão e não tem ano', () => {
+    const parsed = createClassSchema.parse(base);
+    expect(parsed.semester).toBe(1);
+    expect(parsed).not.toHaveProperty('year');
   });
-  it('coage ano e semestre vindos como string', () => {
-    expect(createClassSchema.parse({ ...base, year: '2027', semester: '3' })).toMatchObject({ year: 2027, semester: 3 });
+  it('aceita posição de 1 a 12 vinda como string', () => {
+    expect(createClassSchema.parse({ ...base, semester: '12' }).semester).toBe(12);
   });
-  it('remove espaços nas bordas de nome e código', () => {
-    expect(createClassSchema.parse({ name: '  Turma A ', code: '  ADS-2026-3A ' })).toMatchObject({ name: 'Turma A', code: 'ADS-2026-3A' });
+  it('rejeita posição fora de 1 a 12 com mensagem pt-BR', () => {
+    for (const semester of [0, 13]) {
+      expect(createClassSchema.safeParse({ ...base, semester }).error?.issues[0].message).toBe('Informe uma posição entre 1 e 12');
+    }
   });
-  it('rejeita semestre fora de 1 a 4 e código curto', () => {
-    expect(createClassSchema.safeParse({ ...base, semester: 5 }).success).toBe(false);
-    expect(createClassSchema.safeParse({ ...base, semester: 0 }).success).toBe(false);
-    expect(createClassSchema.safeParse({ ...base, code: 'A' }).success).toBe(false);
+  it('exige curso e período com mensagem pt-BR, inválidos ou ausentes', () => {
+    const { courseId: _c, ...semCurso } = base;
+    const { academicPeriodId: _p, ...semPeriodo } = base;
+    expect(createClassSchema.safeParse(semCurso).error?.issues[0].message).toBe('Selecione o curso');
+    expect(createClassSchema.safeParse({ ...base, courseId: 'x' }).error?.issues[0].message).toBe('Selecione o curso');
+    expect(createClassSchema.safeParse(semPeriodo).error?.issues[0].message).toBe('Selecione o período letivo');
   });
   it('updateClassSchema exige id', () => {
     expect(updateClassSchema.safeParse(base).success).toBe(false);
@@ -80,14 +86,6 @@ describe('updateSubjectSchema', () => {
   });
   it('coage academicYear quando informado', () => {
     expect(updateSubjectSchema.parse({ ...base, academicYear: '2027' }).academicYear).toBe(2027);
-  });
-});
-
-describe('createClassSchema (mensagens do ano)', () => {
-  it('rejeita ano fora do intervalo com mensagem em pt-BR', () => {
-    const r = createClassSchema.safeParse({ name: 'Turma A', code: 'ADS-2026-3A', year: 2019 });
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.issues[0].message).toBe('Informe um ano entre 2020 e 2050');
   });
 });
 

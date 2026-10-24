@@ -31,10 +31,11 @@ export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;
 export type UpsertSubjectInput = z.infer<typeof upsertSubjectSchema>;
 
 export const createClassSchema = z.object({
-  name: z.string().trim().min(2, 'Informe o nome da turma'),
-  code: z.string().trim().min(2, 'Informe o código da turma'),
-  year: z.coerce.number().int('Informe um ano válido').min(2020, 'Informe um ano entre 2020 e 2050').max(2050, 'Informe um ano entre 2020 e 2050').default(() => new Date().getFullYear()),
-  semester: z.coerce.number().int('Informe um semestre válido').min(1, 'Informe um semestre entre 1 e 4').max(4, 'Informe um semestre entre 1 e 4').default(1),
+  name: z.string({ required_error: 'Informe o nome da turma' }).trim().min(2, 'Informe o nome da turma'),
+  code: z.string({ required_error: 'Informe o código da turma' }).trim().min(2, 'Informe o código da turma'),
+  courseId: z.string({ required_error: 'Selecione o curso' }).cuid('Selecione o curso'),
+  academicPeriodId: z.string({ required_error: 'Selecione o período letivo' }).cuid('Selecione o período letivo'),
+  semester: z.coerce.number().int('Informe uma posição entre 1 e 12').min(1, 'Informe uma posição entre 1 e 12').max(12, 'Informe uma posição entre 1 e 12').default(1),
 });
 export const updateClassSchema = createClassSchema.extend({ id: z.string().min(1, 'ID é obrigatório') });
 export type CreateClassInput = z.infer<typeof createClassSchema>;

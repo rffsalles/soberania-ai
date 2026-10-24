@@ -11,6 +11,10 @@ export function findPeriodByCode(code: string) {
   return db.academicPeriod.findUnique({ where: { code } });
 }
 
+export function findPeriodById(id: string) {
+  return db.academicPeriod.findUnique({ where: { id } });
+}
+
 export function createPeriod(data: {
   name: string;
   code: string;
