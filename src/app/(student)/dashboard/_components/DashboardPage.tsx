@@ -11,7 +11,7 @@ import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minu
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAgendas } from '@/components/agendas/use-agenda';
 import { useCurrentUser } from '@/components/layout/use-current-user';
-import { API_ROUTES, getAgendaLink } from '@/lib/constants/routes';
+import { getAgendaLink } from '@/lib/constants/routes';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import { useMinutes } from '@/components/pedagogy/use-minutes';
 import { RetentionScore } from '@/components/pedagogy/retention-score';
@@ -133,29 +133,8 @@ function AgendaGroup({ title, agendas }: { title: string; agendas: AgendaDTO[] }
   );
 }
 
-/** Período letivo ativo mais recente cadastrado pela coordenação; null quando não há nenhum. */
-function useActivePeriodName(): string | null {
-  const [name, setName] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    let cancelled = false;
-    fetch(API_ROUTES.ACADEMIC_PERIODS)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.success && Array.isArray(data.periods) && data.periods[0]?.name) {
-          setName(data.periods[0].name as string);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return name;
-}
-
 export default function DashboardPage() {
   const [selectedMinuteAgenda, setSelectedMinuteAgenda] = React.useState<string | null>(null);
-  const activePeriodName = useActivePeriodName();
   const { agendas, isLoading: agendasLoading, error: agendasError } = useAgendas();
   const { user } = useCurrentUser();
   const { data: minutesHistory, isLoading: minutesLoading, error: minutesError } = useMinutes();
@@ -177,9 +156,11 @@ export default function DashboardPage() {
         {/* Welcome Header with Multi-Agendas Summary */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-brand-teal via-brand-teal-dark to-slate-900 text-white shadow-md">
           <div className="space-y-1.5">
-            <Badge className="bg-white/20 hover:bg-white/25 text-white border-0 text-xs font-semibold backdrop-blur-xs">
-              {activePeriodName ?? 'Período letivo não cadastrado'}
-            </Badge>
+            {user?.class && (
+              <Badge className="bg-white/20 hover:bg-white/25 text-white border-0 text-xs font-semibold backdrop-blur-xs">
+                {user.class.academicPeriod.name}
+              </Badge>
+            )}
             <h1 className="text-2xl sm:text-3xl font-bold font-heading">
               {user ? `Bem-vindo, ${user.name}!` : 'Bem-vindo!'}
             </h1>
