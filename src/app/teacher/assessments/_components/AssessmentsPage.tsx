@@ -61,7 +61,7 @@ export function AssessmentsPage() {
           <option value="">{plansLoading ? 'Carregando planos...' : 'Selecione um plano'}</option>
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.subject.name} ({p.subject.code})
+              {p.subject.discipline.name} ({p.subject.discipline.code})
             </option>
           ))}
         </select>

@@ -200,9 +200,7 @@ export default function TeachingPlanNewPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectName: activeSubject.name,
-          courseName: activeSubject.courseName,
-          academicPeriod: activePeriod?.name,
+          subjectId: selectedSubjectId,
           // Referências recarregadas de um plano salvo não têm id de material no acervo.
           selectedReferences: references.map(({ id, title, author, category }) => ({
             id: id.startsWith('ref-loaded-') ? undefined : id,
@@ -259,8 +257,7 @@ export default function TeachingPlanNewPage() {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectId: selectedSubjectId,
-          academicPeriodId: selectedPeriodId || undefined,
+          ...(editingPlanId ? {} : { subjectId: selectedSubjectId }),
           syllabus,
           generalObjectives,
           methodology,

@@ -1,10 +1,7 @@
 export interface SubjectOption {
   id: string;
-  name: string;
-  code: string;
-  courseName: string;
-  academicLevel?: string;
-  academicYear?: number;
+  discipline: { name: string; code: string };
+  class: { name: string; course: { name: string } };
 }
 
 export interface DocumentReference {

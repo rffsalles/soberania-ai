@@ -35,8 +35,16 @@ import {
 } from '../classes/_components/ClassFormModal';
 import { API_ROUTES } from '@/lib/constants/routes';
 
+// Forma da oferta devolvida por GET /admin/subjects (a tela é reescrita na fase 2).
+type OfferingRow = {
+  id: string;
+  discipline: { name: string; code: string };
+  class: { id: string; name: string; code: string; course: { name: string } };
+  teacherAssignments: { teacher: Teacher }[];
+};
+
 export default function AdminSubjectsPage() {
-  const [subjects, setSubjects] = React.useState<SubjectItem[]>([]);
+  const [subjects, setSubjects] = React.useState<OfferingRow[]>([]);
   const [teachers, setTeachers] = React.useState<Teacher[]>([]);
   const [classes, setClasses] = React.useState<ClassOption[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -87,7 +95,8 @@ export default function AdminSubjectsPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (sub: SubjectItem) => {
+  const handleOpenEditModal = (offering: OfferingRow) => {
+    const sub = offering as unknown as SubjectItem;
     setEditingSubject(sub);
     setSelectedTeachers(sub.teacherAssignments.map((ta) => ta.teacher.id));
     setSelectedClassId(sub.classId ?? null);
@@ -105,16 +114,16 @@ export default function AdminSubjectsPage() {
   };
 
   const subjectCount = subjects.length;
-  const withClassCount = subjects.filter((s) => s.class || s.classId).length;
+  const withClassCount = subjects.filter((s) => s.class).length;
   const allocatedTeacherCount = new Set(
     subjects.flatMap((s) => s.teacherAssignments.map((ta) => ta.teacher.id))
   ).size;
 
   const filteredSubjects = subjects.filter(
     (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.code.toLowerCase().includes(search.toLowerCase()) ||
-      s.courseName.toLowerCase().includes(search.toLowerCase())
+      s.discipline.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.discipline.code.toLowerCase().includes(search.toLowerCase()) ||
+      s.class.course.name.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -239,11 +248,11 @@ export default function AdminSubjectsPage() {
                 <TableRow key={sub.id} className="hover:bg-slate-50/50 transition-colors">
                   <TableCell className="font-medium">
                     <div className="flex flex-col">
-                      <span className="text-slate-900 dark:text-white font-semibold">{sub.name}</span>
-                      <span className="text-xs text-brand-teal font-mono">{sub.code}</span>
+                      <span className="text-slate-900 dark:text-white font-semibold">{sub.discipline.name}</span>
+                      <span className="text-xs text-brand-teal font-mono">{sub.discipline.code}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">{sub.courseName}</TableCell>
+                  <TableCell className="text-sm">{sub.class.course.name}</TableCell>
                   <TableCell className="text-sm">
                     {sub.class ? (
                       <span>
@@ -255,7 +264,7 @@ export default function AdminSubjectsPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
-                      {sub.academicLevel === 'HIGHER_EDUCATION' ? 'Ensino Superior' : 'Ensino Médio'}
+                      {'—'}
                     </Badge>
                   </TableCell>
                   <TableCell>

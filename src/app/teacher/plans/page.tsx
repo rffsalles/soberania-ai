@@ -38,10 +38,8 @@ interface TeachingPlan {
   updatedAt: string;
   subject?: {
     id: string;
-    name: string;
-    code: string;
-    courseName: string;
-    academicYear: number;
+    discipline: { name: string; code: string };
+    class: { name: string; course: { name: string } };
   };
 }
 
@@ -73,9 +71,9 @@ export default function TeacherPlansListPage() {
 
   const filteredPlans = plans.filter((p) => {
     const term = search.toLowerCase();
-    const name = p.subject?.name?.toLowerCase() || '';
-    const code = p.subject?.code?.toLowerCase() || '';
-    const course = p.subject?.courseName?.toLowerCase() || '';
+    const name = p.subject?.discipline?.name?.toLowerCase() || '';
+    const code = p.subject?.discipline?.code?.toLowerCase() || '';
+    const course = p.subject?.class?.course?.name?.toLowerCase() || '';
     return name.includes(term) || code.includes(term) || course.includes(term);
   });
 
@@ -236,15 +234,15 @@ export default function TeacherPlansListPage() {
                   <TableCell className="font-medium">
                     <div className="flex flex-col">
                       <span className="text-slate-900 dark:text-white font-semibold">
-                        {plan.subject?.name || 'Disciplina não informada'}
+                        {plan.subject?.discipline?.name || 'Disciplina não informada'}
                       </span>
                       <span className="text-xs text-brand-teal font-mono">
-                        {plan.subject?.code || '—'}
+                        {plan.subject?.discipline?.code || '—'}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell className="text-sm">
-                    {plan.subject?.courseName || 'Curso não informado'}
+                    {plan.subject?.class?.course?.name || 'Curso não informado'}
                   </TableCell>
                   <TableCell>{getStatusBadge(plan.status)}</TableCell>
                   <TableCell className="text-sm text-slate-600 font-medium">

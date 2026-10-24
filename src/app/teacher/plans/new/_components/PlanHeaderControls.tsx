@@ -48,9 +48,9 @@ export function PlanHeaderControls({
   const subjectItems = React.useMemo(() => {
     return subjects.map((s) => ({
       id: s.id,
-      title: s.name,
-      subtitle: `${s.code} · ${s.courseName}`,
-      badge: s.code,
+      title: s.discipline.name,
+      subtitle: `${s.discipline.code} · ${s.class.course.name}`,
+      badge: s.discipline.code,
     }));
   }, [subjects]);
 
@@ -87,13 +87,13 @@ export function PlanHeaderControls({
           </div>
 
           <h1 className="text-xl sm:text-2xl font-heading font-bold text-slate-900 dark:text-white">
-            Plano de Ensino & Aprendizagem: {activeSubject ? activeSubject.name : 'Selecione a Disciplina'}
+            Plano de Ensino & Aprendizagem: {activeSubject ? activeSubject.discipline.name : 'Selecione a Disciplina'}
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             {activeSubject ? (
               <>
-                Curso: {activeSubject.courseName} | Código: {activeSubject.code} | Status: Em Elaboração
+                Curso: {activeSubject.class.course.name} | Código: {activeSubject.discipline.code} | Status: Em Elaboração
               </>
             ) : (
               'Vincule uma disciplina e período letivo válidos para iniciar a elaboração do plano.'

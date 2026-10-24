@@ -50,6 +50,7 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
   let db: Db;
   let teacherId = '';
   let subjectId = '';
+  let disciplineId = '';
   let planId = '';
   let materialId = '';
   let assessmentId = '';
@@ -80,6 +81,7 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     if (agendaIds.length) await db.agenda.deleteMany({ where: { id: { in: agendaIds } } });
     if (planId) await db.teachingPlan.deleteMany({ where: { id: planId } });
     if (subjectId) await db.subject.deleteMany({ where: { id: subjectId } });
+    if (disciplineId) await db.discipline.deleteMany({ where: { id: disciplineId } });
     if (teacherId) await db.user.deleteMany({ where: { id: teacherId } });
     if (materialId) {
       const { removeMaterial } = await import('@/domains/rag/services/library-service');
@@ -101,16 +103,22 @@ describe.skipIf(!TEST_DB_URL)('full pedagogical flow over Postgres (service leve
     teacherId = created.id;
     teacher = { id: teacherId, role: 'TEACHER', classId: null };
 
-    // Mesmo shape que POST /admin/subjects aceita: o schema da rota valida o corpo.
-    const { upsertSubjectSchema } = await import('@/lib/validators/admin.validator');
-    const subject = await createSubject(
-      upsertSubjectSchema.parse({
+    // Curso da turma semeada -> disciplina da matriz -> oferta (turma + disciplina), como o admin faz.
+    const { createDiscipline } = await import('@/domains/academic/services/discipline-service');
+    const { createDisciplineSchema, createOfferingSchema } = await import('@/lib/validators/admin.validator');
+    const klass = await db.class.findUniqueOrThrow({ where: { id: classId } });
+    const discipline = await createDiscipline(
+      createDisciplineSchema.parse({
+        courseId: klass.courseId,
         name: `Banco de Dados E2E ${SUFFIX}`,
         code: `E2E${SUFFIX}`,
-        courseName: 'ADS',
-        classId,
-        teacherIds: [teacherId],
+        workloadHours: 60,
       })
+    );
+    disciplineId = discipline.id;
+    // Mesmo shape que POST /admin/subjects aceita: o schema da rota valida o corpo.
+    const subject = await createSubject(
+      createOfferingSchema.parse({ classId, disciplineId, teacherIds: [teacherId] })
     );
     subjectId = subject.id;
     expect(subject.teacherAssignments.map((a) => a.teacherId)).toEqual([teacherId]);

@@ -144,7 +144,7 @@ export default function AdminClassesPage() {
                     {klass.name}
                   </TableCell>
                   <TableCell className="text-xs text-brand-teal font-mono">{klass.code}</TableCell>
-                  <TableCell className="text-sm">{klass.year}</TableCell>
+                  <TableCell className="text-sm">{(klass as { academicPeriod?: { name: string } }).academicPeriod?.name ?? '—'}</TableCell>
                   <TableCell className="text-sm">{klass.semester}</TableCell>
                   <TableCell className="text-sm">{klass._count?.students ?? 0}</TableCell>
                   <TableCell className="text-sm">{klass._count?.subjects ?? 0}</TableCell>
