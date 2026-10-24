@@ -56,7 +56,7 @@ function makeDeps(
     student: { name: 'Lucas' },
     agenda: {
       subject: 'BD',
-      subjectRef: { name: 'Banco de Dados' },
+      subjectRef: { discipline: { name: 'Banco de Dados' } },
       class: { name: 'Turma A' },
     },
   }));
@@ -173,7 +173,7 @@ describe('generateMinute com IA indisponível', () => {
     aiFallback: false,
     createdAt: NOW,
     student: { name: 'Lucas' },
-    agenda: { subject: 'BD', subjectRef: { name: 'Banco de Dados' }, class: { name: 'Turma A' } },
+    agenda: { subject: 'BD', subjectRef: { discipline: { name: 'Banco de Dados' } }, class: { name: 'Turma A' } },
   };
 
   it('regeneração pelo professor preserva o parecer real e atualiza só as métricas', async () => {
@@ -232,7 +232,7 @@ describe('requestMinutes', () => {
     aiFallback: false,
     createdAt: NOW,
     student: { name: 'Lucas' },
-    agenda: { subject: 'BD', subjectRef: { name: 'Banco de Dados' }, class: { name: 'Turma A' } },
+    agenda: { subject: 'BD', subjectRef: { discipline: { name: 'Banco de Dados' } }, class: { name: 'Turma A' } },
   };
 
   it('professor sem studentId gera as atas da turma inteira e devolve o resumo', async () => {

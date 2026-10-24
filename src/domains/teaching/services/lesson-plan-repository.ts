@@ -8,7 +8,7 @@ export function listLessonsBySchedule(filter: { scheduleId?: string; teacherId?:
       ...(filter.teacherId ? { courseSchedule: { teachingPlan: { teacherId: filter.teacherId } } } : {}),
     },
     include: {
-      courseSchedule: { include: { teachingPlan: { include: { subject: true } } } },
+      courseSchedule: { include: { teachingPlan: { include: { subject: { include: { discipline: true } } } } } },
     },
     orderBy: { classNumber: 'asc' },
   });
@@ -20,7 +20,7 @@ export function createLesson(data: Prisma.LessonPlanUncheckedCreateInput) {
 
 const lessonContextInclude = {
   courseSchedule: {
-    include: { teachingPlan: { select: { teacherId: true, subject: { select: { id: true, name: true, classId: true } } } } },
+    include: { teachingPlan: { select: { teacherId: true, subject: { select: { id: true, classId: true, discipline: { select: { name: true } } } } } } },
   },
 } satisfies Prisma.LessonPlanInclude;
 

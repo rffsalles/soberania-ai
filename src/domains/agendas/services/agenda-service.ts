@@ -29,7 +29,7 @@ export type AgendaDeps = {
     findAgendas(scope: AgendaScope): Promise<AgendaRecord[]>;
     findAgendaById(id: string): Promise<AgendaRecord | null>;
     findTeacherSubjectIds(teacherId: string): Promise<string[]>;
-    findSubject(subjectId: string): Promise<{ name: string; classId: string | null } | null>;
+    findSubject(subjectId: string): Promise<{ name: string; classId: string } | null>;
     findLessonPlanSubjectId(lessonPlanId: string): Promise<string | null>;
     findAssessmentRef(assessmentId: string): Promise<{ subjectId: string; status: string } | null>;
     insertAgenda(data: Parameters<typeof realRepo.insertAgenda>[0]): Promise<AgendaRecord>;
@@ -111,7 +111,7 @@ export async function getAgendaForUser(
 /** Turma, plano de aula e avaliação precisam pertencer à disciplina da agenda (sem IDOR entre professores). */
 async function assertAgendaReferences(
   input: CreateAgendaInput,
-  subjectClassId: string | null,
+  subjectClassId: string,
   deps: AgendaDeps
 ): Promise<void> {
   if (input.classId !== subjectClassId) {

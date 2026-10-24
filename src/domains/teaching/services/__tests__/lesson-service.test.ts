@@ -16,24 +16,24 @@ const teacher = { id: 't1', role: Role.TEACHER, classId: null };
 const student = { id: 's1', role: Role.STUDENT, classId: 'c1' };
 const otherStudent = { id: 's2', role: Role.STUDENT, classId: 'c9' };
 
-const baseLesson = (teacherId: string, classId: string | null = 'c1'): LessonWithContext => ({
+const baseLesson = (teacherId: string): LessonWithContext => ({
   id: 'own',
   topicTitle: 'Aula 1',
   classDate: new Date('2026-03-02T13:00:00Z'),
   mediaType: null,
   mediaUrl: null,
   s3ObjectKey: null,
-  courseSchedule: { teachingPlan: { teacherId, subject: { id: 'sub1', name: 'BD', classId } } },
+  courseSchedule: { teachingPlan: { teacherId, subject: { id: 'sub1', classId: 'c1', discipline: { name: 'BD' } } } },
 });
 
-function makeDeps(opts: { teacherId?: string; classId?: string | null; s3ObjectKey?: string | null; mediaType?: string | null; mediaUrl?: string | null; failDelete?: boolean } = {}) {
+function makeDeps(opts: { teacherId?: string; s3ObjectKey?: string | null; mediaType?: string | null; mediaUrl?: string | null; failDelete?: boolean } = {}) {
   const calls: Record<string, unknown[]> = {};
   const rec = (name: string, arg: unknown) => {
     (calls[name] ||= []).push(arg);
   };
   const agendas = new Map<string, Record<string, unknown>>();
   const lessonRow: LessonWithContext = {
-    ...baseLesson(opts.teacherId ?? 't1', opts.classId === undefined ? 'c1' : opts.classId),
+    ...baseLesson(opts.teacherId ?? 't1'),
     s3ObjectKey: opts.s3ObjectKey ?? null,
     mediaType: opts.mediaType ?? null,
     mediaUrl: opts.mediaUrl ?? null,
@@ -161,15 +161,6 @@ describe('lesson-service syncAgendaForLesson', () => {
       videoUrl: 'https://youtu.be/abcdefghijk',
     });
     expect((agenda!.endTime as Date).getTime() - (agenda!.startTime as Date).getTime()).toBe(100 * 60 * 1000);
-  });
-
-  it('skips the sync when the subject has no class', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { deps, calls } = makeDeps();
-    await syncAgendaForLesson(baseLesson('t1', null), deps);
-    expect(warn).toHaveBeenCalledOnce();
-    warn.mockRestore();
-    expect(calls.upsert).toBeUndefined();
   });
 });
 

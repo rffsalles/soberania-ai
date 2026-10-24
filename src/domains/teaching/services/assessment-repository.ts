@@ -9,7 +9,7 @@ export function listAssessmentsByPlan(filter: { planId?: string; teacherId?: str
       ...(filter.teacherId ? { teachingPlan: { teacherId: filter.teacherId } } : {}),
     },
     include: {
-      teachingPlan: { include: { subject: true } },
+      teachingPlan: { include: { subject: { include: { discipline: true } } } },
       agendas: { select: { id: true, classId: true, startTime: true, endTime: true } },
     },
     orderBy: { createdAt: 'desc' },

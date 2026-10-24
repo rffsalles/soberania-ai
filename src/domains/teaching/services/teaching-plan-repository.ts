@@ -43,6 +43,6 @@ export function findPlanOwner(id: string) {
 export function findPlanForAssessment(id: string) {
   return db.teachingPlan.findUnique({
     where: { id },
-    select: { id: true, teacherId: true, subjectId: true, syllabus: true, unitsContent: true, subject: { select: { name: true } } },
+    select: { id: true, teacherId: true, subjectId: true, syllabus: true, unitsContent: true, subject: { select: { discipline: { select: { name: true } } } } },
   });
 }

@@ -6,7 +6,7 @@ const minuteInclude = {
   agenda: {
     select: {
       subject: true,
-      subjectRef: { select: { name: true } },
+      subjectRef: { select: { discipline: { select: { name: true } } } },
       class: { select: { name: true } },
     },
   },

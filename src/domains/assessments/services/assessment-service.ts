@@ -31,7 +31,7 @@ type PlanForAssessment = {
   subjectId: string;
   syllabus: string;
   unitsContent: unknown;
-  subject: { name: string };
+  subject: { discipline: { name: string } };
 };
 
 type AssessmentWithPlan = {
@@ -150,7 +150,7 @@ export async function generateQuestions(
   const units = selectUnits(plan, input.unitNumbers);
   const results = await Promise.all(
     units.map((u) =>
-      deps.search({ query: `${u.title} ${u.topics.join(' ')}`, subjectName: plan.subject.name, topK: CHUNKS_PER_UNIT })
+      deps.search({ query: `${u.title} ${u.topics.join(' ')}`, subjectName: plan.subject.discipline.name, topK: CHUNKS_PER_UNIT })
     )
   );
   const seen = new Set<string>();
@@ -182,7 +182,7 @@ export async function generateQuestions(
         {
           id: plan.id,
           materialId: plan.id,
-          bookTitle: plan.subject.name,
+          bookTitle: plan.subject.discipline.name,
           author: '',
           chapter: units[0].title,
           pageNumber: 0,

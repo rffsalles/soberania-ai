@@ -39,7 +39,7 @@ function makeDeps(aiText: string, fallback = false) {
             subjectId: 's1',
             syllabus: 'Ementa',
             unitsContent: [{ unitNumber: 1, title: 'Unidade um', topics: ['a'] }],
-            subject: { name: 'Banco de Dados' },
+            subject: { discipline: { name: 'Banco de Dados' } },
           }
         : null,
     findAssessment: async (id) =>
@@ -82,6 +82,13 @@ const validQuestion = (id: string): Question => ({
 
 describe('generateQuestions', () => {
   const input = { teachingPlanId: 'plan1', unitNumbers: [1], questionCount: 5, type: 'EXAM' };
+
+  it('busca trechos pelo nome da disciplina da matriz', async () => {
+    const { deps } = makeDeps('isto não é json');
+    const search = vi.spyOn(deps, 'search');
+    await generateQuestions(teacher, input, deps);
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ subjectName: 'Banco de Dados' }));
+  });
 
   it('falls back to chunk-based questions when the AI returns invalid JSON', async () => {
     const { deps } = makeDeps('isto não é json');

@@ -34,7 +34,7 @@ export type LessonWithContext = {
   mediaUrl: string | null;
   s3ObjectKey: string | null;
   courseSchedule: {
-    teachingPlan: { teacherId: string; subject: { id: string; name: string; classId: string | null } };
+    teachingPlan: { teacherId: string; subject: { id: string; classId: string; discipline: { name: string } } };
   };
 };
 
@@ -73,13 +73,9 @@ async function loadOwned(id: string, user: LessonActor, deps: LessonDeps) {
 /** Creates or updates the CLASSROOM agenda of a dated lesson (one agenda per lesson plan). */
 export async function syncAgendaForLesson(lesson: LessonWithContext, deps: LessonDeps = defaultDeps) {
   const { teacherId, subject } = lesson.courseSchedule.teachingPlan;
-  if (!subject.classId) {
-    console.warn(`[lesson-service] Disciplina ${subject.id} sem turma: agenda da aula ${lesson.id} não sincronizada.`);
-    return;
-  }
   await deps.repo.upsertAgendaByLessonPlanId(lesson.id, {
     title: lesson.topicTitle,
-    subject: subject.name,
+    subject: subject.discipline.name,
     type: AgendaType.CLASSROOM,
     startTime: lesson.classDate,
     endTime: new Date(lesson.classDate.getTime() + LESSON_DEFAULT_DURATION_MINUTES * MS_PER_MINUTE),

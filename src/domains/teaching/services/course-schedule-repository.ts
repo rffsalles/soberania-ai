@@ -8,7 +8,7 @@ export function listSchedulesByPlan(filter: { planId?: string; teacherId?: strin
       ...(filter.teacherId ? { teachingPlan: { teacherId: filter.teacherId } } : {}),
     },
     include: {
-      teachingPlan: { include: { subject: true } },
+      teachingPlan: { include: { subject: { include: { discipline: true } } } },
       lessonPlans: { orderBy: { classNumber: 'asc' } },
     },
     orderBy: { createdAt: 'desc' },
@@ -25,7 +25,7 @@ export function findScheduleOwner(id: string) {
 export function createSchedule(data: Prisma.CourseScheduleUncheckedCreateInput) {
   return db.courseSchedule.create({
     data,
-    include: { teachingPlan: { include: { subject: true } } },
+    include: { teachingPlan: { include: { subject: { include: { discipline: true } } } } },
   });
 }
 

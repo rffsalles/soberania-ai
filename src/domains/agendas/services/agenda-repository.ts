@@ -41,8 +41,12 @@ export async function findTeacherSubjectIds(teacherId: string): Promise<string[]
   return rows.map((r) => r.subjectId);
 }
 
-export function findSubject(subjectId: string): Promise<{ name: string; classId: string | null } | null> {
-  return db.subject.findUnique({ where: { id: subjectId }, select: { name: true, classId: true } });
+export async function findSubject(subjectId: string): Promise<{ name: string; classId: string } | null> {
+  const row = await db.subject.findUnique({
+    where: { id: subjectId },
+    select: { classId: true, discipline: { select: { name: true } } },
+  });
+  return row ? { name: row.discipline.name, classId: row.classId } : null;
 }
 
 /** Disciplina do plano de ensino ao qual o plano de aula pertence. */

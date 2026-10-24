@@ -75,7 +75,7 @@ function toDTO(r: MinuteRecord): MinuteDTO {
     actionableAdvice: r.actionableAdvice,
     aiGenerated: !r.aiFallback,
     createdAt: r.createdAt.toISOString(),
-    subjectName: r.agenda.subjectRef?.name ?? r.agenda.subject,
+    subjectName: r.agenda.subjectRef?.discipline.name ?? r.agenda.subject,
     className: r.agenda.class.name,
   };
 }
