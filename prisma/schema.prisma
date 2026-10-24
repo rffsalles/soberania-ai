@@ -80,19 +80,64 @@ model Session {
   @@map("sessions")
 }
 
+enum AcademicLevel {
+  HIGHER_EDUCATION
+  HIGH_SCHOOL
+  ELEMENTARY
+}
+
+// Curso (ex.: "Análise e Desenvolvimento de Sistemas", "Ensino Médio")
+model Course {
+  id            String        @id @default(cuid())
+  name          String
+  code          String        @unique // ex: "ADS"
+  academicLevel AcademicLevel @default(HIGHER_EDUCATION)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  disciplines Discipline[]
+  classes     Class[]
+
+  @@map("courses")
+}
+
+// Disciplina da matriz curricular do curso (catálogo)
+model Discipline {
+  id            String   @id @default(cuid())
+  courseId      String
+  code          String // ex: "BD101", único dentro do curso
+  name          String // ex: "Banco de Dados I"
+  description   String?  @db.Text
+  workloadHours Int // carga horária da matriz, ex: 80
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  course    Course    @relation(fields: [courseId], references: [id])
+  offerings Subject[]
+
+  @@unique([courseId, code])
+  @@index([courseId])
+  @@map("disciplines")
+}
+
 model Class {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  semester  Int
-  year      Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  courseId         String
+  academicPeriodId String
+  name             String
+  code             String   @unique
+  semester         Int // posição na matriz: 3 = 3º semestre (superior) ou 3º ano (médio/fundamental)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  students User[]
-  agendas  Agenda[]
-  subjects Subject[]
+  course         Course         @relation(fields: [courseId], references: [id])
+  academicPeriod AcademicPeriod @relation(fields: [academicPeriodId], references: [id])
+  students       User[]
+  agendas        Agenda[]
+  subjects       Subject[]
 
+  @@index([courseId])
+  @@index([academicPeriodId])
   @@map("classes")
 }
 
@@ -136,24 +181,21 @@ model Agenda {
 // ==========================================
 
 model Subject {
-  id            String   @id @default(cuid())
-  name          String // ex: "Banco de Dados I" ou "Física III"
-  code          String   @unique // ex: "BD101"
-  description   String?  @db.Text
-  courseName    String // ex: "ADS", "Engenharia de Software" ou "3º Ano EM"
-  academicLevel String   @default("HIGHER_EDUCATION") // "HIGHER_EDUCATION" | "HIGH_SCHOOL" | "ELEMENTARY"
-  academicYear  Int      @default(2026) // Ano letivo (ex: 2026)
-  semester      Int? // Semestre (opcional para escolas anuais)
-  classId       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  disciplineId String
+  classId      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  class              Class?           @relation(fields: [classId], references: [id])
+  discipline         Discipline       @relation(fields: [disciplineId], references: [id])
+  class              Class            @relation(fields: [classId], references: [id])
   teacherAssignments TeacherSubject[]
   teachingPlans      TeachingPlan[]
   agendas            Agenda[]
 
+  @@unique([disciplineId, classId])
   @@index([classId])
+  @@index([disciplineId])
   @@map("subjects")
 }
 
@@ -191,7 +233,7 @@ model AcademicPeriod {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  teachingPlans TeachingPlan[]
+  classes Class[]
 
   @@map("academic_periods")
 }
@@ -201,16 +243,15 @@ model TeachingPlan {
   id                  String   @id @default(cuid())
   subjectId           String
   teacherId           String
-  academicPeriodId    String?
-  syllabus            String   @db.Text // Ementa oficial
-  generalObjectives   String   @db.Text // Objetivos gerais
-  specificObjectives  String   @db.Text // Objetivos específicos
-  unitsContent        Json // Array de { unitNumber, title, topics: [] }
-  methodology         String   @db.Text // Metodologia de ensino
-  assessmentCriteria  String   @db.Text // Critérios de avaliação
-  basicBibliography   String[] // Bibliografia básica
-  complementaryBiblio String[] // Bibliografia complementar
-  status              String   @default("DRAFT") // DRAFT, APPROVED
+  syllabus            String   @db.Text
+  generalObjectives   String   @db.Text
+  specificObjectives  String   @db.Text
+  unitsContent        Json
+  methodology         String   @db.Text
+  assessmentCriteria  String   @db.Text
+  basicBibliography   String[]
+  complementaryBiblio String[]
+  status              String   @default("DRAFT")
   totalHours          Int
   theoryHours         Int
   practiceHours       Int
@@ -218,13 +259,11 @@ model TeachingPlan {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  subject        Subject          @relation(fields: [subjectId], references: [id])
-  academicPeriod AcademicPeriod?  @relation(fields: [academicPeriodId], references: [id])
-  schedules      CourseSchedule[]
-  assessments    Assessment[]
+  subject     Subject          @relation(fields: [subjectId], references: [id])
+  schedules   CourseSchedule[]
+  assessments Assessment[]
 
   @@index([subjectId])
-  @@index([academicPeriodId])
   @@map("teaching_plans")
 }
 

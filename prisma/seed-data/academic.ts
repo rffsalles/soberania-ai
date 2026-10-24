@@ -1,3 +1,4 @@
+import { AcademicLevel } from '@prisma/client';
 import { generateMeetings } from '../../src/domains/teaching/schedule-generator';
 import {
   DEFAULT_NDE_COMPLIANCE_STATUS,
@@ -9,22 +10,25 @@ import {
 } from '../../src/lib/constants/teaching';
 import { localDateTimeToUtc } from '../../src/lib/timezone';
 
+export const DEMO_COURSE = {
+  code: 'ADS',
+  name: 'Análise e Desenvolvimento de Sistemas',
+  academicLevel: AcademicLevel.HIGHER_EDUCATION,
+} as const;
+
+export const DEMO_DISCIPLINE = {
+  code: 'BD101',
+  name: 'Banco de Dados I',
+  workloadHours: 80,
+} as const;
+
+export const DEMO_PERIOD_CODE = '2026.1';
+
 export const DEMO_CLASS = {
   code: 'ADS-2026-3A',
   name: '3º Semestre · ADS',
   semester: 3,
-  year: 2026,
 } as const;
-
-export const DEMO_SUBJECT = {
-  code: 'BD101',
-  name: 'Banco de Dados I',
-  courseName: 'ADS',
-  academicYear: 2026,
-  semester: 3,
-} as const;
-
-export const DEMO_PERIOD_CODE = '2026.1';
 
 export const DEMO_TEACHING_PLAN = {
   totalHours: 80,

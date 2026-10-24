@@ -9,11 +9,12 @@ import { DEMO_USERS } from './seed-data/users';
 import {
   DEMO_ASSESSMENT,
   DEMO_CLASS,
+  DEMO_COURSE,
+  DEMO_DISCIPLINE,
   DEMO_LESSON_PLANS,
   DEMO_TOTAL_CLASSES,
   DEMO_PERIOD_CODE,
   DEMO_SCHEDULE,
-  DEMO_SUBJECT,
   DEMO_TEACHING_PLAN,
 } from './seed-data/academic';
 import { DEMO_AGENDAS, offsetDate } from './seed-data/agendas';
@@ -121,18 +122,34 @@ async function seedEmbeddings(chunks: { id: string; content: string }[]) {
 }
 
 async function main() {
-  // Turma, usuários e disciplina
+  // Períodos padrão
+  for (const p of DEFAULT_PERIODS) {
+    await prisma.academicPeriod.upsert({ where: { code: p.code }, update: {}, create: { ...p } });
+  }
+  const period = await prisma.academicPeriod.findUniqueOrThrow({ where: { code: DEMO_PERIOD_CODE } });
+
+  // Curso, disciplina da matriz, turma, usuários e oferta
+  const course = await prisma.course.upsert({
+    where: { code: DEMO_COURSE.code },
+    update: { name: DEMO_COURSE.name, academicLevel: DEMO_COURSE.academicLevel },
+    create: { ...DEMO_COURSE },
+  });
+  const discipline = await prisma.discipline.upsert({
+    where: { courseId_code: { courseId: course.id, code: DEMO_DISCIPLINE.code } },
+    update: { name: DEMO_DISCIPLINE.name, workloadHours: DEMO_DISCIPLINE.workloadHours },
+    create: { ...DEMO_DISCIPLINE, courseId: course.id },
+  });
   const klass = await prisma.class.upsert({
     where: { code: DEMO_CLASS.code },
-    update: { name: DEMO_CLASS.name, semester: DEMO_CLASS.semester, year: DEMO_CLASS.year },
-    create: { ...DEMO_CLASS },
+    update: { name: DEMO_CLASS.name, semester: DEMO_CLASS.semester, courseId: course.id, academicPeriodId: period.id },
+    create: { ...DEMO_CLASS, courseId: course.id, academicPeriodId: period.id },
   });
   const teacher = await seedUsers(klass.id);
 
   const subject = await prisma.subject.upsert({
-    where: { code: DEMO_SUBJECT.code },
-    update: { name: DEMO_SUBJECT.name, courseName: DEMO_SUBJECT.courseName, classId: klass.id },
-    create: { ...DEMO_SUBJECT, classId: klass.id },
+    where: { disciplineId_classId: { disciplineId: discipline.id, classId: klass.id } },
+    update: {},
+    create: { disciplineId: discipline.id, classId: klass.id },
   });
   await prisma.teacherSubject.upsert({
     where: { teacherId_subjectId: { teacherId: teacher.id, subjectId: subject.id } },
@@ -140,15 +157,11 @@ async function main() {
     create: { teacherId: teacher.id, subjectId: subject.id },
   });
 
-  // Períodos e categorias padrão
-  for (const p of DEFAULT_PERIODS) {
-    await prisma.academicPeriod.upsert({ where: { code: p.code }, update: {}, create: { ...p } });
-  }
+  // Categorias padrão
   await seedCategories();
-  const period = await prisma.academicPeriod.findUniqueOrThrow({ where: { code: DEMO_PERIOD_CODE } });
 
   // Plano de ensino, cronograma e planos de aula
-  const planWhere = { subjectId: subject.id, teacherId: teacher.id, academicPeriodId: period.id };
+  const planWhere = { subjectId: subject.id, teacherId: teacher.id };
   const planData = { ...DEMO_TEACHING_PLAN, basicBibliography: [...DEMO_TEACHING_PLAN.basicBibliography], complementaryBiblio: [...DEMO_TEACHING_PLAN.complementaryBiblio] };
   const existingPlan = await prisma.teachingPlan.findFirst({ where: planWhere });
   const plan = existingPlan
@@ -205,7 +218,7 @@ async function main() {
   const now = Date.now();
   for (const a of DEMO_AGENDAS) {
     const data = {
-      subject: subject.name,
+      subject: DEMO_DISCIPLINE.name,
       type: a.type,
       status: a.status,
       startTime: offsetDate(now, a.startOffsetMinutes),
@@ -228,6 +241,8 @@ async function main() {
 
   const counts = {
     users: await prisma.user.count(),
+    courses: await prisma.course.count(),
+    disciplines: await prisma.discipline.count(),
     classes: await prisma.class.count(),
     subjects: await prisma.subject.count(),
     teacherSubjects: await prisma.teacherSubject.count(),
