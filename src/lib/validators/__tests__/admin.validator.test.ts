@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema, updateSubjectSchema } from '../admin.validator';
+import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema, updateSubjectSchema, createCourseSchema, updateCourseSchema } from '../admin.validator';
 
 const valid = {
   name: 'Carlos Silva',
@@ -88,5 +88,25 @@ describe('createClassSchema (mensagens do ano)', () => {
     const r = createClassSchema.safeParse({ name: 'Turma A', code: 'ADS-2026-3A', year: 2019 });
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues[0].message).toBe('Informe um ano entre 2020 e 2050');
+  });
+});
+
+describe('createCourseSchema', () => {
+  it('aplica nível HIGHER_EDUCATION por padrão e remove espaços', () => {
+    expect(createCourseSchema.parse({ name: '  Ensino Médio ', code: ' EM ' })).toEqual({
+      name: 'Ensino Médio', code: 'EM', academicLevel: 'HIGHER_EDUCATION',
+    });
+  });
+  it('rejeita nível desconhecido e nome curto com mensagem pt-BR', () => {
+    expect(createCourseSchema.safeParse({ name: 'ADS', code: 'ADS', academicLevel: 'MBA' }).success).toBe(false);
+    expect(createCourseSchema.safeParse({ name: 'A', code: 'ADS' }).error?.issues[0].message).toBe('Informe o nome do curso');
+  });
+  it('usa mensagens pt-BR quando nome ou código estão ausentes', () => {
+    expect(createCourseSchema.safeParse({ code: 'ADS' }).error?.issues[0].message).toBe('Informe o nome do curso');
+    expect(createCourseSchema.safeParse({ name: 'ADS' }).error?.issues[0].message).toBe('Informe o código do curso');
+  });
+  it('updateCourseSchema exige id', () => {
+    expect(updateCourseSchema.safeParse({ name: 'ADS', code: 'ADS' }).success).toBe(false);
+    expect(updateCourseSchema.safeParse({ name: 'ADS', code: 'ADS' }).error?.issues[0].message).toBe('ID é obrigatório');
   });
 });

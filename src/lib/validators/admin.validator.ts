@@ -38,3 +38,13 @@ export const createClassSchema = z.object({
 });
 export const updateClassSchema = createClassSchema.extend({ id: z.string().min(1, 'ID é obrigatório') });
 export type CreateClassInput = z.infer<typeof createClassSchema>;
+
+const academicLevel = z.enum(['HIGHER_EDUCATION', 'HIGH_SCHOOL', 'ELEMENTARY']);
+
+export const createCourseSchema = z.object({
+  name: z.string({ required_error: 'Informe o nome do curso' }).trim().min(2, 'Informe o nome do curso'),
+  code: z.string({ required_error: 'Informe o código do curso' }).trim().min(2, 'Informe o código do curso'),
+  academicLevel: academicLevel.default('HIGHER_EDUCATION'),
+});
+export const updateCourseSchema = createCourseSchema.extend({ id: z.string({ required_error: 'ID é obrigatório' }).min(1, 'ID é obrigatório') });
+export type CreateCourseInput = z.infer<typeof createCourseSchema>;
