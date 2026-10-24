@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
+import { API_ROUTES, ROUTES } from '@/lib/constants/routes';
 import {
   Table,
   TableBody,
@@ -36,10 +37,14 @@ interface TeachingPlan {
   ndeComplianceStatus?: string;
   createdAt: string;
   updatedAt: string;
-  subject?: {
+  subject: {
     id: string;
     discipline: { name: string; code: string };
-    class: { name: string; course: { name: string } };
+    class: {
+      name: string;
+      course: { name: string; code: string };
+      academicPeriod: { id: string; name: string; code: string; year: number };
+    };
   };
 }
 
@@ -51,7 +56,7 @@ export default function TeacherPlansListPage() {
   const fetchPlans = React.useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/v1/teacher/plans');
+      const res = await fetch(API_ROUTES.TEACHER_PLANS);
       const data = await res.json();
       if (data.success && Array.isArray(data.plans)) {
         setPlans(data.plans);
@@ -69,13 +74,25 @@ export default function TeacherPlansListPage() {
     fetchPlans();
   }, [fetchPlans]);
 
-  const filteredPlans = plans.filter((p) => {
+  const groups = React.useMemo(() => {
     const term = search.toLowerCase();
-    const name = p.subject?.discipline?.name?.toLowerCase() || '';
-    const code = p.subject?.discipline?.code?.toLowerCase() || '';
-    const course = p.subject?.class?.course?.name?.toLowerCase() || '';
-    return name.includes(term) || code.includes(term) || course.includes(term);
-  });
+    const filtered = plans.filter((p) => {
+      const { discipline, class: cls } = p.subject;
+      return [discipline.name, discipline.code, cls.course.name, cls.name].some((v) =>
+        v.toLowerCase().includes(term),
+      );
+    });
+    const byPeriod = new Map<string, { period: TeachingPlan['subject']['class']['academicPeriod']; plans: TeachingPlan[] }>();
+    for (const p of filtered) {
+      const period = p.subject.class.academicPeriod;
+      const group = byPeriod.get(period.id);
+      if (group) group.plans.push(p);
+      else byPeriod.set(period.id, { period, plans: [p] });
+    }
+    return [...byPeriod.values()].sort(
+      (a, b) => b.period.year - a.period.year || b.period.code.localeCompare(a.period.code),
+    );
+  }, [plans, search]);
 
   const totalMappedHours = React.useMemo(() => {
     return plans.reduce((acc, p) => acc + (p.totalHours ?? 0), 0);
@@ -132,7 +149,7 @@ export default function TeacherPlansListPage() {
           </p>
         </div>
 
-        <Link href="/teacher/plans/new">
+        <Link href={ROUTES.TEACHER_PLANS_NEW}>
           <Button className="bg-brand-teal hover:bg-brand-teal-dark text-white gap-2 cursor-pointer rounded-xl shadow-soft-sm">
             <Plus className="h-4 w-4" />
             <span>+ Elaborar Novo Plano de Ensino</span>
@@ -196,7 +213,7 @@ export default function TeacherPlansListPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar plano por disciplina ou curso..."
+            placeholder="Buscar plano por disciplina, curso ou turma..."
             className="pl-9 rounded-xl"
           />
         </div>
@@ -208,7 +225,7 @@ export default function TeacherPlansListPage() {
           <TableHeader className="bg-slate-50/80 dark:bg-slate-900/80">
             <TableRow>
               <TableHead>Disciplina & Código</TableHead>
-              <TableHead>Curso / Ano</TableHead>
+              <TableHead>Curso / Turma</TableHead>
               <TableHead>Status NDE</TableHead>
               <TableHead>Carga Horária</TableHead>
               <TableHead>Última Atualização</TableHead>
@@ -222,48 +239,60 @@ export default function TeacherPlansListPage() {
                   Carregando planos de ensino...
                 </TableCell>
               </TableRow>
-            ) : filteredPlans.length === 0 ? (
+            ) : groups.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center text-slate-500">
                   Nenhum plano de ensino encontrado.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredPlans.map((plan) => (
-                <TableRow key={plan.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TableCell className="font-medium">
-                    <div className="flex flex-col">
-                      <span className="text-slate-900 dark:text-white font-semibold">
-                        {plan.subject?.discipline?.name || 'Disciplina não informada'}
-                      </span>
-                      <span className="text-xs text-brand-teal font-mono">
-                        {plan.subject?.discipline?.code || '—'}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {plan.subject?.class?.course?.name || 'Curso não informado'}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(plan.status)}</TableCell>
-                  <TableCell className="text-sm text-slate-600 font-medium">
-                    {plan.totalHours != null ? `${plan.totalHours}h` : '—'}
-                  </TableCell>
-                  <TableCell className="text-xs text-slate-500">
-                    {new Date(plan.updatedAt).toLocaleDateString('pt-BR')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/teacher/plans/new?id=${plan.id}`}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs border-brand-teal/30 text-brand-teal hover:bg-brand-teal/10 cursor-pointer gap-1"
-                      >
-                        <span>Editar / Continuar</span>
-                        <ArrowRight className="h-3 w-3" />
-                      </Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
+              groups.map(({ period, plans: groupPlans }) => (
+                <React.Fragment key={period.id}>
+                  <TableRow className="bg-slate-50/60 dark:bg-slate-900/60 hover:bg-slate-50/60">
+                    <TableCell colSpan={6} role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                      {period.name}
+                    </TableCell>
+                  </TableRow>
+                  {groupPlans.map((plan) => (
+                    <TableRow key={plan.id} className="hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col">
+                          <span className="text-slate-900 dark:text-white font-semibold">
+                            {plan.subject.discipline.name}
+                          </span>
+                          <span className="text-xs text-brand-teal font-mono">
+                            {plan.subject.discipline.code}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex flex-col">
+                          <span>{plan.subject.class.course.name}</span>
+                          <span className="text-xs text-slate-500">{plan.subject.class.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(plan.status)}</TableCell>
+                      <TableCell className="text-sm text-slate-600 font-medium">
+                        {plan.totalHours != null ? `${plan.totalHours}h` : '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500">
+                        {new Date(plan.updatedAt).toLocaleDateString('pt-BR')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`${ROUTES.TEACHER_PLANS_NEW}?id=${plan.id}`}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs border-brand-teal/30 text-brand-teal hover:bg-brand-teal/10 cursor-pointer gap-1"
+                          >
+                            <span>Editar / Continuar</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </React.Fragment>
               ))
             )}
           </TableBody>
