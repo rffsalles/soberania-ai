@@ -40,8 +40,8 @@ const plans = [
   plan('cplan0000004', { name: 'Banco de Dados III', code: 'BD103' }, 'Turma C', p2026_1),
 ];
 
-function setup() {
-  vi.stubGlobal('fetch', routeFetch({ 'GET /api/v1/teacher/plans': { success: true, plans } }));
+function setup(list: unknown[] = plans) {
+  vi.stubGlobal('fetch', routeFetch({ 'GET /api/v1/teacher/plans': { success: true, plans: list } }));
   render(<TeacherPlansListPage />);
 }
 
@@ -57,6 +57,27 @@ describe('TeacherPlansListPage', () => {
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       'Disciplina & Código', 'Curso / Turma', 'Status NDE', 'Carga Horária', 'Última Atualização', 'Ações',
     ]);
+  });
+
+  it('cada plano fica sob o cabeçalho do seu período, na ordem da API', async () => {
+    setup();
+    await screen.findByText('Banco de Dados I');
+    const body = document.querySelector('tbody') as HTMLElement;
+    const seq = Array.from(body.querySelectorAll('tr')).map((tr) =>
+      tr.querySelector('[role="rowheader"]')
+        ? `H:${tr.textContent}`
+        : `P:${(tr.querySelector('span.font-mono') as HTMLElement).textContent}`,
+    );
+    expect(seq).toEqual([
+      'H:2º Semestre / 2026 (2026.2)', 'P:BD102',
+      'H:1º Semestre / 2026 (2026.1)', 'P:BD101', 'P:BD103',
+      'H:2º Semestre / 2025 (2025.2)', 'P:ES101',
+    ]);
+  });
+
+  it('mostra o estado vazio quando a API devolve lista vazia', async () => {
+    setup([]);
+    expect(await screen.findByText('Nenhum plano de ensino encontrado.')).toBeTruthy();
   });
 
   it('cada linha mostra disciplina, código, curso e turma', async () => {
