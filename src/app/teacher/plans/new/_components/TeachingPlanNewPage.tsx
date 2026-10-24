@@ -12,7 +12,7 @@ import { ReferenceSelectionModal } from './ReferenceSelectionModal';
 import { DEFAULT_NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
 import type { AcademicPeriodOption } from '@/app/admin/classes/_components/PeriodCreateInlineModal';
 import type {
-  SubjectOption,
+  OfferingOption,
   DocumentReference,
   NdeComplianceData,
 } from '../types';
@@ -48,7 +48,7 @@ export default function TeachingPlanNewPage() {
   const editingPlanId = searchParams.get('id');
 
   // Dynamic Subjects & Academic Periods from DB
-  const [subjects, setSubjects] = React.useState<SubjectOption[]>([]);
+  const [subjects, setSubjects] = React.useState<OfferingOption[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = React.useState<string>('');
 
   const [periods, setPeriods] = React.useState<AcademicPeriodOption[]>([]);

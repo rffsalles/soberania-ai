@@ -1,7 +1,13 @@
-export interface SubjectOption {
+export interface OfferingOption {
   id: string;
-  discipline: { name: string; code: string };
-  class: { name: string; course: { name: string } };
+  discipline: { code: string; name: string; workloadHours: number };
+  class: {
+    id: string;
+    name: string;
+    semester: number;
+    course: { name: string; code: string; academicLevel: 'HIGHER_EDUCATION' | 'HIGH_SCHOOL' | 'ELEMENTARY' };
+    academicPeriod: { id: string; name: string; code: string };
+  };
 }
 
 export interface DocumentReference {
@@ -29,14 +35,5 @@ export interface NdeComplianceData {
   theoryHours: number | null;
   practiceHours: number | null;
   ndeComplianceStatus: string;
-}
-
-export interface GeneratedPlanData {
-  syllabus: string;
-  generalObjectives: string;
-  bloomLevels: string[];
-  methodology: string;
-  citations: string[];
-  academicPeriod: string;
 }
 

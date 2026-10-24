@@ -7,13 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { ProviderBadge } from '@/components/layout/provider-badge';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
 import { PeriodCreateInlineModal, type AcademicPeriodOption } from '@/app/admin/classes/_components/PeriodCreateInlineModal';
-import type { SubjectOption } from '../types';
+import type { OfferingOption } from '../types';
 
 interface PlanHeaderControlsProps {
-  subjects: SubjectOption[];
+  subjects: OfferingOption[];
   selectedSubjectId: string;
   onSelectSubjectId: (id: string) => void;
-  activeSubject: SubjectOption | null;
+  activeSubject: OfferingOption | null;
 
   periods: AcademicPeriodOption[];
   selectedPeriodId: string;
