@@ -48,3 +48,20 @@ export const createCourseSchema = z.object({
 });
 export const updateCourseSchema = createCourseSchema.extend({ id: z.string({ required_error: 'ID é obrigatório' }).min(1, 'ID é obrigatório') });
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
+
+export const createDisciplineSchema = z.object({
+  courseId: z.string({ required_error: 'Curso inválido' }).cuid('Curso inválido'),
+  code: z.string({ required_error: 'Informe o código da disciplina' }).trim().min(2, 'Informe o código da disciplina'),
+  name: z.string({ required_error: 'Informe o nome da disciplina' }).trim().min(2, 'Informe o nome da disciplina'),
+  description: z.string().trim().optional(),
+  workloadHours: z.coerce
+    .number({ invalid_type_error: 'Informe a carga horária' })
+    .int('Informe a carga horária em horas inteiras')
+    .min(1, 'A carga horária deve ser maior que zero')
+    .max(1000, 'Informe no máximo 1000 horas'),
+});
+export const updateDisciplineSchema = createDisciplineSchema
+  .omit({ courseId: true })
+  .extend({ id: z.string({ required_error: 'ID é obrigatório' }).min(1, 'ID é obrigatório') });
+export type CreateDisciplineInput = z.infer<typeof createDisciplineSchema>;
+export type UpdateDisciplineInput = Omit<z.infer<typeof updateDisciplineSchema>, 'id'>;

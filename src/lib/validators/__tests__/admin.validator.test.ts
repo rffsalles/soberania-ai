@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema, updateSubjectSchema, createCourseSchema, updateCourseSchema } from '../admin.validator';
+import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema, updateSubjectSchema, createCourseSchema, updateCourseSchema, createDisciplineSchema, updateDisciplineSchema } from '../admin.validator';
 
 const valid = {
   name: 'Carlos Silva',
@@ -108,5 +108,36 @@ describe('createCourseSchema', () => {
   it('updateCourseSchema exige id', () => {
     expect(updateCourseSchema.safeParse({ name: 'ADS', code: 'ADS' }).success).toBe(false);
     expect(updateCourseSchema.safeParse({ name: 'ADS', code: 'ADS' }).error?.issues[0].message).toBe('ID é obrigatório');
+  });
+});
+
+describe('createDisciplineSchema', () => {
+  const base = { courseId: 'ccourse00001', code: 'BD101', name: 'Banco de Dados I' };
+  it('coage a carga horária vinda como string', () => {
+    expect(createDisciplineSchema.parse({ ...base, workloadHours: '80' }).workloadHours).toBe(80);
+  });
+  it('limita a carga horária com mensagens pt-BR', () => {
+    const msg = (v: unknown) => createDisciplineSchema.safeParse({ ...base, workloadHours: v }).error?.issues[0].message;
+    expect(msg(0)).toBe('A carga horária deve ser maior que zero');
+    expect(msg(1001)).toBe('Informe no máximo 1000 horas');
+    expect(msg(80.5)).toBe('Informe a carga horária em horas inteiras');
+  });
+  it('exige a carga horária com mensagem pt-BR, mesmo ausente', () => {
+    expect(createDisciplineSchema.safeParse(base).error?.issues[0].message).toBe('Informe a carga horária');
+    expect(createDisciplineSchema.safeParse({ ...base, workloadHours: 'abc' }).error?.issues[0].message).toBe('Informe a carga horária');
+  });
+  it('exige courseId cuid com mensagem pt-BR, mesmo ausente', () => {
+    const { courseId: _omit, ...semCurso } = base;
+    expect(createDisciplineSchema.safeParse({ ...semCurso, workloadHours: 80 }).error?.issues[0].message).toBe('Curso inválido');
+    expect(createDisciplineSchema.safeParse({ ...base, courseId: 'x', workloadHours: 80 }).error?.issues[0].message).toBe('Curso inválido');
+  });
+  it('exige código e nome com mensagem pt-BR, mesmo ausentes', () => {
+    expect(createDisciplineSchema.safeParse({ courseId: base.courseId, name: base.name, workloadHours: 80 }).error?.issues[0].message).toBe('Informe o código da disciplina');
+    expect(createDisciplineSchema.safeParse({ courseId: base.courseId, code: base.code, workloadHours: 80 }).error?.issues[0].message).toBe('Informe o nome da disciplina');
+  });
+  it('updateDisciplineSchema descarta courseId e exige id', () => {
+    const parsed = updateDisciplineSchema.parse({ ...base, id: 'd1', workloadHours: 80 });
+    expect(parsed).not.toHaveProperty('courseId');
+    expect(updateDisciplineSchema.safeParse({ code: 'BD101', name: 'Banco de Dados I', workloadHours: 80 }).error?.issues[0].message).toBe('ID é obrigatório');
   });
 });
