@@ -35,6 +35,15 @@ export function PeriodCreateInlineModal({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setName('');
+    setCode('');
+    setType('SEMESTER');
+    setSemester('1');
+  }, [open]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !code.trim()) {
@@ -76,8 +85,8 @@ export function PeriodCreateInlineModal({
       } else {
         setError(data.error || 'Erro ao cadastrar período letivo.');
       }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Falha na comunicação com o servidor.');
+    } catch {
+      setError('Erro ao conectar com servidor.');
     } finally {
       setIsSubmitting(false);
     }

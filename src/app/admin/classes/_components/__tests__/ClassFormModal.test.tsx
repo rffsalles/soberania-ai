@@ -166,6 +166,30 @@ describe('ClassFormModal', () => {
     expect(bodyOf(fetchMock, 'POST')).toMatchObject({ academicPeriodId: 'cperiod0002' });
   });
 
+  it('período criado inline antes do GET terminar não é perdido', async () => {
+    const newPeriod = { id: 'cperiod0002', name: '2º Semestre / 2026 (2026.2)', code: '2026.2', year: 2026, semester: 2, type: 'SEMESTER' };
+    let release!: (r: Response) => void;
+    const pendingPeriods = new Promise<Response>((res) => { release = res; });
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/v1/academic-periods' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ success: true, period: newPeriod }), { status: 201 });
+      }
+      if (url === '/api/v1/academic-periods') return pendingPeriods;
+      return new Response(JSON.stringify(lists['GET /api/v1/admin/courses']), { status: 200 });
+    }));
+    render(<ClassFormModal open editingClass={null} onOpenChange={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.click(screen.getByText('Cadastrar novo período...'));
+    fireEvent.change(screen.getByLabelText('Nome do Período *'), { target: { value: newPeriod.name } });
+    fireEvent.change(screen.getByLabelText('Código / Sigla *'), { target: { value: '2026.2' } });
+    fireEvent.click(screen.getByText('Cadastrar e Selecionar'));
+    await waitFor(() => expect((screen.getByLabelText('Período letivo') as HTMLSelectElement).value).toBe('cperiod0002'));
+    release(new Response(JSON.stringify(lists['GET /api/v1/academic-periods']), { status: 200 }));
+    await screen.findByText(courseOption);
+    const sel = screen.getByLabelText('Período letivo') as HTMLSelectElement;
+    expect(sel.value).toBe('cperiod0002');
+    expect(Array.from(sel.options).map((o) => o.value)).toEqual(expect.arrayContaining(['cperiod0001', 'cperiod0002']));
+  });
+
   async function provoke409() {
     const message = 'A turma tem ofertas; não é possível trocar o curso.';
     const ctx = setup({

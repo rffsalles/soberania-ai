@@ -100,6 +100,7 @@ export default function AdminSubjectsPage() {
   };
 
   const handleClassCreated = (klass: ClassOption) => {
+    setClasses((prev) => (prev.some((c) => c.id === klass.id) ? prev : [...prev, klass]));
     fetchSubjectData();
     setSelectedClassId(klass.id);
   };
@@ -112,7 +113,7 @@ export default function AdminSubjectsPage() {
 
   const query = search.toLowerCase();
   const filteredSubjects = subjects.filter((s) =>
-    [s.discipline.code, s.discipline.name, s.class.name, s.class.course.code, s.class.course.name].some((v) =>
+    [s.discipline.code, s.discipline.name, s.class.name, s.class.code, s.class.course.code, s.class.course.name].some((v) =>
       v.toLowerCase().includes(query),
     ),
   );

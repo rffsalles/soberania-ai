@@ -49,4 +49,17 @@ describe('PeriodCreateInlineModal', () => {
     expect(onCreated).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
   });
+
+  it('erro de rede mostra mensagem fixa e reabrir limpa o erro', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('rede interna'); }));
+    const { rerender } = render(<PeriodCreateInlineModal open onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Nome do Período *'), { target: { value: 'Período X' } });
+    fireEvent.change(screen.getByLabelText('Código / Sigla *'), { target: { value: '2026.2' } });
+    fireEvent.click(screen.getByText('Cadastrar e Selecionar'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Erro ao conectar com servidor.');
+    rerender(<PeriodCreateInlineModal open={false} onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    rerender(<PeriodCreateInlineModal open onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect((screen.getByLabelText('Nome do Período *') as HTMLInputElement).value).toBe('');
+  });
 });

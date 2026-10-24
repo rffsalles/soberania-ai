@@ -81,7 +81,11 @@ export function ClassFormModal({
           return;
         }
         setCourses(coursesData.courses);
-        setPeriods(periodsData.periods);
+        setPeriods((prev) => {
+          const fetched: AcademicPeriodOption[] = periodsData.periods;
+          const extra = prev.filter((p) => !fetched.some((f) => f.id === p.id));
+          return [...fetched, ...extra];
+        });
       } catch {
         if (!cancelled) setError('Não foi possível carregar cursos e períodos.');
       }

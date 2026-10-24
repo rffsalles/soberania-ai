@@ -74,6 +74,7 @@ export function SubjectFormModal({
   const [disciplineId, setDisciplineId] = React.useState<string | null>(null);
   const [disciplines, setDisciplines] = React.useState<DisciplineLite[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [loadingDisciplines, setLoadingDisciplines] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -95,17 +96,25 @@ export function SubjectFormModal({
     if (!open || editingSubject) return;
     setDisciplineId(null);
     setDisciplines([]);
-    if (!courseId) return;
+    setError(null);
+    if (!courseId) {
+      setLoadingDisciplines(false);
+      return;
+    }
     let cancelled = false;
+    setLoadingDisciplines(true);
     fetch(`${API_ROUTES.ADMIN_DISCIPLINES}?courseId=${encodeURIComponent(courseId)}`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
+        setLoadingDisciplines(false);
         if (data.success) setDisciplines(data.disciplines);
         else setError(data.error || 'Não foi possível carregar as disciplinas do curso.');
       })
       .catch(() => {
-        if (!cancelled) setError('Não foi possível carregar as disciplinas do curso.');
+        if (cancelled) return;
+        setLoadingDisciplines(false);
+        setError('Não foi possível carregar as disciplinas do curso.');
       });
     return () => {
       cancelled = true;
@@ -201,11 +210,11 @@ export function SubjectFormModal({
             label="Disciplina"
             placeholder={selectedClassId ? 'Selecione a disciplina' : 'Escolha a turma primeiro'}
             searchPlaceholder="Buscar por código ou nome..."
-            emptyMessage="Nenhuma disciplina cadastrada para este curso."
+            emptyMessage={loadingDisciplines ? 'Carregando disciplinas...' : 'Nenhuma disciplina cadastrada para este curso.'}
             items={disciplineItems}
             selectedId={disciplineId}
             onSelect={(id) => setDisciplineId(id || null)}
-            disabled={!selectedClassId || Boolean(editingSubject)}
+            disabled={!selectedClassId || Boolean(editingSubject) || loadingDisciplines}
           />
         </div>
 

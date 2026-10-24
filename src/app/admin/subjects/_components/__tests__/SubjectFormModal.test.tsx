@@ -50,6 +50,7 @@ const p1 = { id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '202
 const classes: ClassOption[] = [
   { id: 'cclass00001', name: '3º Semestre · ADS', code: 'ADS-2026-3A', semester: 3, courseId: ads.id, academicPeriodId: p1.id, course: ads, academicPeriod: p1 },
   { id: 'cclass00002', name: '1º Ano · EM', code: 'EM-2026-1A', semester: 1, courseId: em.id, academicPeriodId: p1.id, course: em, academicPeriod: p1 },
+  { id: 'cclass00003', name: '3º Semestre · ADS B', code: 'ADS-2026-3B', semester: 3, courseId: ads.id, academicPeriodId: p1.id, course: ads, academicPeriod: p1 },
 ];
 const bd = { id: 'cdiscip0001', courseId: ads.id, code: 'BD101', name: 'Banco de Dados I', workloadHours: 80 };
 const mat = { id: 'cdiscip0002', courseId: em.id, code: 'MAT1', name: 'Matemática I', workloadHours: 120 };
@@ -115,7 +116,7 @@ describe('SubjectFormModal', () => {
   it('lista as turmas com curso e período, sem "Sem turma"', () => {
     setup();
     expect(screen.getByText('Nova oferta')).toBeTruthy();
-    expect(opts('Turma')).toEqual(['—', '3º Semestre · ADS | ADS · 2026.1', '1º Ano · EM | EM · 2026.1']);
+    expect(opts('Turma')).toEqual(['—', '3º Semestre · ADS | ADS · 2026.1', '1º Ano · EM | EM · 2026.1', '3º Semestre · ADS B | ADS · 2026.1']);
     expect(screen.queryByLabelText('Nome da Disciplina')).toBeNull();
     expect(screen.queryByLabelText('Nível acadêmico')).toBeNull();
     expect(screen.queryByLabelText('Curso')).toBeNull();
@@ -143,6 +144,33 @@ describe('SubjectFormModal', () => {
     expect(val('Disciplina')).toBe('');
     await waitFor(() => expect(opts('Disciplina')).toEqual(['—', 'MAT1 · Matemática I | 120 h']));
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/disciplines?courseId=ccourse00002');
+  });
+
+  it('trocar para outra turma do mesmo curso limpa a disciplina, recarrega e exige nova escolha', async () => {
+    const { fetchMock } = setup();
+    await pickClassAndDiscipline();
+    expect(val('Disciplina')).toBe('cdiscip0001');
+    const getsBefore = fetchMock.mock.calls.filter((c) => String(c[0]).startsWith('/api/v1/admin/disciplines')).length;
+    fireEvent.change(screen.getByLabelText('Turma'), { target: { value: 'cclass00003' } });
+    await waitFor(() => expect(opts('Disciplina')).toContain('BD101 · Banco de Dados I | 80 h'));
+    expect(val('Disciplina')).toBe('');
+    const getsAfter = fetchMock.mock.calls.filter((c) => String(c[0]).startsWith('/api/v1/admin/disciplines')).length;
+    expect(getsAfter).toBe(getsBefore + 1);
+    fireEvent.click(screen.getByText('Salvar oferta'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Selecione a disciplina'));
+    expect(bodyOf(fetchMock, 'POST')).toBeUndefined();
+  });
+
+  it('desabilita a Disciplina enquanto carrega e habilita com as opções depois', async () => {
+    let release!: (r: Response) => void;
+    const pending = new Promise<Response>((res) => { release = res; });
+    vi.stubGlobal('fetch', vi.fn(() => pending));
+    render(<Harness onSuccess={vi.fn()} onOpenChange={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Turma'), { target: { value: 'cclass00001' } });
+    await waitFor(() => expect((screen.getByLabelText('Disciplina') as HTMLSelectElement).disabled).toBe(true));
+    release(new Response(JSON.stringify(discRoutes['GET /api/v1/admin/disciplines?courseId=ccourse00001']), { status: 200 }));
+    await waitFor(() => expect(opts('Disciplina')).toEqual(['—', 'BD101 · Banco de Dados I | 80 h']));
+    expect((screen.getByLabelText('Disciplina') as HTMLSelectElement).disabled).toBe(false);
   });
 
   it('cria com POST { classId, disciplineId, teacherIds } e avisa a página sem dados', async () => {
