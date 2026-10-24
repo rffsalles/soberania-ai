@@ -8,7 +8,7 @@ const GENERIC_ERROR = 'Não foi possível concluir a operação. Tente novamente
 
 export type PlanOption = {
   id: string;
-  subject: { id: string; classId: string; discipline: { name: string; code: string }; class?: { id: string; name: string } | null };
+  subject: { id: string; classId: string; discipline: { name: string; code: string }; class: { id: string; name: string } };
   syllabus: string;
   unitsContent: unknown;
 };

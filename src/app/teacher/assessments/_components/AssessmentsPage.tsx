@@ -33,7 +33,7 @@ export function AssessmentsPage() {
   const { assessments, isLoading, error, reload } = useAssessments(planId);
 
   const plan = plans.find((p) => p.id === planId) ?? null;
-  const classOptions = plan?.subject.class ? [plan.subject.class] : [];
+  const classOptions = plan ? [plan.subject.class] : [];
   const backToList = () => setView({ kind: 'list' });
 
   return (

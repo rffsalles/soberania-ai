@@ -11,6 +11,7 @@ import { useAgendas } from '@/components/agendas/use-agenda';
 import { useHeatmap, useMinutes, buildMinuteQuery } from '@/components/pedagogy/use-minutes';
 import { RetentionScore } from '@/components/pedagogy/retention-score';
 import { API_ROUTES } from '@/lib/constants/routes';
+import { formatOfferingLabel } from '@/domains/academic/offering-label';
 import type { MinuteFilter } from '@/domains/pedagogy/services/minutes-service';
 import { BarChart3, Flame, Lightbulb, FileCheck2, Download, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -23,10 +24,16 @@ const ALL_OPTION = '';
 const SELECT_CLASS =
   'h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 text-sm text-slate-900 dark:text-white';
 
-interface SubjectOption {
+interface FilterOption {
   id: string;
   name: string;
 }
+
+type OfferingRow = {
+  id: string;
+  discipline: { code: string; name: string };
+  class: { semester: number; course: { code: string; academicLevel: string }; academicPeriod: { code: string } };
+};
 
 interface FilterState {
   classId: string;
@@ -50,11 +57,11 @@ function toApiFilter(f: FilterState): MinuteFilter {
 
 function describeFilters(
   f: FilterState,
-  classes: SubjectOption[],
-  students: SubjectOption[],
-  subjects: SubjectOption[]
+  classes: FilterOption[],
+  students: FilterOption[],
+  subjects: FilterOption[]
 ): string {
-  const nameOf = (list: SubjectOption[], id: string, all: string) =>
+  const nameOf = (list: FilterOption[], id: string, all: string) =>
     id ? (list.find((o) => o.id === id)?.name ?? id) : all;
   const period = f.from || f.to ? `${f.from || '…'} a ${f.to || '…'}` : 'Todo o período';
   return [
@@ -65,14 +72,16 @@ function describeFilters(
   ].join(' | ');
 }
 
-function useSubjects(): SubjectOption[] {
-  const [subjects, setSubjects] = React.useState<SubjectOption[]>([]);
+function useOfferingOptions(): FilterOption[] {
+  const [subjects, setSubjects] = React.useState<FilterOption[]>([]);
   React.useEffect(() => {
     const controller = new AbortController();
     fetch(API_ROUTES.ADMIN_SUBJECTS, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
-        if (body?.subjects) setSubjects(body.subjects as SubjectOption[]);
+        if (body?.subjects) setSubjects(
+            (body.subjects as OfferingRow[]).map((s) => ({ id: s.id, name: formatOfferingLabel(s) }))
+          );
       })
       .catch(() => {});
     return () => controller.abort();
@@ -117,7 +126,7 @@ export default function TeacherReportsPage() {
   const reload = React.useCallback(() => setReloadKey((k) => k + 1), []);
 
   const { agendas, isLoading: agendasLoading, error: agendasError } = useAgendas(reloadKey);
-  const subjects = useSubjects();
+  const subjects = useOfferingOptions();
   const { data: minutes, isLoading: minutesLoading, error: minutesError } = useMinutes(apiFilter, reloadKey);
   const { data: heatmap, isLoading: heatmapLoading, error: heatmapError } = useHeatmap(apiFilter, reloadKey);
   // Alunos disponíveis vêm das atas sem filtro de aluno, para o seletor não encolher ao selecionar.
