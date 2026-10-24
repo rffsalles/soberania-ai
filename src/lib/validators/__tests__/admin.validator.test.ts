@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTeacherSchema, upsertSubjectSchema, createClassSchema, updateClassSchema, updateSubjectSchema, createCourseSchema, updateCourseSchema, createDisciplineSchema, updateDisciplineSchema } from '../admin.validator';
+import { createTeacherSchema, createOfferingSchema, updateOfferingSchema, createClassSchema, updateClassSchema, createCourseSchema, updateCourseSchema, createDisciplineSchema, updateDisciplineSchema } from '../admin.validator';
 
 const valid = {
   name: 'Carlos Silva',
@@ -22,32 +22,6 @@ describe('createTeacherSchema', () => {
   it('lowercases email', () => {
     const r = createTeacherSchema.safeParse(valid);
     expect(r.success && r.data.email).toBe('carlos@soberania.edu.br');
-  });
-});
-
-describe('upsertSubjectSchema', () => {
-  const base = { name: 'Cálculo', code: 'MAT01', courseName: 'Engenharia' };
-  it('applies defaults', () => {
-    expect(upsertSubjectSchema.parse(base)).toMatchObject({
-      academicLevel: 'HIGHER_EDUCATION',
-      academicYear: 2026,
-      teacherIds: [],
-    });
-  });
-  it('coerces academicYear', () => {
-    expect(upsertSubjectSchema.parse({ ...base, academicYear: '2027' }).academicYear).toBe(2027);
-  });
-  it('rejects short name', () => {
-    expect(upsertSubjectSchema.safeParse({ ...base, name: 'a' }).success).toBe(false);
-  });
-  it('aceita classId cuid opcional ou null', () => {
-    const classId = 'ckx1q2w3e0000abcdxyz12345';
-    expect(upsertSubjectSchema.parse({ ...base, classId }).classId).toBe(classId);
-    expect(upsertSubjectSchema.parse(base).classId).toBeUndefined();
-    expect(upsertSubjectSchema.parse({ ...base, classId: null }).classId).toBeNull();
-  });
-  it('rejeita classId que não é cuid', () => {
-    expect(upsertSubjectSchema.safeParse({ ...base, classId: 'turma 1' }).success).toBe(false);
   });
 });
 
@@ -79,13 +53,21 @@ describe('createClassSchema', () => {
   });
 });
 
-describe('updateSubjectSchema', () => {
-  const base = { id: 's1', name: 'Cálculo', code: 'MAT01', courseName: 'Engenharia' };
-  it('não preenche academicYear quando ausente (edição preserva o ano salvo)', () => {
-    expect(updateSubjectSchema.parse(base).academicYear).toBeUndefined();
+describe('createOfferingSchema', () => {
+  it('aplica teacherIds vazio por padrão', () => {
+    expect(createOfferingSchema.parse({ classId: 'cclass000001', disciplineId: 'cdisc0000001' }).teacherIds).toEqual([]);
   });
-  it('coage academicYear quando informado', () => {
-    expect(updateSubjectSchema.parse({ ...base, academicYear: '2027' }).academicYear).toBe(2027);
+  it('exige turma e disciplina com mensagem pt-BR, mesmo ausentes', () => {
+    expect(createOfferingSchema.safeParse({ disciplineId: 'cdisc0000001' }).error?.issues[0].message).toBe('Selecione a turma');
+    expect(createOfferingSchema.safeParse({ classId: 'cclass000001' }).error?.issues[0].message).toBe('Selecione a disciplina');
+    expect(createOfferingSchema.safeParse({ classId: 'cclass000001', disciplineId: 'x' }).error?.issues[0].message).toBe('Selecione a disciplina');
+  });
+  it('updateOfferingSchema descarta classId e disciplineId', () => {
+    expect(updateOfferingSchema.parse({ id: 's1', classId: 'cclass000001', disciplineId: 'cdisc0000001', teacherIds: ['t1'] }))
+      .toEqual({ id: 's1', teacherIds: ['t1'] });
+  });
+  it('updateOfferingSchema exige id com mensagem pt-BR, mesmo ausente', () => {
+    expect(updateOfferingSchema.safeParse({ teacherIds: [] }).error?.issues[0].message).toBe('ID é obrigatório');
   });
 });
 
