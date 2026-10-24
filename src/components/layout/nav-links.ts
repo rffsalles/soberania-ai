@@ -1,10 +1,12 @@
 import { Role } from '@prisma/client';
 import {
   BarChart3,
+  BookMarked,
   BookOpen,
   CalendarDays,
   ClipboardList,
   FileCheck2,
+  GraduationCap,
   LayoutDashboard,
   Library,
   Presentation,
@@ -34,8 +36,10 @@ const TEACHER_LINKS: readonly NavLink[] = [
 ];
 
 const ADMIN_LINKS: readonly NavLink[] = [
-  { href: ROUTES.ADMIN_SUBJECTS, label: 'Disciplinas', icon: Library },
+  { href: ROUTES.ADMIN_COURSES, label: 'Cursos', icon: GraduationCap },
+  { href: ROUTES.ADMIN_DISCIPLINES, label: 'Disciplinas', icon: Library },
   { href: ROUTES.ADMIN_CLASSES, label: 'Turmas', icon: Users },
+  { href: ROUTES.ADMIN_SUBJECTS, label: 'Ofertas', icon: BookMarked },
   { href: ROUTES.APPLIANCE, label: 'Telemetria', icon: Server },
   ...TEACHER_LINKS,
 ];

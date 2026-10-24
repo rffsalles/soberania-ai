@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Role } from '@prisma/client';
+import { BookMarked, GraduationCap, Library, Users } from 'lucide-react';
 import { canAccessRoute } from '@/lib/auth/rbac';
 import { ROUTES } from '@/lib/constants/routes';
 import { NAV_LINKS_BY_ROLE, getNavLinksForRole } from '../nav-links';
@@ -39,13 +40,16 @@ describe('NAV_LINKS_BY_ROLE', () => {
     ]);
   });
 
-  it('admin vê gestão seguida da lista completa do professor', () => {
-    expect(labels(Role.ADMIN)).toEqual(['Disciplinas', 'Turmas', 'Telemetria', ...labels(Role.TEACHER)]);
-    expect(NAV_LINKS_BY_ROLE[Role.ADMIN].slice(0, 3).map((l) => l.href)).toEqual([
-      ROUTES.ADMIN_SUBJECTS,
+  it('admin vê Cursos, Disciplinas, Turmas, Ofertas e Telemetria, seguidos da lista do professor', () => {
+    expect(labels(Role.ADMIN)).toEqual(['Cursos', 'Disciplinas', 'Turmas', 'Ofertas', 'Telemetria', ...labels(Role.TEACHER)]);
+    expect(NAV_LINKS_BY_ROLE[Role.ADMIN].slice(0, 5).map((l) => l.href)).toEqual([
+      ROUTES.ADMIN_COURSES,
+      ROUTES.ADMIN_DISCIPLINES,
       ROUTES.ADMIN_CLASSES,
+      ROUTES.ADMIN_SUBJECTS,
       ROUTES.APPLIANCE,
     ]);
+    expect(NAV_LINKS_BY_ROLE[Role.ADMIN].slice(0, 4).map((l) => l.icon)).toEqual([GraduationCap, Library, Users, BookMarked]);
   });
 
   it('professor não vê rotas de admin', () => {
