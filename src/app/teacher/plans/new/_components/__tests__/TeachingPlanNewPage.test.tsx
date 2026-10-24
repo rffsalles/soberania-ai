@@ -1,0 +1,161 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import * as React from 'react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { offeringADS, offeringEM, LABEL_ADS } from './fixtures';
+import { DEFAULT_NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
+
+const nav = vi.hoisted(() => ({ id: null as string | null, push: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: nav.push }),
+  useSearchParams: () => new URLSearchParams(nav.id ? { id: nav.id } : {}),
+}));
+
+type Item = { id: string; title: string; subtitle?: string; badge?: string };
+vi.mock('@/components/ui/advanced-combobox', () => ({
+  AdvancedCombobox: ({ id, label, items, selectedId, onSelect, disabled, addNewLabel, onAddNewClick }: {
+    id?: string; label?: string; items: Item[]; selectedId: string | null; onSelect: (id: string) => void;
+    disabled?: boolean; addNewLabel?: string; onAddNewClick?: () => void;
+  }) => (
+    <div>
+      <label htmlFor={id}>{label}</label>
+      <select id={id} disabled={disabled} value={selectedId ?? ''} onChange={(e) => onSelect(e.target.value)}>
+        <option value="">—</option>
+        {items.map((i) => <option key={i.id} value={i.id}>{i.title}{i.subtitle ? `${" | "}${i.subtitle}` : ''}</option>)}
+      </select>
+      {addNewLabel && <button type="button" onClick={onAddNewClick}>{addNewLabel}</button>}
+    </div>
+  ),
+  AdvancedMultiCombobox: ({ label }: { label: string }) => <div>{label}</div>,
+}));
+vi.mock('@/components/layout/provider-badge', () => ({ ProviderBadge: () => null }));
+vi.mock('@/components/layout/use-appliance-status', () => ({ useApplianceStatus: () => null }));
+
+const REF = { id: 'cdoc0000001', title: 'Sistemas de Banco de Dados', author: 'Elmasri', category: 'Banco de Dados' };
+vi.mock('../ReferenceSelectionModal', () => ({
+  ReferenceSelectionModal: ({ onAddReferences }: { onAddReferences: (refs: unknown[]) => void }) => (
+    <button type="button" onClick={() => onAddReferences([REF])}>Adicionar referência (mock)</button>
+  ),
+}));
+
+import TeachingPlanNewPage from '../TeachingPlanNewPage';
+
+function routeFetch(handlers: Record<string, unknown>) {
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    const key = `${init?.method ?? 'GET'} ${url}`;
+    if (!(key in handlers)) throw new Error(`fetch inesperado: ${key}`);
+    return new Response(JSON.stringify(handlers[key]), { status: 200 });
+  });
+}
+
+let fetchMock: ReturnType<typeof routeFetch>;
+function stubFetch(handlers: Record<string, unknown>) {
+  fetchMock = routeFetch(handlers);
+  vi.stubGlobal('fetch', fetchMock);
+}
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  nav.id = null;
+  nav.push.mockReset();
+});
+
+const subjectsOk = (list: unknown[]) => ({ 'GET /api/v1/admin/subjects': { success: true, subjects: list } });
+const bodyOf = (method: string, url: string) => {
+  const call = fetchMock.mock.calls.find(([u, init]) => u === url && (init?.method ?? 'GET') === method);
+  return JSON.parse(String(call![1]!.body));
+};
+const total = () => (screen.getByLabelText('Carga Horária Total (horas) *') as HTMLInputElement).value;
+const pick = (id: string) => fireEvent.change(screen.getByLabelText('Oferta *'), { target: { value: id } });
+
+describe('TeachingPlanNewPage', () => {
+  it('plano novo lista só as ofertas devolvidas pela API e não busca períodos', async () => {
+    stubFetch(subjectsOk([offeringADS]));
+    render(<TeachingPlanNewPage />);
+    await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
+    expect((screen.getByLabelText('Oferta *') as HTMLSelectElement).options).toHaveLength(2);
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('academic-periods'))).toBe(false);
+    expect(screen.queryByText('Cadastrar novo período letivo...')).toBeNull();
+    expect(total()).toBe('');
+  });
+
+  it('escolher a oferta preenche só a carga horária total; POST envia subjectId sem academicPeriodId', async () => {
+    stubFetch({ ...subjectsOk([offeringADS]), 'POST /api/v1/teacher/plans': { success: true, plan: { id: 'cplan000009' } } });
+    render(<TeachingPlanNewPage />);
+    await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
+    pick('csubject0001');
+    expect(total()).toBe('80');
+    expect((screen.getByLabelText('Teoria (h)') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Prática / Lab (h)') as HTMLInputElement).value).toBe('');
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
+    const body = bodyOf('POST', '/api/v1/teacher/plans');
+    expect(body).toMatchObject({ subjectId: 'csubject0001', totalHours: 80, theoryHours: null, practiceHours: null, status: 'DRAFT' });
+    expect(body).not.toHaveProperty('academicPeriodId');
+  });
+
+  it('trocar de oferta atualiza só a carga horária vinda da matriz', async () => {
+    stubFetch(subjectsOk([offeringADS, offeringEM]));
+    render(<TeachingPlanNewPage />);
+    await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
+    pick('csubject0001');
+    expect(total()).toBe('80');
+    pick('csubject0002');
+    expect(total()).toBe('60');
+    fireEvent.change(screen.getByLabelText('Carga Horária Total (horas) *'), { target: { value: '72' } });
+    pick('csubject0001');
+    expect(total()).toBe('72');
+  });
+
+  it('a IA só destrava com oferta e referência e gera com { subjectId, selectedReferences }', async () => {
+    stubFetch({
+      ...subjectsOk([offeringADS]),
+      'POST /api/v1/teacher/plans/generate': {
+        success: true,
+        data: { syllabus: 'Ementa gerada', generalObjectives: '', bloomLevels: [], methodology: '', citations: [] },
+      },
+    });
+    render(<TeachingPlanNewPage />);
+    await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
+    expect(screen.getByText('IA Bloqueada (Preencha Requisitos)')).toBeTruthy();
+    expect(screen.getByText('Selecione uma oferta.')).toBeTruthy();
+    pick('csubject0001');
+    expect(screen.getByText('Adicione ao menos 1 documento na biblioteca RAG.')).toBeTruthy();
+    fireEvent.click(screen.getByText('Adicionar referência (mock)'));
+    fireEvent.click(screen.getByText('IA Socrática: Gerar Sugestão Ementa'));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === '/api/v1/teacher/plans/generate')).toBe(true));
+    expect(bodyOf('POST', '/api/v1/teacher/plans/generate')).toEqual({ subjectId: 'csubject0001', selectedReferences: [REF] });
+  });
+
+  it('plano salvo reabre com a oferta, o cartão e as horas salvas; PUT sem subjectId nem academicPeriodId', async () => {
+    nav.id = 'cplan000001';
+    stubFetch({
+      ...subjectsOk([offeringEM]),
+      'GET /api/v1/teacher/plans/cplan000001': {
+        success: true,
+        plan: {
+          id: 'cplan000001', subjectId: 'csubject0001', subject: offeringADS, syllabus: 'Ementa salva',
+          generalObjectives: '', methodology: '', basicBibliography: [], totalHours: 72, theoryHours: 40,
+          practiceHours: 32, ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS, status: 'DRAFT',
+        },
+      },
+      'PUT /api/v1/teacher/plans/cplan000001': { success: true, plan: { id: 'cplan000001' } },
+    });
+    render(<TeachingPlanNewPage />);
+    await waitFor(() => {
+      const select = screen.getByLabelText('Oferta *') as HTMLSelectElement;
+      expect(select.value).toBe('csubject0001');
+      expect(select.disabled).toBe(true);
+    });
+    expect(screen.getByText('Contexto da oferta')).toBeTruthy();
+    expect(screen.getByText('80h')).toBeTruthy();
+    expect(total()).toBe('72');
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
+    const body = bodyOf('PUT', '/api/v1/teacher/plans/cplan000001');
+    expect(body).not.toHaveProperty('subjectId');
+    expect(body).not.toHaveProperty('academicPeriodId');
+    expect(body.totalHours).toBe(72);
+  });
+});

@@ -1,25 +1,22 @@
 'use client';
 
 import * as React from 'react';
-import { Sparkles, GraduationCap, Calendar, Loader2, Lock, ShieldCheck, Cpu } from 'lucide-react';
+import { Sparkles, GraduationCap, Loader2, Lock, ShieldCheck, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ProviderBadge } from '@/components/layout/provider-badge';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
-import { PeriodCreateInlineModal, type AcademicPeriodOption } from '@/app/admin/classes/_components/PeriodCreateInlineModal';
+import { formatOfferingLabel } from '@/domains/academic/offering-label';
+import { OfferingContextCard } from './OfferingContextCard';
 import type { OfferingOption } from '../types';
 
-interface PlanHeaderControlsProps {
-  subjects: OfferingOption[];
-  selectedSubjectId: string;
-  onSelectSubjectId: (id: string) => void;
-  activeSubject: OfferingOption | null;
-
-  periods: AcademicPeriodOption[];
-  selectedPeriodId: string;
-  onSelectPeriodId: (id: string) => void;
-  onPeriodCreated: (period: AcademicPeriodOption) => void;
-  effectivePeriodName: string;
+export interface PlanHeaderControlsProps {
+  offerings: OfferingOption[];
+  selectedOfferingId: string;
+  onSelectOffering: (id: string) => void;
+  activeOffering: OfferingOption | null;
+  /** true na edição: a oferta do plano salvo não muda. */
+  offeringLocked: boolean;
 
   isAiLocked: boolean;
   lockReason?: string;
@@ -28,46 +25,20 @@ interface PlanHeaderControlsProps {
 }
 
 export function PlanHeaderControls({
-  subjects,
-  selectedSubjectId,
-  onSelectSubjectId,
-  activeSubject,
-  periods,
-  selectedPeriodId,
-  onSelectPeriodId,
-  onPeriodCreated,
-  effectivePeriodName,
+  offerings,
+  selectedOfferingId,
+  onSelectOffering,
+  activeOffering,
+  offeringLocked,
   isAiLocked,
   lockReason,
   isGeneratingAI,
   onGenerateAI,
 }: PlanHeaderControlsProps) {
-  const [isPeriodModalOpen, setIsPeriodModalOpen] = React.useState(false);
-
-  // Map subjects to combobox items
-  const subjectItems = React.useMemo(() => {
-    return subjects.map((s) => ({
-      id: s.id,
-      title: s.discipline.name,
-      subtitle: `${s.discipline.code} · ${s.class.course.name}`,
-      badge: s.discipline.code,
-    }));
-  }, [subjects]);
-
-  // Map periods to combobox items
-  const periodItems = React.useMemo(() => {
-    return periods.map((p) => ({
-      id: p.id,
-      title: p.name,
-      subtitle: `Código: ${p.code} · Regime ${p.type || 'Semestral'}`,
-      badge: `${p.year}`,
-    }));
-  }, [periods]);
-
-  const handlePeriodCreated = (newPeriod: AcademicPeriodOption) => {
-    onPeriodCreated(newPeriod);
-    onSelectPeriodId(newPeriod.id);
-  };
+  const offeringItems = React.useMemo(
+    () => offerings.map((o) => ({ id: o.id, title: formatOfferingLabel(o), subtitle: o.class.name })),
+    [offerings]
+  );
 
   return (
     <div className="space-y-5">
@@ -79,24 +50,19 @@ export function PlanHeaderControls({
               Etapa 1 do Pipeline Pedagógico
             </Badge>
             <ProviderBadge />
-            {effectivePeriodName && (
-              <Badge variant="secondary" className="text-[10px] text-slate-600 dark:text-slate-300">
-                Período: {effectivePeriodName}
-              </Badge>
-            )}
           </div>
 
           <h1 className="text-xl sm:text-2xl font-heading font-bold text-slate-900 dark:text-white">
-            Plano de Ensino & Aprendizagem: {activeSubject ? activeSubject.discipline.name : 'Selecione a Disciplina'}
+            Plano de Ensino & Aprendizagem: {activeOffering ? activeOffering.discipline.name : 'Selecione a oferta'}
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            {activeSubject ? (
+            {activeOffering ? (
               <>
-                Curso: {activeSubject.class.course.name} | Código: {activeSubject.discipline.code} | Status: Em Elaboração
+                Curso: {activeOffering.class.course.name} | Código: {activeOffering.discipline.code} | Status: Em Elaboração
               </>
             ) : (
-              'Vincule uma disciplina e período letivo válidos para iniciar a elaboração do plano.'
+              'Selecione uma oferta para iniciar a elaboração do plano.'
             )}
           </p>
         </div>
@@ -137,44 +103,27 @@ export function PlanHeaderControls({
         </div>
       </div>
 
-      {/* Advanced Combobox Controls: Subject & Academic Period */}
+      {/* Oferta (disciplina + turma + período) e seu contexto somente leitura */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl glass border border-slate-200 dark:border-slate-800">
         <div>
           <AdvancedCombobox
-            label="Disciplina Vinculada *"
-            placeholder="Pesquisar disciplina..."
-            emptyMessage="Nenhuma disciplina encontrada."
-            items={subjectItems}
-            selectedId={selectedSubjectId}
-            onSelect={onSelectSubjectId}
+            id="plan-offering-combobox"
+            label="Oferta *"
+            placeholder="Pesquisar oferta..."
+            emptyMessage="Nenhuma oferta encontrada."
+            items={offeringItems}
+            selectedId={selectedOfferingId}
+            onSelect={onSelectOffering}
+            disabled={offeringLocked}
             icon={<GraduationCap className="h-4 w-4 text-brand-teal" />}
           />
           <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-            Não encontra a disciplina? Peça ao administrador para cadastrá-la e alocar você.
+            Não encontra a oferta? Peça ao administrador para cadastrá-la e alocar você.
           </p>
         </div>
 
-        <div>
-          <AdvancedCombobox
-            label="Período Letivo / Semestre *"
-            placeholder="Pesquisar período letivo..."
-            emptyMessage="Nenhum período letivo encontrado."
-            items={periodItems}
-            selectedId={selectedPeriodId}
-            onSelect={onSelectPeriodId}
-            addNewLabel="Cadastrar novo período letivo..."
-            onAddNewClick={() => setIsPeriodModalOpen(true)}
-            icon={<Calendar className="h-4 w-4 text-brand-teal" />}
-          />
-        </div>
+        <OfferingContextCard offering={activeOffering} />
       </div>
-
-      {/* Modals for Inline Creation */}
-      <PeriodCreateInlineModal
-        open={isPeriodModalOpen}
-        onOpenChange={setIsPeriodModalOpen}
-        onCreated={handlePeriodCreated}
-      />
     </div>
   );
 }

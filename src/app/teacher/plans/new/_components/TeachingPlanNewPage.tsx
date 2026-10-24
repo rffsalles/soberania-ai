@@ -10,7 +10,7 @@ import { PlanTelemetryCard } from './PlanTelemetryCard';
 import { PlanFooterDock } from './PlanFooterDock';
 import { ReferenceSelectionModal } from './ReferenceSelectionModal';
 import { DEFAULT_NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
-import type { AcademicPeriodOption } from '@/app/admin/classes/_components/PeriodCreateInlineModal';
+import { API_ROUTES, ROUTES } from '@/lib/constants/routes';
 import type {
   OfferingOption,
   DocumentReference,
@@ -29,7 +29,7 @@ async function restoreReferences(bibliography: string[]): Promise<DocumentRefere
     category: item.match(/\[(.*?)\]/)?.[1] || 'Geral',
   }));
   try {
-    const res = await fetch('/api/v1/library/documents');
+    const res = await fetch(`${API_ROUTES.LIBRARY}/documents`);
     const data = await res.json();
     const library: DocumentReference[] = data.success && Array.isArray(data.documents) ? data.documents : [];
     return parsed.map((ref) => {
@@ -47,12 +47,10 @@ export default function TeachingPlanNewPage() {
   const searchParams = useSearchParams();
   const editingPlanId = searchParams.get('id');
 
-  // Dynamic Subjects & Academic Periods from DB
-  const [subjects, setSubjects] = React.useState<OfferingOption[]>([]);
+  // Ofertas do professor (disciplina + turma + período); a oferta do plano salvo vem de plan.subject.
+  const [offerings, setOfferings] = React.useState<OfferingOption[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = React.useState<string>('');
-
-  const [periods, setPeriods] = React.useState<AcademicPeriodOption[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = React.useState<string>('');
+  const [savedOffering, setSavedOffering] = React.useState<OfferingOption | null>(null);
 
   // References: Starts clean or loaded from DB
   const [references, setReferences] = React.useState<DocumentReference[]>([]);
@@ -79,31 +77,17 @@ export default function TeachingPlanNewPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveStatusMessage, setSaveStatusMessage] = React.useState<string | null>(null);
 
-  // Fetch initial subjects and academic periods on mount
   React.useEffect(() => {
-    // 1. Fetch Subjects
-    fetch('/api/v1/admin/subjects')
+    fetch(API_ROUTES.ADMIN_SUBJECTS)
       .then((res) => res.json())
       .then((data) => {
-        // Plano novo não pré-seleciona disciplina: a escolha é do professor e define o conteúdo gerado.
+        // Plano novo não pré-seleciona oferta: a escolha é do professor e define o conteúdo gerado.
         if (data.success && Array.isArray(data.subjects) && data.subjects.length > 0) {
-          setSubjects(data.subjects);
+          setOfferings(data.subjects);
         }
       })
       .catch((err) => {
-        console.warn('Erro ao carregar catálogo de disciplinas:', err);
-      });
-
-    // 2. Fetch Academic Periods
-    fetch('/api/v1/academic-periods')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.periods) && data.periods.length > 0) {
-          setPeriods(data.periods);
-        }
-      })
-      .catch((err) => {
-        console.warn('Erro ao carregar períodos letivos:', err);
+        console.warn('Erro ao carregar as ofertas:', err);
       });
   }, [editingPlanId]);
 
@@ -111,13 +95,13 @@ export default function TeachingPlanNewPage() {
   React.useEffect(() => {
     if (!editingPlanId) return;
 
-    fetch(`/api/v1/teacher/plans/${editingPlanId}`)
+    fetch(`${API_ROUTES.TEACHER_PLANS}/${editingPlanId}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.plan) {
           const plan = data.plan;
           if (plan.subjectId) setSelectedSubjectId(plan.subjectId);
-          if (plan.academicPeriodId) setSelectedPeriodId(plan.academicPeriodId);
+          if (plan.subject) setSavedOffering(plan.subject);
           if (plan.syllabus) {
             setSyllabus(plan.syllabus);
             setSyllabusSource('saved');
@@ -140,25 +124,38 @@ export default function TeachingPlanNewPage() {
       });
   }, [editingPlanId]);
 
-  // Active Subject details
-  const activeSubject = React.useMemo(() => {
-    return subjects.find((s) => s.id === selectedSubjectId) || null;
-  }, [subjects, selectedSubjectId]);
+  // Na edição, a oferta do plano entra na lista mesmo que a API não a devolva mais.
+  const offeringOptions = React.useMemo(() => {
+    if (!savedOffering || offerings.some((o) => o.id === savedOffering.id)) return offerings;
+    return [savedOffering, ...offerings];
+  }, [offerings, savedOffering]);
 
-  // Active Period details
-  const activePeriod = React.useMemo(() => {
-    return periods.find((p) => p.id === selectedPeriodId) || null;
-  }, [periods, selectedPeriodId]);
+  const activeOffering = React.useMemo(
+    () => offeringOptions.find((o) => o.id === selectedSubjectId) || null,
+    [offeringOptions, selectedSubjectId]
+  );
 
-  // Gating AI Generation: requires subject, period and at least 1 reference
-  const isAiLocked = !selectedSubjectId || !selectedPeriodId || references.length === 0;
+  // Gating da IA: exige oferta e ao menos 1 referência
+  const isAiLocked = !selectedSubjectId || references.length === 0;
 
   const lockReason = React.useMemo(() => {
-    if (!selectedSubjectId) return 'Selecione uma disciplina vinculada.';
-    if (!selectedPeriodId) return 'Selecione o período letivo.';
+    if (!selectedSubjectId) return 'Selecione uma oferta.';
     if (references.length === 0) return 'Adicione ao menos 1 documento na biblioteca RAG.';
     return undefined;
-  }, [selectedSubjectId, selectedPeriodId, references.length]);
+  }, [selectedSubjectId, references.length]);
+
+  // Regra 11: em plano novo, a carga horária total acompanha a da matriz até o professor digitar outro valor.
+  const handleSelectOffering = (id: string) => {
+    const previous = offeringOptions.find((o) => o.id === selectedSubjectId);
+    const next = offeringOptions.find((o) => o.id === id);
+    setSelectedSubjectId(id);
+    if (editingPlanId || !next) return;
+    setNdeCompliance((prev) =>
+      prev.totalHours === null || prev.totalHours === previous?.discipline.workloadHours
+        ? { ...prev, totalHours: next.discipline.workloadHours }
+        : prev
+    );
+  };
 
   // As citações refletem a última geração da IA; ao mudar as referências elas deixam de corresponder.
   const updateCitationsFromReferences = (refs: DocumentReference[]) => {
@@ -185,18 +182,13 @@ export default function TeachingPlanNewPage() {
     });
   };
 
-  // Handler: Add newly created period
-  const handlePeriodCreated = (newPeriod: AcademicPeriodOption) => {
-    setPeriods((prev) => [newPeriod, ...prev]);
-  };
-
   // Handler: AI Generation with RAG
   const handleGenerateAI = async () => {
-    if (isAiLocked || !activeSubject) return;
+    if (isAiLocked || !activeOffering) return;
 
     try {
       setIsGeneratingAI(true);
-      const res = await fetch('/api/v1/teacher/plans/generate', {
+      const res = await fetch(`${API_ROUTES.TEACHER_PLANS}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -242,15 +234,15 @@ export default function TeachingPlanNewPage() {
   // Handler: Save / Update Plan
   const handleSavePlan = async (status: 'DRAFT' | 'APPROVED') => {
     if (!selectedSubjectId) {
-      alert('Por favor, selecione uma disciplina.');
+      alert('Por favor, selecione uma oferta.');
       return;
     }
 
     try {
       setIsSaving(true);
       const url = editingPlanId
-        ? `/api/v1/teacher/plans/${editingPlanId}`
-        : '/api/v1/teacher/plans';
+        ? `${API_ROUTES.TEACHER_PLANS}/${editingPlanId}`
+        : API_ROUTES.TEACHER_PLANS;
       const method = editingPlanId ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -273,9 +265,9 @@ export default function TeachingPlanNewPage() {
       const data = await res.json();
       if (data.success) {
         if (status === 'APPROVED') {
-          router.push('/teacher/schedules');
+          router.push(ROUTES.TEACHER_SCHEDULES);
         } else {
-          router.push('/teacher/plans');
+          router.push(ROUTES.TEACHER_PLANS);
         }
       } else {
         alert(data.error || 'Erro ao salvar plano.');
@@ -289,17 +281,13 @@ export default function TeachingPlanNewPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header Controls: Disciplina & Período Letivo Comboboxes + AI Trigger */}
+      {/* Header Controls: combobox de oferta + cartão de contexto + gatilho da IA */}
       <PlanHeaderControls
-        subjects={subjects}
-        selectedSubjectId={selectedSubjectId}
-        onSelectSubjectId={setSelectedSubjectId}
-        activeSubject={activeSubject}
-        periods={periods}
-        selectedPeriodId={selectedPeriodId}
-        onSelectPeriodId={setSelectedPeriodId}
-        onPeriodCreated={handlePeriodCreated}
-        effectivePeriodName={activePeriod ? `${activePeriod.name} (${activePeriod.code})` : ''}
+        offerings={offeringOptions}
+        selectedOfferingId={selectedSubjectId}
+        onSelectOffering={handleSelectOffering}
+        activeOffering={activeOffering}
+        offeringLocked={Boolean(editingPlanId)}
         isAiLocked={isAiLocked}
         lockReason={lockReason}
         isGeneratingAI={isGeneratingAI}
