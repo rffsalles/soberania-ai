@@ -2,19 +2,19 @@
 
 import * as React from 'react';
 import { API_ROUTES } from '@/lib/constants/routes';
-import type { AuthenticatedUser } from '@/lib/auth/types';
+import type { CurrentUser } from '@/lib/auth/types';
 
 interface CurrentUserState {
-  user: AuthenticatedUser | null;
+  user: CurrentUser | null;
   isLoading: boolean;
 }
 
 /** Carrega o usuário autenticado a partir de /api/v1/auth/me. */
 export function useCurrentUser(
-  initialUser?: AuthenticatedUser | null,
+  initialUser?: CurrentUser | null,
   enabled = true,
 ): CurrentUserState {
-  const [user, setUser] = React.useState<AuthenticatedUser | null>(initialUser ?? null);
+  const [user, setUser] = React.useState<CurrentUser | null>(initialUser ?? null);
   const [isLoading, setIsLoading] = React.useState(enabled && !initialUser);
 
   React.useEffect(() => {

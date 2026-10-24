@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AUTH_COOKIE_NAME } from '@/lib/auth/rbac';
 import { getSessionUser } from '@/lib/auth/session';
+import { findClassContext } from '@/domains/academic/services/class-repository';
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,7 +25,9 @@ export async function GET(req: NextRequest) {
       return response;
     }
 
-    return NextResponse.json({ user });
+    const classContext = user.classId ? await findClassContext(user.classId) : null;
+
+    return NextResponse.json({ user: { ...user, class: classContext } });
   } catch (error) {
     console.error('Erro ao obter sessão atual:', error);
     return NextResponse.json(

@@ -32,6 +32,8 @@ export const ROUTES = {
   ADMIN: '/admin',
   ADMIN_SUBJECTS: '/admin/subjects',
   ADMIN_CLASSES: '/admin/classes',
+  ADMIN_COURSES: '/admin/courses',
+  ADMIN_DISCIPLINES: '/admin/disciplines',
 } as const;
 
 /** Prefixos das rotas de API protegidas pelo RBAC. */
@@ -59,6 +61,8 @@ export const API_ROUTES = {
   ADMIN_SUBJECTS: '/api/v1/admin/subjects',
   ADMIN_TEACHERS: '/api/v1/admin/teachers',
   ADMIN_CLASSES: '/api/v1/admin/classes',
+  ADMIN_COURSES: '/api/v1/admin/courses',
+  ADMIN_DISCIPLINES: '/api/v1/admin/disciplines',
   ACADEMIC_PERIODS: '/api/v1/academic-periods',
   APPLIANCE: '/api/v1/appliance',
   APPLIANCE_TELEMETRY: '/api/v1/appliance/telemetry',

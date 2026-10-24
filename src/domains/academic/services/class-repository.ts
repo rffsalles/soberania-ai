@@ -1,5 +1,6 @@
 import type { AcademicLevel } from '@prisma/client';
 import { db } from '@/lib/db';
+import type { ClassContext } from '@/lib/auth/types';
 import type { CreateClassInput } from '@/lib/validators/admin.validator';
 
 const classSelect = {
@@ -50,4 +51,19 @@ export async function updateClass(id: string, data: CreateClassInput): Promise<C
 /** Ofertas (disciplinas) já criadas para a turma. */
 export async function countOfferings(classId: string): Promise<number> {
   return db.subject.count({ where: { classId } });
+}
+
+/** Turma com curso e período, no formato mínimo exposto em /auth/me. */
+export async function findClassContext(classId: string): Promise<ClassContext | null> {
+  return db.class.findUnique({
+    where: { id: classId },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      semester: true,
+      course: { select: { name: true, code: true } },
+      academicPeriod: { select: { name: true, code: true } },
+    },
+  });
 }
