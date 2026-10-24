@@ -27,7 +27,7 @@ import {
 } from './_components/TeacherCreateModal';
 import {
   SubjectFormModal,
-  type SubjectItem,
+  type OfferingItem,
 } from './_components/SubjectFormModal';
 import {
   ClassFormModal,
@@ -35,16 +35,8 @@ import {
 } from '../classes/_components/ClassFormModal';
 import { API_ROUTES } from '@/lib/constants/routes';
 
-// Forma da oferta devolvida por GET /admin/subjects (a tela é reescrita na fase 2).
-type OfferingRow = {
-  id: string;
-  discipline: { name: string; code: string };
-  class: { id: string; name: string; code: string; course: { name: string } };
-  teacherAssignments: { teacher: Teacher }[];
-};
-
 export default function AdminSubjectsPage() {
-  const [subjects, setSubjects] = React.useState<OfferingRow[]>([]);
+  const [subjects, setSubjects] = React.useState<OfferingItem[]>([]);
   const [teachers, setTeachers] = React.useState<Teacher[]>([]);
   const [classes, setClasses] = React.useState<ClassOption[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -52,7 +44,7 @@ export default function AdminSubjectsPage() {
   const [search, setSearch] = React.useState('');
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isTeacherModalOpen, setIsTeacherModalOpen] = React.useState(false);
-  const [editingSubject, setEditingSubject] = React.useState<SubjectItem | null>(null);
+  const [editingSubject, setEditingSubject] = React.useState<OfferingItem | null>(null);
   const [selectedTeachers, setSelectedTeachers] = React.useState<string[]>([]);
   const [isClassModalOpen, setIsClassModalOpen] = React.useState(false);
   const [selectedClassId, setSelectedClassId] = React.useState<string | null>(null);
@@ -78,7 +70,7 @@ export default function AdminSubjectsPage() {
       setTeachers(dataTeach.teachers);
       setClasses(dataClasses.classes);
     } catch {
-      setLoadError('Não foi possível carregar disciplinas, professores e turmas. Tente novamente.');
+      setLoadError('Não foi possível carregar ofertas, professores e turmas. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -95,6 +87,13 @@ export default function AdminSubjectsPage() {
     setIsModalOpen(true);
   };
 
+  const handleOpenEditModal = (sub: OfferingItem) => {
+    setEditingSubject(sub);
+    setSelectedTeachers(sub.teacherAssignments.map((ta) => ta.teacher.id));
+    setSelectedClassId(sub.class.id);
+    setIsModalOpen(true);
+  };
+
   const handleTeacherCreated = (newTeacher: Teacher) => {
     fetchSubjectData();
     setSelectedTeachers((prev) => [...prev, newTeacher.id]);
@@ -106,16 +105,16 @@ export default function AdminSubjectsPage() {
   };
 
   const subjectCount = subjects.length;
-  const withClassCount = subjects.filter((s) => s.class).length;
+  const withoutTeacherCount = subjects.filter((s) => s.teacherAssignments.length === 0).length;
   const allocatedTeacherCount = new Set(
     subjects.flatMap((s) => s.teacherAssignments.map((ta) => ta.teacher.id))
   ).size;
 
-  const filteredSubjects = subjects.filter(
-    (s) =>
-      s.discipline.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.discipline.code.toLowerCase().includes(search.toLowerCase()) ||
-      s.class.course.name.toLowerCase().includes(search.toLowerCase())
+  const query = search.toLowerCase();
+  const filteredSubjects = subjects.filter((s) =>
+    [s.discipline.code, s.discipline.name, s.class.name, s.class.course.code, s.class.course.name].some((v) =>
+      v.toLowerCase().includes(query),
+    ),
   );
 
   return (
@@ -125,15 +124,15 @@ export default function AdminSubjectsPage() {
         <div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-brand-teal border-brand-teal/30">
-              Etapa 0 • Governança N:N
+              Etapa 0 • Ofertas
             </Badge>
             <ProviderBadge />
           </div>
           <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white mt-1">
-            Gestão N:N de Professores & Disciplinas
+            Ofertas
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Alocação docente multidimensional para escolas e faculdades.
+            Disciplinas da matriz ofertadas em cada turma, com os professores alocados.
           </p>
         </div>
 
@@ -148,13 +147,13 @@ export default function AdminSubjectsPage() {
             <span>+ Cadastrar Novo Professor</span>
           </Button>
 
-          {/* Modal 2: Nova / Editar Disciplina & Vínculos */}
+          {/* Modal 2: Nova / Editar oferta */}
           <Button
             onClick={handleOpenCreateModal}
             className="bg-brand-teal hover:bg-brand-teal-dark text-white gap-2 cursor-pointer rounded-xl"
           >
             <Plus className="h-4 w-4" />
-            <span>+ Vincular Professor a Disciplina</span>
+            <span>Nova oferta</span>
           </Button>
         </div>
       </div>
@@ -162,8 +161,8 @@ export default function AdminSubjectsPage() {
       {/* KPI Cards (derivados da lista carregada) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: 'Disciplinas cadastradas', value: subjectCount, icon: <BookOpen className="h-4 w-4 text-brand-teal" /> },
-          { label: 'Com turma vinculada', value: withClassCount, icon: <Layers className="h-4 w-4 text-brand-teal" /> },
+          { label: 'Ofertas cadastradas', value: subjectCount, icon: <BookOpen className="h-4 w-4 text-brand-teal" /> },
+          { label: 'Ofertas sem professor', value: withoutTeacherCount, icon: <Layers className="h-4 w-4 text-brand-teal" /> },
           { label: 'Professores alocados', value: allocatedTeacherCount, icon: <Users className="h-4 w-4 text-brand-orange" /> },
         ].map((kpi) => (
           <div key={kpi.label} className="glass rounded-xl p-4 border border-slate-200 dark:border-slate-800">
@@ -191,7 +190,7 @@ export default function AdminSubjectsPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por disciplina ou curso..."
+            placeholder="Buscar por disciplina, turma ou curso..."
             className="pl-9 rounded-xl"
           />
         </div>
@@ -203,18 +202,19 @@ export default function AdminSubjectsPage() {
         <Table>
           <TableHeader className="bg-slate-50/80 dark:bg-slate-900/80">
             <TableRow>
-              <TableHead>Código & Disciplina</TableHead>
-              <TableHead>Curso</TableHead>
+              <TableHead>Disciplina</TableHead>
               <TableHead>Turma</TableHead>
-              <TableHead>Nível Acadêmico</TableHead>
-              <TableHead>Professores Alocados (N:N)</TableHead>
+              <TableHead>Curso</TableHead>
+              <TableHead>Período</TableHead>
+              <TableHead>Professores</TableHead>
+              <TableHead>Planos</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loadError ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <div role="alert" className="flex flex-col items-center gap-2 text-sm text-red-600">
                     <span>{loadError}</span>
                     <Button variant="outline" size="sm" onClick={fetchSubjectData} className="cursor-pointer">
@@ -225,40 +225,30 @@ export default function AdminSubjectsPage() {
               </TableRow>
             ) : loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
-                  Carregando disciplinas...
+                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                  Carregando ofertas...
                 </TableCell>
               </TableRow>
             ) : filteredSubjects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
-                  Nenhuma disciplina cadastrada.
+                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                  Nenhuma oferta cadastrada.
                 </TableCell>
               </TableRow>
             ) : (
               filteredSubjects.map((sub) => (
                 <TableRow key={sub.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium text-slate-900 dark:text-white">
+                    {`${sub.discipline.code} · ${sub.discipline.name}`}
+                  </TableCell>
+                  <TableCell className="text-sm">
                     <div className="flex flex-col">
-                      <span className="text-slate-900 dark:text-white font-semibold">{sub.discipline.name}</span>
-                      <span className="text-xs text-brand-teal font-mono">{sub.discipline.code}</span>
+                      <span>{sub.class.name}</span>
+                      <span className="text-xs text-slate-400 font-mono">{sub.class.code}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">{sub.class.course.name}</TableCell>
-                  <TableCell className="text-sm">
-                    {sub.class ? (
-                      <span>
-                        {sub.class.name} <span className="text-xs text-slate-400 font-mono">{sub.class.code}</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-amber-600 italic">Sem turma</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {'—'}
-                    </Badge>
-                  </TableCell>
+                  <TableCell className="text-sm">{sub.class.course.code}</TableCell>
+                  <TableCell className="text-sm">{sub.class.academicPeriod.code}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {sub.teacherAssignments.length === 0 ? (
@@ -272,15 +262,15 @@ export default function AdminSubjectsPage() {
                       )}
                     </div>
                   </TableCell>
+                  <TableCell className="text-sm">{sub.teachingPlans.length}</TableCell>
                   <TableCell className="text-right">
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled
-                      title="Edição de ofertas disponível na fase 2"
+                      onClick={() => handleOpenEditModal(sub)}
                       className="text-xs text-brand-teal hover:text-brand-teal/80 cursor-pointer"
                     >
-                      Editar Vínculo
+                      Editar
                     </Button>
                   </TableCell>
                 </TableRow>

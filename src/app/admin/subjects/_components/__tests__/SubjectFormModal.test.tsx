@@ -4,145 +4,232 @@ import * as React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
 vi.mock('@/components/adaptive/adaptive-modal', () => ({
-  AdaptiveModal: ({ open, children }: { open: boolean; children: React.ReactNode }) => (open ? <div>{children}</div> : null),
+  AdaptiveModal: ({ open, title, children }: { open: boolean; title: string; children: React.ReactNode }) =>
+    open ? <div><h2>{title}</h2>{children}</div> : null,
 }));
 
 type Item = { id: string; title: string; subtitle?: string; badge?: string };
 vi.mock('@/components/ui/advanced-combobox', () => ({
-  AdvancedCombobox: ({ label, items, selectedId, onSelect, addNewLabel, onAddNewClick }: {
-    label: string; items: Item[]; selectedId: string | null; onSelect: (id: string) => void; addNewLabel?: string; onAddNewClick?: () => void;
+  AdvancedCombobox: ({ id, label, items, selectedId, onSelect, disabled, addNewLabel, onAddNewClick }: {
+    id?: string; label?: string; items: Item[]; selectedId: string | null; onSelect: (id: string) => void;
+    disabled?: boolean; addNewLabel?: string; onAddNewClick?: () => void;
   }) => (
     <div>
-      <label htmlFor="combo">{label}</label>
-      <select id="combo" value={selectedId ?? ''} onChange={(e) => onSelect(e.target.value)}>
-        {items.map((i) => <option key={i.id} value={i.id}>{i.title}{i.subtitle ? ` | ${i.subtitle}` : ''}{i.badge ? ` | ${i.badge}` : ''}</option>)}
+      <label htmlFor={id}>{label}</label>
+      <select id={id} disabled={disabled} value={selectedId ?? ''} onChange={(e) => onSelect(e.target.value)}>
+        <option value="">—</option>
+        {items.map((i) => <option key={i.id} value={i.id}>{i.title}{i.subtitle ? ` | ${i.subtitle}` : ''}</option>)}
       </select>
-      <button type="button" onClick={onAddNewClick}>{addNewLabel}</button>
+      {addNewLabel && <button type="button" onClick={onAddNewClick}>{addNewLabel}</button>}
     </div>
   ),
   AdvancedMultiCombobox: ({ label }: { label: string }) => <div>{label}</div>,
 }));
 
-import { SubjectFormModal, type SubjectItem } from '../SubjectFormModal';
+import { SubjectFormModal, type OfferingItem } from '../SubjectFormModal';
 import type { ClassOption } from '../../../classes/_components/ClassFormModal';
+import type { Teacher } from '../TeacherCreateModal';
 
+function routeFetch(handlers: Record<string, unknown>) {
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    const key = `${init?.method ?? 'GET'} ${url}`;
+    if (!(key in handlers)) throw new Error(`fetch inesperado: ${key}`);
+    return new Response(JSON.stringify(handlers[key]), { status: 200 });
+  });
+}
+function bodyOf(fetchMock: ReturnType<typeof routeFetch>, method: string) {
+  const call = fetchMock.mock.calls.find(
+    (c) => c[0] === '/api/v1/admin/subjects' && (c[1] as RequestInit | undefined)?.method === method,
+  );
+  return call ? JSON.parse(String((call[1] as RequestInit).body)) : undefined;
+}
+
+const ads = { id: 'ccourse00001', name: 'Análise e Desenvolvimento de Sistemas', code: 'ADS', academicLevel: 'HIGHER_EDUCATION' };
+const em = { id: 'ccourse00002', name: 'Ensino Médio', code: 'EM', academicLevel: 'HIGH_SCHOOL' };
+const p1 = { id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '2026.1', year: 2026 };
 const classes: ClassOption[] = [
-  {
-  id: 'c1', name: '3º Semestre · ADS', code: 'ADS-2026-3A', semester: 3,
-  courseId: 'ccourse00001', academicPeriodId: 'cperiod0001',
-  course: { id: 'ccourse00001', name: 'Análise e Desenvolvimento de Sistemas', code: 'ADS', academicLevel: 'HIGHER_EDUCATION' },
-  academicPeriod: { id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '2026.1', year: 2026 },
-},
+  { id: 'cclass00001', name: '3º Semestre · ADS', code: 'ADS-2026-3A', semester: 3, courseId: ads.id, academicPeriodId: p1.id, course: ads, academicPeriod: p1 },
+  { id: 'cclass00002', name: '1º Ano · EM', code: 'EM-2026-1A', semester: 1, courseId: em.id, academicPeriodId: p1.id, course: em, academicPeriod: p1 },
 ];
+const bd = { id: 'cdiscip0001', courseId: ads.id, code: 'BD101', name: 'Banco de Dados I', workloadHours: 80 };
+const mat = { id: 'cdiscip0002', courseId: em.id, code: 'MAT1', name: 'Matemática I', workloadHours: 120 };
+const ana: Teacher = { id: 'cteacher001', name: 'Profa. Ana', email: 'ana@x.br', enrollment: 'P001' };
 
-function renderModal(overrides: Partial<React.ComponentProps<typeof SubjectFormModal>> = {}) {
-  const props: React.ComponentProps<typeof SubjectFormModal> = {
-    open: true,
-    onOpenChange: vi.fn(),
-    editingSubject: null,
-    teachers: [],
-    classes,
-    selectedTeachers: [],
-    setSelectedTeachers: vi.fn(),
-    selectedClassId: null,
-    setSelectedClassId: vi.fn(),
-    onSuccess: vi.fn(),
-    onRequestCreateTeacher: vi.fn(),
-    onRequestCreateClass: vi.fn(),
-    ...overrides,
-  };
-  return { ...render(<SubjectFormModal {...props} />), props };
+const discRoutes = {
+  'GET /api/v1/admin/disciplines?courseId=ccourse00001': { success: true, disciplines: [bd, mat] },
+  'GET /api/v1/admin/disciplines?courseId=ccourse00002': { success: true, disciplines: [mat] },
+};
+
+const editing: OfferingItem = {
+  id: 'csubject001',
+  discipline: bd,
+  class: { ...classes[0] },
+  teacherAssignments: [{ teacher: ana }],
+  teachingPlans: [],
+};
+
+function Harness({ editingSubject = null, onSuccess, onOpenChange, onRequestCreateClass }: {
+  editingSubject?: OfferingItem | null; onSuccess: () => void; onOpenChange: (o: boolean) => void; onRequestCreateClass?: () => void;
+}) {
+  const [classId, setClassId] = React.useState<string | null>(null);
+  const [teachers, setTeachers] = React.useState<string[]>([]);
+  return (
+    <SubjectFormModal
+      open
+      onOpenChange={onOpenChange}
+      editingSubject={editingSubject}
+      teachers={[ana]}
+      classes={classes}
+      selectedTeachers={teachers}
+      setSelectedTeachers={setTeachers}
+      selectedClassId={classId}
+      setSelectedClassId={setClassId}
+      onSuccess={onSuccess}
+      onRequestCreateTeacher={vi.fn()}
+      onRequestCreateClass={onRequestCreateClass ?? vi.fn()}
+    />
+  );
+}
+
+function setup(handlers: Record<string, unknown> = {}, editingSubject: OfferingItem | null = null, onRequestCreateClass?: () => void) {
+  const fetchMock = routeFetch({ ...discRoutes, ...handlers });
+  vi.stubGlobal('fetch', fetchMock);
+  const onSuccess = vi.fn();
+  const onOpenChange = vi.fn();
+  const utils = render(<Harness editingSubject={editingSubject} onSuccess={onSuccess} onOpenChange={onOpenChange} onRequestCreateClass={onRequestCreateClass} />);
+  return { fetchMock, onSuccess, onOpenChange, ...utils };
+}
+
+const opts = (label: string) => Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).map((o) => o.text);
+const val = (label: string) => (screen.getByLabelText(label) as HTMLSelectElement).value;
+
+async function pickClassAndDiscipline() {
+  fireEvent.change(screen.getByLabelText('Turma'), { target: { value: 'cclass00001' } });
+  await waitFor(() => expect(opts('Disciplina')).toContain('BD101 · Banco de Dados I | 80 h'));
+  fireEvent.change(screen.getByLabelText('Disciplina'), { target: { value: 'cdiscip0001' } });
 }
 
 describe('SubjectFormModal', () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it('lista "Sem turma" e as turmas com curso, período e código', () => {
-    renderModal();
-    const options = Array.from((screen.getByLabelText('Turma') as HTMLSelectElement).options).map((o) => o.text);
-    expect(options).toEqual(['Sem turma | não aparece para alunos', '3º Semestre · ADS | ADS · 2026.1 | ADS-2026-3A']);
-    expect(screen.getByText('Ano letivo e semestre vêm da turma selecionada.')).toBeTruthy();
+  it('lista as turmas com curso e período, sem "Sem turma"', () => {
+    setup();
+    expect(screen.getByText('Nova oferta')).toBeTruthy();
+    expect(opts('Turma')).toEqual(['—', '3º Semestre · ADS | ADS · 2026.1', '1º Ano · EM | EM · 2026.1']);
+    expect(screen.queryByLabelText('Nome da Disciplina')).toBeNull();
+    expect(screen.queryByLabelText('Nível acadêmico')).toBeNull();
+    expect(screen.queryByLabelText('Curso')).toBeNull();
+  });
+
+  it('Disciplina fica desabilitada até escolher a turma', () => {
+    const { fetchMock } = setup();
+    expect((screen.getByLabelText('Disciplina') as HTMLSelectElement).disabled).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('lista só disciplinas do curso da turma', async () => {
+    const { fetchMock } = setup();
+    fireEvent.change(screen.getByLabelText('Turma'), { target: { value: 'cclass00001' } });
+    await waitFor(() => expect(opts('Disciplina')).toEqual(['—', 'BD101 · Banco de Dados I | 80 h']));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/disciplines?courseId=ccourse00001');
+    expect((screen.getByLabelText('Disciplina') as HTMLSelectElement).disabled).toBe(false);
+  });
+
+  it('trocar a turma limpa a disciplina e recarrega pelo curso novo', async () => {
+    const { fetchMock } = setup();
+    await pickClassAndDiscipline();
+    expect(val('Disciplina')).toBe('cdiscip0001');
+    fireEvent.change(screen.getByLabelText('Turma'), { target: { value: 'cclass00002' } });
+    expect(val('Disciplina')).toBe('');
+    await waitFor(() => expect(opts('Disciplina')).toEqual(['—', 'MAT1 · Matemática I | 120 h']));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/disciplines?courseId=ccourse00002');
+  });
+
+  it('cria com POST { classId, disciplineId, teacherIds } e avisa a página sem dados', async () => {
+    const { fetchMock, onSuccess, onOpenChange } = setup({
+      'POST /api/v1/admin/subjects': { success: true, subject: { id: 'csubject001', teacherAssignments: [] } },
+    });
+    await pickClassAndDiscipline();
+    fireEvent.click(screen.getByText('Salvar oferta'));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith());
+    expect(bodyOf(fetchMock, 'POST')).toEqual({ classId: 'cclass00001', disciplineId: 'cdiscip0001', teacherIds: [] });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('sem disciplina mostra "Selecione a disciplina" e sem turma "Selecione a turma", sem enviar', async () => {
+    const { fetchMock } = setup();
+    fireEvent.click(screen.getByText('Salvar oferta'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Selecione a turma');
+    fireEvent.change(screen.getByLabelText('Turma'), { target: { value: 'cclass00001' } });
+    await waitFor(() => expect(opts('Disciplina')).toHaveLength(2));
+    fireEvent.click(screen.getByText('Salvar oferta'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Selecione a disciplina'));
+    expect(bodyOf(fetchMock, 'POST')).toBeUndefined();
+  });
+
+  it('oferta duplicada mostra o 409 e mantém as escolhas', async () => {
+    const { onSuccess } = setup({
+      'POST /api/v1/admin/subjects': { success: false, error: 'Esta disciplina já é ofertada nesta turma.' },
+    });
+    await pickClassAndDiscipline();
+    fireEvent.click(screen.getByText('Salvar oferta'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Esta disciplina já é ofertada nesta turma.');
+    expect(val('Turma')).toBe('cclass00001');
+    expect(val('Disciplina')).toBe('cdiscip0001');
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it('mostra erro de conexão quando o fetch falha', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') throw new Error('rede');
+      return new Response(JSON.stringify(discRoutes[`GET ${url}` as keyof typeof discRoutes]), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<Harness onSuccess={vi.fn()} onOpenChange={vi.fn()} />);
+    await pickClassAndDiscipline();
+    fireEvent.click(screen.getByText('Salvar oferta'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Erro ao conectar com servidor.');
+  });
+
+  it('em edição só professores mudam e o PUT envia { id, teacherIds }', async () => {
+    const { fetchMock, onSuccess } = setup(
+      { 'PUT /api/v1/admin/subjects': { success: true, subject: { id: 'csubject001', teacherAssignments: [] } } },
+      editing,
+    );
+    expect(screen.getByText('Editar oferta')).toBeTruthy();
+    const turma = screen.getByLabelText('Turma') as HTMLSelectElement;
+    expect(turma.value).toBe('cclass00001');
+    expect(turma.disabled).toBe(true);
+    const disc = screen.getByLabelText('Disciplina') as HTMLSelectElement;
+    expect(disc.value).toBe('cdiscip0001');
+    expect(disc.disabled).toBe(true);
+    expect(opts('Disciplina')).toContain('BD101 · Banco de Dados I | 80 h');
+    expect(screen.queryByText('+ Nova turma...')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Atualizar oferta'));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(bodyOf(fetchMock, 'PUT')).toEqual({ id: 'csubject001', teacherIds: ['cteacher001'] });
   });
 
   it('"+ Nova turma..." chama onRequestCreateClass', () => {
-    const { props } = renderModal();
+    const onRequestCreateClass = vi.fn();
+    setup({}, null, onRequestCreateClass);
     fireEvent.click(screen.getByText('+ Nova turma...'));
-    expect(props.onRequestCreateClass).toHaveBeenCalledTimes(1);
+    expect(onRequestCreateClass).toHaveBeenCalledTimes(1);
   });
 
-  it('selecionar uma turma informa o id; "Sem turma" informa null', () => {
-    const { props } = renderModal();
-    fireEvent.change(screen.getByLabelText('Turma'), { target: { value: 'c1' } });
-    expect(props.setSelectedClassId).toHaveBeenLastCalledWith('c1');
-    fireEvent.change(screen.getByLabelText('Turma'), { target: { value: '__none__' } });
-    expect(props.setSelectedClassId).toHaveBeenLastCalledWith(null);
-  });
-
-  it('envia nível acadêmico e classId null, sem academicYear', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 }));
+  it('limpa o erro ao reabrir em outra oferta', async () => {
+    const fetchMock = routeFetch({ ...discRoutes });
     vi.stubGlobal('fetch', fetchMock);
-    renderModal();
-    fireEvent.change(screen.getByLabelText('Nome da Disciplina'), { target: { value: 'Matemática' } });
-    fireEvent.change(screen.getByLabelText('Código'), { target: { value: 'MT01' } });
-    fireEvent.change(screen.getByLabelText('Curso'), { target: { value: 'Ensino Médio' } });
-    fireEvent.change(screen.getByLabelText('Nível acadêmico'), { target: { value: 'HIGH_SCHOOL' } });
-    fireEvent.click(screen.getByText('Salvar disciplina'));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    const body = JSON.parse(String(init.body));
-    expect(body).toEqual({ name: 'Matemática', code: 'MT01', courseName: 'Ensino Médio', academicLevel: 'HIGH_SCHOOL', teacherIds: [], classId: null });
-    expect(body).not.toHaveProperty('academicYear');
-  });
-
-  it('em edição abre com a turma e o nível da disciplina', () => {
-    const editing: SubjectItem = {
-      id: 's1', name: 'Cálculo', code: 'MAT01', courseName: 'Engenharia', academicLevel: 'HIGHER_EDUCATION',
-      academicYear: 2026, classId: 'c1', class: { id: 'c1', name: '3º Semestre · ADS', code: 'ADS-2026-3A' }, teacherAssignments: [],
+    const props = {
+      open: true, onOpenChange: vi.fn(), editingSubject: null, teachers: [ana], classes,
+      selectedTeachers: [], setSelectedTeachers: vi.fn(), selectedClassId: null, setSelectedClassId: vi.fn(),
+      onSuccess: vi.fn(), onRequestCreateTeacher: vi.fn(), onRequestCreateClass: vi.fn(),
     };
-    const { props } = renderModal({ editingSubject: editing, selectedClassId: 'c1' });
-    expect(props.setSelectedClassId).toHaveBeenCalledWith('c1');
-    expect((screen.getByLabelText('Turma') as HTMLSelectElement).value).toBe('c1');
-    expect((screen.getByLabelText('Nível acadêmico') as HTMLSelectElement).value).toBe('HIGHER_EDUCATION');
-    expect(screen.getByText('Atualizar disciplina')).toBeTruthy();
-  });
-
-  it('limpa o erro ao reabrir o modal com outra disciplina', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: false, error: 'Turma não encontrada.' }), { status: 404 })));
-    const { rerender, props } = renderModal();
-    fireEvent.change(screen.getByLabelText('Nome da Disciplina'), { target: { value: 'Matemática' } });
-    fireEvent.change(screen.getByLabelText('Código'), { target: { value: 'MT01' } });
-    fireEvent.change(screen.getByLabelText('Curso'), { target: { value: 'ADS' } });
-    fireEvent.click(screen.getByText('Salvar disciplina'));
+    const { rerender } = render(<SubjectFormModal {...props} />);
+    fireEvent.click(screen.getByText('Salvar oferta'));
     await screen.findByRole('alert');
-    const editing: SubjectItem = {
-      id: 's1', name: 'Cálculo', code: 'MAT01', courseName: 'Engenharia', academicLevel: 'HIGHER_EDUCATION',
-      academicYear: 2026, classId: null, class: null, teacherAssignments: [],
-    };
     rerender(<SubjectFormModal {...props} editingSubject={editing} />);
     expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('mantém o que foi digitado quando chega uma turma nova e ela fica selecionada', () => {
-    const { rerender, props } = renderModal();
-    fireEvent.change(screen.getByLabelText('Nome da Disciplina'), { target: { value: 'Matemática' } });
-    const nova: ClassOption = {
-  id: 'c9', name: 'Turma Nova', code: 'NOVA-2026-1', semester: 1,
-  courseId: 'ccourse00001', academicPeriodId: 'cperiod0001',
-  course: { id: 'ccourse00001', name: 'Análise e Desenvolvimento de Sistemas', code: 'ADS', academicLevel: 'HIGHER_EDUCATION' },
-  academicPeriod: { id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '2026.1', year: 2026 },
-};
-    rerender(<SubjectFormModal {...props} classes={[...classes, nova]} selectedClassId="c9" />);
-    expect((screen.getByLabelText('Nome da Disciplina') as HTMLInputElement).value).toBe('Matemática');
-    expect((screen.getByLabelText('Turma') as HTMLSelectElement).value).toBe('c9');
-  });
-
-  it('mostra erro da API inline', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: false, error: 'Turma não encontrada.' }), { status: 404 })));
-    renderModal();
-    fireEvent.change(screen.getByLabelText('Nome da Disciplina'), { target: { value: 'Matemática' } });
-    fireEvent.change(screen.getByLabelText('Código'), { target: { value: 'MT01' } });
-    fireEvent.change(screen.getByLabelText('Curso'), { target: { value: 'ADS' } });
-    fireEvent.click(screen.getByText('Salvar disciplina'));
-    expect((await screen.findByRole('alert')).textContent).toBe('Turma não encontrada.');
   });
 });

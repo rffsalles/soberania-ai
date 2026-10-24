@@ -2,8 +2,6 @@
 
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
 import {
   AdvancedCombobox,
@@ -15,26 +13,39 @@ import type { Teacher } from './TeacherCreateModal';
 import type { ClassOption } from '../../classes/_components/ClassFormModal';
 
 
-type AcademicLevel = 'HIGHER_EDUCATION' | 'HIGH_SCHOOL' | 'ELEMENTARY';
-
-const NO_CLASS_ID = '__none__';
-
-export interface SubjectItem {
+export interface OfferingItem {
   id: string;
-  name: string;
-  code: string;
-  courseName: string;
-  academicLevel: string;
-  academicYear: number;
-  classId?: string | null;
-  class?: { id: string; name: string; code: string } | null;
+  discipline: { id: string; code: string; name: string; workloadHours: number };
+  class: {
+    id: string;
+    name: string;
+    code: string;
+    courseId: string;
+    course: { id: string; name: string; code: string };
+    academicPeriod: { id: string; name: string; code: string };
+  };
   teacherAssignments: { teacher: Teacher }[];
+  teachingPlans: { id: string; status: string }[];
 }
+
+interface DisciplineLite {
+  id: string;
+  courseId: string;
+  code: string;
+  name: string;
+  workloadHours: number;
+}
+
+const toDisciplineItem = (d: Omit<DisciplineLite, 'courseId'>): ComboboxItem => ({
+  id: d.id,
+  title: `${d.code} · ${d.name}`,
+  subtitle: `${d.workloadHours} h`,
+});
 
 interface SubjectFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  editingSubject: SubjectItem | null;
+  editingSubject: OfferingItem | null;
   teachers: Teacher[];
   classes: ClassOption[];
   selectedTeachers: string[];
@@ -60,31 +71,54 @@ export function SubjectFormModal({
   onRequestCreateTeacher,
   onRequestCreateClass,
 }: SubjectFormModalProps) {
-  const [name, setName] = React.useState('');
-  const [code, setCode] = React.useState('');
-  const [courseName, setCourseName] = React.useState('');
-  const [academicLevel, setAcademicLevel] = React.useState<AcademicLevel>('HIGHER_EDUCATION');
+  const [disciplineId, setDisciplineId] = React.useState<string | null>(null);
+  const [disciplines, setDisciplines] = React.useState<DisciplineLite[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setError(null);
     if (editingSubject) {
-      setName(editingSubject.name);
-      setCode(editingSubject.code);
-      setCourseName(editingSubject.courseName);
-      setSelectedClassId(editingSubject.classId ?? null);
-      setAcademicLevel(editingSubject.academicLevel as AcademicLevel);
+      setSelectedClassId(editingSubject.class.id);
+      setDisciplineId(editingSubject.discipline.id);
       setSelectedTeachers(editingSubject.teacherAssignments.map((ta) => ta.teacher.id));
     } else {
-      setName('');
-      setCode('');
-      setCourseName('');
       setSelectedClassId(null);
-      setAcademicLevel('HIGHER_EDUCATION');
+      setDisciplineId(null);
       setSelectedTeachers([]);
     }
-  }, [editingSubject, setSelectedTeachers, setSelectedClassId]);
+  }, [open, editingSubject, setSelectedTeachers, setSelectedClassId]);
+
+  const courseId = classes.find((c) => c.id === selectedClassId)?.courseId ?? null;
+
+  React.useEffect(() => {
+    if (!open || editingSubject) return;
+    setDisciplineId(null);
+    setDisciplines([]);
+    if (!courseId) return;
+    let cancelled = false;
+    fetch(`${API_ROUTES.ADMIN_DISCIPLINES}?courseId=${encodeURIComponent(courseId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.success) setDisciplines(data.disciplines);
+        else setError(data.error || 'Não foi possível carregar as disciplinas do curso.');
+      })
+      .catch(() => {
+        if (!cancelled) setError('Não foi possível carregar as disciplinas do curso.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, editingSubject, selectedClassId, courseId]);
+
+  const disciplineItems: ComboboxItem[] = React.useMemo(
+    () =>
+      editingSubject
+        ? [toDisciplineItem(editingSubject.discipline)]
+        : disciplines.filter((d) => d.courseId === courseId).map(toDisciplineItem),
+    [editingSubject, disciplines, courseId],
+  );
 
   const teacherItems: ComboboxItem[] = React.useMemo(() => {
     return teachers.map((t) => ({
@@ -96,38 +130,31 @@ export function SubjectFormModal({
   }, [teachers]);
 
   const classItems: ComboboxItem[] = React.useMemo(
-    () => [
-      { id: NO_CLASS_ID, title: 'Sem turma', subtitle: 'não aparece para alunos' },
-      ...classes.map((c) => ({
+    () =>
+      classes.map((c) => ({
         id: c.id,
         title: c.name,
         subtitle: `${c.course.code} · ${c.academicPeriod.code}`,
         badge: c.code,
       })),
-    ],
     [classes],
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!editingSubject) {
+      if (!selectedClassId) return setError('Selecione a turma');
+      if (!disciplineId) return setError('Selecione a disciplina');
+    }
     try {
       setLoading(true);
-      const isEdit = Boolean(editingSubject);
-      const method = isEdit ? 'PUT' : 'POST';
-      const bodyPayload = {
-        ...(isEdit && editingSubject ? { id: editingSubject.id } : {}),
-        name,
-        code,
-        courseName,
-        academicLevel,
-        teacherIds: selectedTeachers,
-        // Sem turma a disciplina não gera agendas para alunos; null desvincula.
-        classId: selectedClassId,
-      };
+      const bodyPayload = editingSubject
+        ? { id: editingSubject.id, teacherIds: selectedTeachers }
+        : { classId: selectedClassId, disciplineId, teacherIds: selectedTeachers };
 
       const res = await fetch(API_ROUTES.ADMIN_SUBJECTS, {
-        method,
+        method: editingSubject ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload),
       });
@@ -136,10 +163,10 @@ export function SubjectFormModal({
         onOpenChange(false);
         onSuccess();
       } else {
-        setError(data.error || 'Erro ao salvar disciplina.');
+        setError(data.error || 'Erro ao salvar oferta.');
       }
     } catch {
-      setError('Erro ao salvar disciplina.');
+      setError('Erro ao conectar com servidor.');
     } finally {
       setLoading(false);
     }
@@ -149,80 +176,42 @@ export function SubjectFormModal({
     <AdaptiveModal
       open={open}
       onOpenChange={onOpenChange}
-      title={editingSubject ? 'Editar Disciplina & Vínculos' : 'Nova Disciplina & Vínculos'}
-      description="Gerencie os dados da disciplina e os docentes alocados."
+      title={editingSubject ? 'Editar oferta' : 'Nova oferta'}
+      description="Escolha a turma, uma disciplina do curso da turma e os professores."
       className="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4 py-1">
         <div className="space-y-1.5">
-          <Label htmlFor="subject-name">Nome da Disciplina</Label>
-          <Input
-            id="subject-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="ex: Banco de Dados I"
-            required
-            className="rounded-xl"
+          <AdvancedCombobox
+            id="subject-class-combobox"
+            label="Turma"
+            placeholder="Selecione a turma"
+            searchPlaceholder="Buscar por nome ou código..."
+            items={classItems}
+            selectedId={selectedClassId}
+            onSelect={(id) => setSelectedClassId(id || null)}
+            disabled={Boolean(editingSubject)}
+            {...(editingSubject ? {} : { addNewLabel: '+ Nova turma...', onAddNewClick: onRequestCreateClass })}
           />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="subject-code">Código</Label>
-            <Input
-              id="subject-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="ex: BD101"
-              required
-              className="rounded-xl"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="subject-course">Curso</Label>
-            <Input
-              id="subject-course"
-              value={courseName}
-              onChange={(e) => setCourseName(e.target.value)}
-              placeholder="ex: ADS, Engenharia de Software, Ensino Médio"
-              required
-              className="rounded-xl"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="subject-academic-level">Nível acadêmico</Label>
-          <select
-            id="subject-academic-level"
-            value={academicLevel}
-            onChange={(e) => setAcademicLevel(e.target.value as AcademicLevel)}
-            className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 cursor-pointer"
-          >
-            <option value="HIGHER_EDUCATION">Ensino Superior</option>
-            <option value="HIGH_SCHOOL">Ensino Médio</option>
-            <option value="ELEMENTARY">Fundamental</option>
-          </select>
         </div>
 
         <div className="space-y-1.5">
           <AdvancedCombobox
-            id="subject-class-combobox"
-            label="Turma"
-            placeholder="Sem turma (não aparece para alunos)"
-            searchPlaceholder="Buscar por nome ou código..."
-            items={classItems}
-            selectedId={selectedClassId ?? NO_CLASS_ID}
-            onSelect={(id) => setSelectedClassId(id === NO_CLASS_ID ? null : id)}
-            addNewLabel="+ Nova turma..."
-            onAddNewClick={onRequestCreateClass}
+            id="subject-discipline-combobox"
+            label="Disciplina"
+            placeholder={selectedClassId ? 'Selecione a disciplina' : 'Escolha a turma primeiro'}
+            searchPlaceholder="Buscar por código ou nome..."
+            emptyMessage="Nenhuma disciplina cadastrada para este curso."
+            items={disciplineItems}
+            selectedId={disciplineId}
+            onSelect={(id) => setDisciplineId(id || null)}
+            disabled={!selectedClassId || Boolean(editingSubject)}
           />
-          <p className="text-[11px] text-slate-500">Ano letivo e semestre vêm da turma selecionada.</p>
         </div>
 
         <div className="space-y-1.5">
           <AdvancedMultiCombobox
-            label="Professores Alocados (N:N)"
+            label="Professores"
             placeholder="Selecione um ou mais professores..."
             searchPlaceholder="Buscar por docente, matrícula ou e-mail..."
             items={teacherItems}
@@ -256,8 +245,8 @@ export function SubjectFormModal({
             {loading
               ? 'Salvando...'
               : editingSubject
-              ? 'Atualizar disciplina'
-              : 'Salvar disciplina'}
+              ? 'Atualizar oferta'
+              : 'Salvar oferta'}
           </Button>
         </div>
       </form>
