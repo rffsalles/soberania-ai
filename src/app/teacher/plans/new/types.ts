@@ -23,15 +23,6 @@ export interface CategoryOption {
   color?: string | null;
 }
 
-export interface AcademicPeriodOption {
-  id: string;
-  name: string;
-  code: string;
-  year: number;
-  semester?: number | null;
-  type?: string;
-}
-
 /** Horas em null = ainda não informadas pelo professor (plano novo começa vazio, sem valores inventados). */
 export interface NdeComplianceData {
   totalHours: number | null;

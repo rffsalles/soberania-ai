@@ -10,9 +10,9 @@ import { PlanTelemetryCard } from './PlanTelemetryCard';
 import { PlanFooterDock } from './PlanFooterDock';
 import { ReferenceSelectionModal } from './ReferenceSelectionModal';
 import { DEFAULT_NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
+import type { AcademicPeriodOption } from '@/app/admin/classes/_components/PeriodCreateInlineModal';
 import type {
   SubjectOption,
-  AcademicPeriodOption,
   DocumentReference,
   NdeComplianceData,
 } from '../types';

@@ -5,7 +5,16 @@ import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Plus, Calendar } from 'lucide-react';
-import type { AcademicPeriodOption } from '../types';
+import { API_ROUTES } from '@/lib/constants/routes';
+
+export interface AcademicPeriodOption {
+  id: string;
+  name: string;
+  code: string;
+  year: number;
+  semester?: number | null;
+  type?: string;
+}
 
 interface PeriodCreateInlineModalProps {
   open: boolean;
@@ -37,7 +46,7 @@ export function PeriodCreateInlineModal({
       setIsSubmitting(true);
       setError(null);
 
-      const res = await fetch('/api/v1/academic-periods', {
+      const res = await fetch(API_ROUTES.ACADEMIC_PERIODS, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,7 +92,7 @@ export function PeriodCreateInlineModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4 pt-2">
         {error && (
-          <div className="p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-600 rounded-xl">
+          <div role="alert" className="p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-600 rounded-xl">
             {error}
           </div>
         )}

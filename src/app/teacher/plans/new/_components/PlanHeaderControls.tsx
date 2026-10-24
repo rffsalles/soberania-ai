@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ProviderBadge } from '@/components/layout/provider-badge';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
-import { PeriodCreateInlineModal } from './PeriodCreateInlineModal';
-import type { SubjectOption, AcademicPeriodOption } from '../types';
+import { PeriodCreateInlineModal, type AcademicPeriodOption } from '@/app/admin/classes/_components/PeriodCreateInlineModal';
+import type { SubjectOption } from '../types';
 
 interface PlanHeaderControlsProps {
   subjects: SubjectOption[];
