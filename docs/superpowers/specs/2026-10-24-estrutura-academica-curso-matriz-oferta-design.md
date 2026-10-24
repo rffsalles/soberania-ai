@@ -210,12 +210,14 @@ Derivações (únicas fontes):
 
 ### Migração
 
-- Sem backfill. Sem SQL manual.
+- Sem backfill.
+- A migração gerada por `migrate dev --create-only` pode incluir a remoção dos índices `hnsw`/`gin` e da coluna gerada `content_tsv`, criados por SQL em `20261020130000_pgvector_fulltext`. Remover essas linhas do SQL gerado antes de aplicar. O arquivo deve ficar só com o enum, as tabelas novas e as alterações de `classes`, `subjects` e `teaching_plans`.
 - Passos:
   1. Editar `prisma/schema.prisma` conforme acima.
   2. `npx prisma migrate dev --create-only --name estrutura_academica_curso_matriz_oferta` gera a migração em `prisma/migrations/<timestamp>_estrutura_academica_curso_matriz_oferta/`.
   3. `npx prisma migrate reset --force` recria o banco de dev, aplica todas as migrações e roda `prisma/seed.ts`.
 - `migrate reset` **apaga todos os dados locais** (usuários, acervo, chunks, planos). Aceito pelo usuário: é protótipo. O seed recria os dados de demonstração e o acervo.
+- Sem terminal interativo, o `migrate dev` pode pedir confirmação. Alternativa: rodar antes `npx prisma migrate reset --force --skip-seed` e repetir o passo 2.
 - `--create-only` evita que o `migrate dev` tente aplicar colunas obrigatórias sobre linhas existentes; o reset aplica sobre banco vazio.
 
 ### Seed
@@ -301,7 +303,7 @@ export const createCourseSchema = z.object({
 export const updateCourseSchema = createCourseSchema.extend({ id: z.string().min(1, 'ID é obrigatório') });
 
 export const createDisciplineSchema = z.object({
-  courseId: z.string().cuid('Curso inválido'),
+  courseId: z.string({ required_error: 'Curso inválido' }).cuid('Curso inválido'),
   code: z.string().trim().min(2, 'Informe o código da disciplina'),
   name: z.string().trim().min(2, 'Informe o nome da disciplina'),
   description: z.string().trim().optional(),
@@ -315,16 +317,16 @@ export const updateDisciplineSchema = createDisciplineSchema
 export const createClassSchema = z.object({
   name: z.string().trim().min(2, 'Informe o nome da turma'),
   code: z.string().trim().min(2, 'Informe o código da turma'),
-  courseId: z.string().cuid('Selecione o curso'),
-  academicPeriodId: z.string().cuid('Selecione o período letivo'),
+  courseId: z.string({ required_error: 'Selecione o curso' }).cuid('Selecione o curso'),
+  academicPeriodId: z.string({ required_error: 'Selecione o período letivo' }).cuid('Selecione o período letivo'),
   semester: z.coerce.number().int('Informe uma posição válida')
     .min(1, 'Informe uma posição entre 1 e 12').max(12, 'Informe uma posição entre 1 e 12').default(1),
 });
 export const updateClassSchema = createClassSchema.extend({ id: z.string().min(1, 'ID é obrigatório') });
 
 export const createOfferingSchema = z.object({
-  classId: z.string().cuid('Selecione a turma'),
-  disciplineId: z.string().cuid('Selecione a disciplina'),
+  classId: z.string({ required_error: 'Selecione a turma' }).cuid('Selecione a turma'),
+  disciplineId: z.string({ required_error: 'Selecione a disciplina' }).cuid('Selecione a disciplina'),
   teacherIds: z.array(z.string()).default([]),
 });
 export const updateOfferingSchema = z.object({
@@ -333,13 +335,14 @@ export const updateOfferingSchema = z.object({
 });
 ```
 
+- Campo obrigatório ausente (chave fora do JSON) devolve a mesma mensagem pt-BR do campo, nunca o `"Required"` do zod. Todo `z.string()` obrigatório novo (`courseId`, `academicPeriodId`, `classId`, `disciplineId`, `subjectId`, `syllabus`) recebe `{ required_error: <mesma mensagem> }`.
 - `semester` passa de 1–4 para 1–12. Agora é posição na matriz: cursos superiores têm 6 a 10 semestres; ensino fundamental tem 9 anos.
 - `upsertSubjectSchema` e `updateSubjectSchema` são substituídos por `createOfferingSchema` e `updateOfferingSchema`. `UpsertSubjectInput` sai.
 - Em `src/lib/validators/teaching-plan.validator.ts`:
   - `updateTeachingPlanSchema` perde `subjectId` e `academicPeriodId`.
-  - Novo `createTeachingPlanSchema = updateTeachingPlanSchema.extend({ subjectId: z.string().min(1, 'Selecione a oferta'), syllabus: z.string().min(1, 'Informe a ementa') })`. A rota POST passa a validar com ele (hoje passa o body cru para `createPlan`). As mensagens de horas continuam em `createPlan`.
-- `generatePlanSchema` em `src/app/api/v1/teacher/plans/generate/route.ts`: sai `subjectName`, `courseName`, `academicPeriod`; entra `subjectId: z.string().min(1, 'Selecione a oferta para gerar.')`.
-- `/api/v1/auth/me`: a rota acrescenta `class` ao objeto `user` da resposta, lido por nova função `findClassContext(classId)` em `class-repository.ts`: `{ id, name, code, semester, course: { name, code }, academicPeriod: { name, code } } | null`. `AuthenticatedUser` e o JWT não mudam. Novo tipo `CurrentUser = AuthenticatedUser & { class?: ClassContext | null }` em `src/lib/auth/types.ts`, usado por `src/components/layout/use-current-user.ts`.
+  - Novo `createTeachingPlanSchema = updateTeachingPlanSchema.extend({ subjectId: z.string({ required_error: 'Selecione a oferta' }).min(1, 'Selecione a oferta'), syllabus: z.string({ required_error: 'Informe a ementa' }).min(1, 'Informe a ementa'), totalHours: hoursInput, theoryHours: hoursInput, practiceHours: hoursInput })`, com `const hoursInput = z.union([z.number(), z.string()]).nullable().optional()`. A UI envia `null` quando o campo está vazio; o zod não rejeita. A validação de horas, com mensagem pt-BR, continua em `createPlan`. `type CreateTeachingPlanInput = z.infer<typeof createTeachingPlanSchema>`. A rota POST passa a validar com o schema (hoje passa o body cru para `createPlan`).
+- `generatePlanSchema` em `src/app/api/v1/teacher/plans/generate/route.ts`: sai `subjectName`, `courseName`, `academicPeriod`; entra `subjectId: z.string({ required_error: 'Selecione a oferta para gerar.' }).min(1, 'Selecione a oferta para gerar.')`. A rota troca `.parse` por `safeParse`, no padrão das rotas admin (400 com `issues[0].message`), para devolver `'Selecione a oferta para gerar.'`.
+- `/api/v1/auth/me`: a rota acrescenta `class` ao objeto `user` da resposta, lido por nova função `findClassContext(classId)` em `class-repository.ts`: `{ id, name, code, semester, course: { name, code }, academicPeriod: { name, code } } | null`. `AuthenticatedUser` e o JWT não mudam. Novos tipos `ClassContext` e `CurrentUser = AuthenticatedUser & { class?: ClassContext | null }`, ambos em `src/lib/auth/types.ts`, usado por `src/components/layout/use-current-user.ts`.
 - `src/lib/constants/routes.ts`: novas constantes `ROUTES.ADMIN_COURSES = '/admin/courses'`, `ROUTES.ADMIN_DISCIPLINES = '/admin/disciplines'`, `API_ROUTES.ADMIN_COURSES = '/api/v1/admin/courses'`, `API_ROUTES.ADMIN_DISCIPLINES = '/api/v1/admin/disciplines'`. `src/lib/auth/rbac.ts` não muda: os prefixos `/admin` e `/api/v1/admin` já são `ADMIN_ONLY`.
 
 ### Serviços e repositórios
@@ -349,7 +352,7 @@ Todos em `src/domains/academic/services/`, com injeção de `deps` no padrão de
 - `course-repository.ts`, `course-service.ts`: `listCourses`, `findCourseById`, `findCourseByCode`, `createCourse`, `updateCourse`. Regras 3 e 5.
 - `discipline-repository.ts`, `discipline-service.ts`: `listDisciplines({ courseId? })`, `findDisciplineById`, `findDisciplineByCourseAndCode`, `createDiscipline`, `updateDiscipline`. Regras 3, 4 e 8.
 - `class-repository.ts`, `class-service.ts`: select com `course` e `academicPeriod`; ordem `academicPeriod.year desc`, `semester asc`, `name asc`. Novos deps `courses.findCourseById` e `periods.findPeriodById` (nova função em `academic-period-repository.ts`). `countOfferings(classId)` para a regra 6. Nova `findClassContext`.
-- `subject-repository.ts`, `subject-service.ts` (oferta): `listSubjects(user)` com `where` por papel; include `discipline`, `class: { include: { course, academicPeriod } }`, `teacherAssignments`, `teachingPlans`. `createSubject` aplica regras 1, 2 e 3. `updateSubject` só sincroniza professores. Nova `getOfferingContext(subjectId, user)` devolve `{ subjectName, courseName, academicPeriod, workloadHours }` para a geração (regras 9 e 12). A lógica de `academicYear`/`semester` copiados some.
+- `subject-repository.ts`, `subject-service.ts` (oferta): `listSubjects(user)` com `where` por papel; include `discipline`, `class: { include: { course, academicPeriod } }`, `teacherAssignments`, `teachingPlans`. `createSubject` aplica regras 1, 2 e 3. `updateSubject` só sincroniza professores e devolve 404 "Oferta não encontrada." se a oferta não existir. Nova `getOfferingContext(subjectId, user)` devolve `{ subjectName, courseName, academicPeriod, workloadHours }` para a geração (regras 9 e 12). A lógica de `academicYear`/`semester` copiados some.
 - `teacher-subject-repository.ts`: nova `isTeacherAssigned(teacherId, subjectId)`; `listTeachersWithSubjects` inclui `subject.discipline`.
 - `src/domains/teaching/services/teaching-plan-service.ts`: `CreatePlanInput` perde `academicPeriodId`. Novos deps `offerings.findSubjectById` e `assignments.isTeacherAssigned` (regra 9). `insertPlan` sem `academicPeriodId`.
 - `src/domains/teaching/services/teaching-plan-repository.ts`: `planFull` e `planBasic` trocam `academicPeriod: true` por `subject: { include: { discipline: true, class: { include: { course: true, academicPeriod: true } } } }`. `findPlanForAssessment` seleciona `subject.discipline.name`.
@@ -403,7 +406,7 @@ A entrada atual "Disciplinas" de `/admin/subjects` passa a se chamar "Ofertas". 
 
 ### Novo plano (`/teacher/plans/new`)
 
-- `src/app/teacher/plans/new/types.ts`: `SubjectOption` vira `OfferingOption = { id; discipline: { code; name; workloadHours }; class: { id; name; semester; course: { name; code; academicLevel }; academicPeriod: { id; name; code } } }`.
+- `src/app/teacher/plans/new/types.ts` (fase 3, junto com `PlanHeaderControls` e `OfferingContextCard`): `SubjectOption` vira `OfferingOption = { id; discipline: { code; name; workloadHours }; class: { id; name; semester; course: { name; code; academicLevel }; academicPeriod: { id; name; code } } }`.
 - Novo helper puro `src/domains/academic/offering-label.ts`: `formatOfferingLabel(o)` → `"BD101 · Banco de Dados I · 3º Sem ADS · 2026.1"`. Para `HIGH_SCHOOL` e `ELEMENTARY` usa `"3º Ano"`. Usado pelo combobox do professor e pela listagem de planos.
 - `PlanHeaderControls.tsx`:
   - Combobox "Oferta *" com os itens de `GET /api/v1/admin/subjects` (já filtrado para o professor). Título = `formatOfferingLabel`. Texto de ajuda atual mantido ("Peça ao administrador para cadastrá-la e alocar você").
@@ -528,16 +531,14 @@ Testes existentes que referenciam campos removidos ou formas que mudam (atualiza
 - `src/domains/teaching/services/__tests__/plan-generation-service.test.ts`
 - `src/domains/teaching/services/__tests__/lesson-service.test.ts`
 - `src/domains/agents/prompts/__tests__/teaching-plan-prompt.test.ts` (novo caso de carga horária)
-- `src/domains/agendas/services/__tests__/agenda-service.test.ts`
 - `src/domains/assessments/services/__tests__/assessment-service.test.ts`
 - `src/domains/pedagogy/services/__tests__/minutes-service.test.ts`
 - `src/lib/validators/__tests__/admin.validator.test.ts`
 - `src/app/api/v1/admin/classes/__tests__/route.test.ts`
-- `src/app/admin/classes/_components/__tests__/ClassFormModal.test.tsx`
-- `src/app/admin/subjects/_components/__tests__/SubjectFormModal.test.tsx`
-- `src/components/layout/__tests__/nav-links.test.ts` (ordem e rótulos do menu admin)
 
-Listados pelo grep, mas sem mudança esperada (usam só `classId` de agenda/usuário ou nomes homônimos): `src/app/api/v1/agendas/[id]/status/__tests__/route.test.ts`, `src/app/api/v1/agent/chat/__tests__/route.test.ts`, `src/app/api/v1/library/documents/inspect/__tests__/route.test.ts`, `src/app/api/v1/library/materials/[id]/download/__tests__/route.test.ts`, `src/components/agendas/agenda-session.ts`, `src/components/pedagogy/__tests__/use-minutes.test.ts`, `src/domains/agendas/services/__tests__/study-group-service.test.ts`, `src/domains/agendas/types.ts`, `src/domains/agents/services/__tests__/chat-service.test.ts`, `src/domains/assessments/services/__tests__/assessment-submissions.test.ts`, `src/domains/assessments/services/__tests__/draft-service.test.ts`, `src/domains/assessments/services/__tests__/exam-service.test.ts`, `src/domains/auth/services/user-repository.ts`, `src/domains/pedagogy/services/__tests__/faq-service.test.ts`, `src/lib/auth/session.ts`, `src/lib/auth/__tests__/get-session-user.test.ts`, `src/lib/auth/__tests__/request-user.test.ts`, `src/lib/mcp/__tests__/mcp-server.test.ts`, `src/lib/mcp/tools/interaction-tool.ts`, `src/lib/validators/agenda.validator.ts`, `src/lib/validators/assessment.validator.ts`, `src/lib/validators/pedagogy.validator.ts`, `src/domains/academic/services/academic-period-service.ts`, `src/components/layout/__tests__/app-header.test.tsx` e `src/app/__tests__/area-layouts.test.tsx` (usam só `ROUTES.ADMIN_SUBJECTS`, que não muda). O `typecheck` confirma: se algum deles quebrar, entra na fase 1.
+Atualizados nas fases 2 e 3 (não quebram na fase 1): `ClassFormModal.test.tsx` e `SubjectFormModal.test.tsx` (fase 2), `nav-links.test.ts` (ordem e rótulos do menu admin, fase 2).
+
+Listados pelo grep, mas sem mudança esperada (usam só `classId` de agenda/usuário ou nomes homônimos): `src/domains/agendas/services/__tests__/agenda-service.test.ts` (não quebra na fase 1), `src/app/api/v1/agendas/[id]/status/__tests__/route.test.ts`, `src/app/api/v1/agent/chat/__tests__/route.test.ts`, `src/app/api/v1/library/documents/inspect/__tests__/route.test.ts`, `src/app/api/v1/library/materials/[id]/download/__tests__/route.test.ts`, `src/components/agendas/agenda-session.ts`, `src/components/pedagogy/__tests__/use-minutes.test.ts`, `src/domains/agendas/services/__tests__/study-group-service.test.ts`, `src/domains/agendas/types.ts`, `src/domains/agents/services/__tests__/chat-service.test.ts`, `src/domains/assessments/services/__tests__/assessment-submissions.test.ts`, `src/domains/assessments/services/__tests__/draft-service.test.ts`, `src/domains/assessments/services/__tests__/exam-service.test.ts`, `src/domains/auth/services/user-repository.ts`, `src/domains/pedagogy/services/__tests__/faq-service.test.ts`, `src/lib/auth/session.ts`, `src/lib/auth/__tests__/get-session-user.test.ts`, `src/lib/auth/__tests__/request-user.test.ts`, `src/lib/mcp/__tests__/mcp-server.test.ts`, `src/lib/mcp/tools/interaction-tool.ts`, `src/lib/validators/agenda.validator.ts`, `src/lib/validators/assessment.validator.ts`, `src/lib/validators/pedagogy.validator.ts`, `src/domains/academic/services/academic-period-service.ts`, `src/components/layout/__tests__/app-header.test.tsx` e `src/app/__tests__/area-layouts.test.tsx` (usam só `ROUTES.ADMIN_SUBJECTS`, que não muda). O `typecheck` confirma: se algum deles quebrar, entra na fase 1.
 
 ## Testes
 
@@ -581,7 +582,7 @@ Prova de migração e seed:
 
 Um plano de implementação por fase. Cada fase termina com `npm run typecheck` e `npm test` verdes, e commit em `main`.
 
-1. **Schema, migração, seed, domínio e API.** Schema, migração, reset, seed; serviços e repositórios (curso, disciplina, turma, oferta, plano, geração, prompt); validators; rotas novas e alteradas, incluindo `/auth/me`; downstream de domínio (agendas, aulas, avaliações, atas); constantes de rota. A UI pode ficar incoerente em runtime, mas precisa compilar. Para isso, a fase 1 inclui os ajustes mínimos de tipo e de leitura de campo na UI (troca de `subject.name` por `subject.discipline.name`, remoção de `academicPeriodId` dos bodies, tipos de `use-assessments.ts` e `types.ts`). Sem layout novo nessa fase.
+1. **Schema, migração, seed, domínio e API.** Schema, migração, reset, seed; serviços e repositórios (curso, disciplina, turma, oferta, plano, geração, prompt); validators; rotas novas e alteradas, incluindo `/auth/me`; downstream de domínio (agendas, aulas, avaliações, atas); constantes de rota. A UI pode ficar incoerente em runtime, mas precisa compilar. Para isso, a fase 1 inclui os ajustes mínimos de tipo e de leitura de campo na UI (troca de `subject.name` por `subject.discipline.name`, remoção de `academicPeriodId` dos bodies, tipos de `use-assessments.ts`). `types.ts` (`SubjectOption` → `OfferingOption`) fica para a fase 3. Sem layout novo nessa fase.
 2. **Interface do admin.** Páginas e modais de Cursos e Disciplinas; `ClassFormModal` com curso e período; mover `PeriodCreateInlineModal`; `SubjectFormModal` como oferta; listagens; navegação.
 3. **Interface de professor e aluno.** Combobox de oferta, `OfferingContextCard`, remoção do seletor de período, pré-preenchimento de horas, geração por `subjectId`, lista de planos agrupada por período, páginas de aulas/cronogramas/avaliações/relatórios, dashboard do aluno.
 
