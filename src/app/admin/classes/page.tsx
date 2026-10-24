@@ -58,7 +58,10 @@ export default function AdminClassesPage() {
 
   const term = search.toLowerCase();
   const filteredClasses = classes.filter(
-    (c) => c.name.toLowerCase().includes(term) || c.code.toLowerCase().includes(term)
+    (c) =>
+      c.name.toLowerCase().includes(term) ||
+      c.code.toLowerCase().includes(term) ||
+      c.course.code.toLowerCase().includes(term)
   );
 
   return (
@@ -75,7 +78,7 @@ export default function AdminClassesPage() {
             Turmas
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Turmas que recebem agendas e alunos.
+            Turmas de cada curso por período letivo.
           </p>
         </div>
 
@@ -94,7 +97,7 @@ export default function AdminClassesPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome ou código..."
+            placeholder="Buscar por nome, código ou curso..."
             className="pl-9 rounded-xl"
           />
         </div>
@@ -106,17 +109,18 @@ export default function AdminClassesPage() {
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Código</TableHead>
-              <TableHead>Período letivo</TableHead>
-              <TableHead>Semestre</TableHead>
+              <TableHead>Curso</TableHead>
+              <TableHead>Período</TableHead>
+              <TableHead>Posição</TableHead>
               <TableHead>Alunos</TableHead>
-              <TableHead>Disciplinas</TableHead>
+              <TableHead>Ofertas</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loadError ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div role="alert" className="flex flex-col items-center gap-2 text-sm text-red-600">
                     <span>{loadError}</span>
                     <Button variant="outline" size="sm" onClick={fetchClasses} className="cursor-pointer">
@@ -127,13 +131,13 @@ export default function AdminClassesPage() {
               </TableRow>
             ) : loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={8} className="h-24 text-center text-slate-500">
                   Carregando turmas...
                 </TableCell>
               </TableRow>
             ) : filteredClasses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={8} className="h-24 text-center text-slate-500">
                   Nenhuma turma cadastrada.
                 </TableCell>
               </TableRow>
@@ -144,7 +148,8 @@ export default function AdminClassesPage() {
                     {klass.name}
                   </TableCell>
                   <TableCell className="text-xs text-brand-teal font-mono">{klass.code}</TableCell>
-                  <TableCell className="text-sm">{(klass as { academicPeriod?: { name: string } }).academicPeriod?.name ?? '—'}</TableCell>
+                  <TableCell className="text-sm">{klass.course.code}</TableCell>
+                  <TableCell className="text-sm">{klass.academicPeriod.code}</TableCell>
                   <TableCell className="text-sm">{klass.semester}</TableCell>
                   <TableCell className="text-sm">{klass._count?.students ?? 0}</TableCell>
                   <TableCell className="text-sm">{klass._count?.subjects ?? 0}</TableCell>

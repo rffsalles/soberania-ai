@@ -27,7 +27,12 @@ import { SubjectFormModal, type SubjectItem } from '../SubjectFormModal';
 import type { ClassOption } from '../../../classes/_components/ClassFormModal';
 
 const classes: ClassOption[] = [
-  { id: 'c1', name: '3º Semestre · ADS', code: 'ADS-2026-3A', semester: 3, year: 2026 },
+  {
+  id: 'c1', name: '3º Semestre · ADS', code: 'ADS-2026-3A', semester: 3,
+  courseId: 'ccourse00001', academicPeriodId: 'cperiod0001',
+  course: { id: 'ccourse00001', name: 'Análise e Desenvolvimento de Sistemas', code: 'ADS', academicLevel: 'HIGHER_EDUCATION' },
+  academicPeriod: { id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '2026.1', year: 2026 },
+},
 ];
 
 function renderModal(overrides: Partial<React.ComponentProps<typeof SubjectFormModal>> = {}) {
@@ -52,10 +57,10 @@ function renderModal(overrides: Partial<React.ComponentProps<typeof SubjectFormM
 describe('SubjectFormModal', () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it('lista "Sem turma" e as turmas com ano, semestre e código', () => {
+  it('lista "Sem turma" e as turmas com curso, período e código', () => {
     renderModal();
     const options = Array.from((screen.getByLabelText('Turma') as HTMLSelectElement).options).map((o) => o.text);
-    expect(options).toEqual(['Sem turma | não aparece para alunos', '3º Semestre · ADS | 2026 · 3º semestre | ADS-2026-3A']);
+    expect(options).toEqual(['Sem turma | não aparece para alunos', '3º Semestre · ADS | ADS · 2026.1 | ADS-2026-3A']);
     expect(screen.getByText('Ano letivo e semestre vêm da turma selecionada.')).toBeTruthy();
   });
 
@@ -120,7 +125,12 @@ describe('SubjectFormModal', () => {
   it('mantém o que foi digitado quando chega uma turma nova e ela fica selecionada', () => {
     const { rerender, props } = renderModal();
     fireEvent.change(screen.getByLabelText('Nome da Disciplina'), { target: { value: 'Matemática' } });
-    const nova: ClassOption = { id: 'c9', name: 'Turma Nova', code: 'NOVA-2026-1', semester: 1, year: 2026 };
+    const nova: ClassOption = {
+  id: 'c9', name: 'Turma Nova', code: 'NOVA-2026-1', semester: 1,
+  courseId: 'ccourse00001', academicPeriodId: 'cperiod0001',
+  course: { id: 'ccourse00001', name: 'Análise e Desenvolvimento de Sistemas', code: 'ADS', academicLevel: 'HIGHER_EDUCATION' },
+  academicPeriod: { id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '2026.1', year: 2026 },
+};
     rerender(<SubjectFormModal {...props} classes={[...classes, nova]} selectedClassId="c9" />);
     expect((screen.getByLabelText('Nome da Disciplina') as HTMLInputElement).value).toBe('Matemática');
     expect((screen.getByLabelText('Turma') as HTMLSelectElement).value).toBe('c9');

@@ -101,7 +101,7 @@ export function SubjectFormModal({
       ...classes.map((c) => ({
         id: c.id,
         title: c.name,
-        subtitle: `${c.year} · ${c.semester}º semestre`,
+        subtitle: `${c.course.code} · ${c.academicPeriod.code}`,
         badge: c.code,
       })),
     ],
