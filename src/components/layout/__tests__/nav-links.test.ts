@@ -24,16 +24,16 @@ describe('NAV_LINKS_BY_ROLE', () => {
   it('professor vê as seis telas docentes, nesta ordem', () => {
     expect(labels(Role.TEACHER)).toEqual([
       'Planos de Ensino',
-      'Aulas',
       'Cronogramas',
+      'Aulas',
       'Avaliações',
       'Acervo RAG',
       'Relatórios',
     ]);
     expect(NAV_LINKS_BY_ROLE[Role.TEACHER].map((l) => l.href)).toEqual([
       ROUTES.TEACHER_PLANS,
-      ROUTES.TEACHER_LESSONS,
       ROUTES.TEACHER_SCHEDULES,
+      ROUTES.TEACHER_LESSONS,
       ROUTES.TEACHER_ASSESSMENTS,
       ROUTES.TEACHER_MATERIALS,
       ROUTES.REPORTS,

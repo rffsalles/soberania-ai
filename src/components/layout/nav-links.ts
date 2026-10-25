@@ -28,8 +28,8 @@ const STUDENT_LINKS: readonly NavLink[] = [
 
 const TEACHER_LINKS: readonly NavLink[] = [
   { href: ROUTES.TEACHER_PLANS, label: 'Planos de Ensino', icon: ClipboardList },
-  { href: ROUTES.TEACHER_LESSONS, label: 'Aulas', icon: Presentation },
   { href: ROUTES.TEACHER_SCHEDULES, label: 'Cronogramas', icon: CalendarDays },
+  { href: ROUTES.TEACHER_LESSONS, label: 'Aulas', icon: Presentation },
   { href: ROUTES.TEACHER_ASSESSMENTS, label: 'Avaliações', icon: FileCheck2 },
   { href: ROUTES.TEACHER_MATERIALS, label: 'Acervo RAG', icon: BookOpen },
   { href: ROUTES.REPORTS, label: 'Relatórios', icon: BarChart3 },

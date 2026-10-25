@@ -6,9 +6,10 @@ import { ArrowRight, Calendar as CalendarIcon, Plus, RefreshCw } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ROUTES } from '@/lib/constants/routes';
-import { useTeacherPlans, type PlanOption } from '@/components/assessments/use-assessments';
+import { useTeacherPlans } from '@/components/assessments/use-assessments';
 import { syncSchedule, useScheduleLessons, useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
-import { AdvancedCombobox, type ComboboxItem } from '@/components/ui/advanced-combobox';
+import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
+import { planToComboboxItem } from '@/components/teaching/plan-combobox-item';
 import { MeetingsTable } from './MeetingsTable';
 import { ScheduleForm } from './ScheduleForm';
 
@@ -16,18 +17,6 @@ const SYNC_ERROR = 'Não foi possível sincronizar o calendário. Tente novament
 
 const formatPeriod = (s: ScheduleItem) =>
   `${new Date(s.startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(s.endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`;
-
-export function planToComboboxItem(p: PlanOption): ComboboxItem {
-  const { discipline, class: turma } = p.subject;
-  const subtitle = [turma.course?.name, turma.name, turma.academicPeriod?.name].filter(Boolean).join(' · ');
-  const split = p.theoryHours != null && p.practiceHours != null ? ` (${p.theoryHours}T/${p.practiceHours}P)` : '';
-  return {
-    id: p.id,
-    title: `${discipline.code} · ${discipline.name}`,
-    subtitle: subtitle || undefined,
-    badge: p.totalHours != null ? `${p.totalHours}h${split}` : undefined,
-  };
-}
 
 export function SchedulesPage() {
   const { plans, isLoading: plansLoading, error: plansError } = useTeacherPlans();
@@ -156,7 +145,7 @@ export function SchedulesPage() {
                   {syncing ? 'Sincronizando...' : 'Sincronizar calendário'}
                 </Button>
                 <Button asChild size="sm" className="gap-2 bg-brand-teal text-white hover:bg-brand-teal-dark">
-                  <Link href={`${ROUTES.TEACHER_LESSONS}?scheduleId=${encodeURIComponent(schedule.id)}`}>
+                  <Link href={`${ROUTES.TEACHER_LESSONS}?planId=${encodeURIComponent(schedule.teachingPlanId)}&scheduleId=${encodeURIComponent(schedule.id)}`}>
                     Ir para planos de aula <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>

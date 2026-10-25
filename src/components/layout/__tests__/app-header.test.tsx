@@ -44,8 +44,8 @@ describe('AppHeader', () => {
     setup(teacher, ROUTES.TEACHER_PLANS);
     expect(navLinkNames()).toEqual([
       'Planos de Ensino',
-      'Aulas',
       'Cronogramas',
+      'Aulas',
       'Avaliações',
       'Acervo RAG',
       'Relatórios',

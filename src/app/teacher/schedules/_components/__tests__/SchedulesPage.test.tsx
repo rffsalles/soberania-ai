@@ -3,8 +3,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as React from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
-const useSchedules = vi.fn((_planId: string | null) => ({
-  schedules: [], isLoading: false, error: null, reload: vi.fn(),
+const SCHEDULE = { id: 'sch-9', teachingPlanId: 'plan-2', startDate: '2026-02-01T00:00:00.000Z', endDate: '2026-06-30T00:00:00.000Z', totalClasses: 20, startTime: '19:00', holidays: null };
+const useSchedules = vi.fn((planId: string | null) => ({
+  schedules: planId === 'plan-2' ? [SCHEDULE] : [], isLoading: false, error: null, reload: vi.fn(),
 }));
 const plans = [
   {
@@ -85,5 +86,14 @@ describe('SchedulesPage seletor de plano', () => {
     fireEvent.click(screen.getByText('FIS · Física'));
     expect(useSchedules).toHaveBeenLastCalledWith('plan-2');
     expect(screen.getByText('Cronogramas')).toBeTruthy();
+  });
+
+  it('o link para planos de aula leva planId e scheduleId', () => {
+    open();
+    fireEvent.click(screen.getByText('FIS · Física'));
+    fireEvent.click(screen.getByRole('button', { name: /20 aulas/ }));
+    const href = screen.getByRole('link', { name: /Ir para planos de aula/ }).getAttribute('href') ?? '';
+    expect(href).toContain('planId=plan-2');
+    expect(href).toContain('scheduleId=sch-9');
   });
 });

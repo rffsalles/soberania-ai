@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTeacherPlans } from '@/components/assessments/use-assessments';
 import { useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
 import { useLessons, type LessonItem } from '@/components/teaching/use-lessons';
+import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
+import { planToComboboxItem } from '@/components/teaching/plan-combobox-item';
 import { LessonEditor } from './LessonEditor';
 import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
@@ -24,12 +26,13 @@ const SELECT_CLASS =
 export function LessonsPage() {
   const params = useSearchParams();
   const { plans, isLoading: plansLoading, error: plansError } = useTeacherPlans();
-  const [planId, setPlanId] = React.useState<string | null>(null);
+  const [planId, setPlanId] = React.useState<string | null>(params.get('planId'));
   const [scheduleId, setScheduleId] = React.useState<string | null>(params.get('scheduleId'));
   const [lessonId, setLessonId] = React.useState<string | null>(null);
   const { schedules } = useSchedules(planId);
   const { lessons, isLoading, error, reload } = useLessons(scheduleId);
 
+  const planItems = React.useMemo(() => plans.map(planToComboboxItem), [plans]);
   const lesson: LessonItem | null = lessons.find((l) => l.id === lessonId) ?? null;
 
   return (
@@ -49,23 +52,19 @@ export function LessonsPage() {
           <label htmlFor="plan-select" className="text-sm font-medium">
             Plano de ensino
           </label>
-          <select
+          <AdvancedCombobox
             id="plan-select"
-            value={planId ?? ''}
-            onChange={(e) => {
-              setPlanId(e.target.value || null);
+            placeholder={plansLoading ? 'Carregando planos...' : 'Selecione um plano'}
+            searchPlaceholder="Buscar por disciplina, curso, turma ou período..."
+            emptyMessage="Nenhum plano encontrado."
+            items={planItems}
+            selectedId={planId}
+            onSelect={(id) => {
+              setPlanId(id || null);
               setScheduleId(null);
               setLessonId(null);
             }}
-            className={SELECT_CLASS}
-          >
-            <option value="">{plansLoading ? 'Carregando planos...' : 'Selecione um plano'}</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.subject.discipline.name} ({p.subject.discipline.code})
-              </option>
-            ))}
-          </select>
+          />
           {plansError && (
             <p role="alert" className="text-sm text-red-600">
               {plansError}
