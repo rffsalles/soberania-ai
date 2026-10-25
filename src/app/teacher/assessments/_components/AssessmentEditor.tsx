@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, Save, Sparkles, Trash2 } from 'lucide-react';
+import { Lock, Plus, Save, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -66,6 +66,14 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
   const [error, setError] = React.useState<string | null>(null);
   const unitOptions = planUnits(plan);
   const problems = validateAssessmentDraft(draft);
+  const lockReason = React.useMemo(() => {
+    if (unitOptions.length === 0) return 'O plano não possui unidades cadastradas.';
+    if (units.length === 0) return 'Selecione ao menos uma unidade.';
+    if (!Number.isInteger(count) || count < 1 || count > MAX_QUESTION_COUNT) {
+      return `Informe entre 1 e ${MAX_QUESTION_COUNT} questões.`;
+    }
+    return undefined;
+  }, [unitOptions.length, units.length, count]);
 
   const run = async (kind: 'generate' | 'save', action: () => Promise<void>) => {
     setBusy(kind);
@@ -187,11 +195,17 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
                 onChange={(e) => setCount(Number(e.target.value))}
               />
             </div>
-            <Button onClick={generate} disabled={busy !== null || units.length === 0} className="gap-2">
-              <Sparkles className="h-4 w-4" />
+            <Button onClick={generate} disabled={busy !== null || lockReason !== undefined} className="gap-2">
+              {lockReason !== undefined && busy === null ? <Lock className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
               {busy === 'generate' ? 'Gerando...' : 'Gerar com IA'}
             </Button>
           </div>
+          {lockReason !== undefined && (
+            <span className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium max-w-xs">
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+              <span>{lockReason}</span>
+            </span>
+          )}
         </CardContent>
       </Card>
 

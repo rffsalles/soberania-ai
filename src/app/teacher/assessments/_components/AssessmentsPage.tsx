@@ -4,6 +4,8 @@ import * as React from 'react';
 import { ClipboardList, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
+import { planToComboboxItem } from '@/components/teaching/plan-combobox-item';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ASSESSMENT_STATUS, INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 import { useAssessments, useTeacherPlans, type AssessmentItem } from '@/components/assessments/use-assessments';
@@ -32,6 +34,7 @@ export function AssessmentsPage() {
   const [notice, setNotice] = React.useState<string | null>(null);
   const { assessments, isLoading, error, reload } = useAssessments(planId);
 
+  const planItems = React.useMemo(() => plans.map(planToComboboxItem), [plans]);
   const plan = plans.find((p) => p.id === planId) ?? null;
   const classOptions = plan ? [plan.subject.class] : [];
   const backToList = () => setView({ kind: 'list' });
@@ -49,22 +52,18 @@ export function AssessmentsPage() {
         <label htmlFor="plan-select" className="text-sm font-medium">
           Plano de ensino
         </label>
-        <select
+        <AdvancedCombobox
           id="plan-select"
-          value={planId ?? ''}
-          onChange={(e) => {
-            setPlanId(e.target.value || null);
+          placeholder={plansLoading ? 'Carregando planos...' : 'Selecione um plano'}
+          searchPlaceholder="Buscar por disciplina, curso, turma ou período..."
+          emptyMessage="Nenhum plano encontrado."
+          items={planItems}
+          selectedId={planId}
+          onSelect={(id) => {
+            setPlanId(id || null);
             backToList();
           }}
-          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
-        >
-          <option value="">{plansLoading ? 'Carregando planos...' : 'Selecione um plano'}</option>
-          {plans.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.subject.discipline.name} ({p.subject.discipline.code})
-            </option>
-          ))}
-        </select>
+        />
         {plansError && <p role="alert" className="text-sm text-red-600">{plansError}</p>}
       </div>
 
