@@ -31,7 +31,7 @@ export const DEMO_CLASS = {
 } as const;
 
 export const DEMO_TEACHING_PLAN = {
-  totalHours: 80,
+  totalHours: DEMO_DISCIPLINE.workloadHours, // carga total = carga da disciplina; teoria + prática somam esse valor
   theoryHours: 60,
   practiceHours: 20,
   // Explícito: nenhum plano de demonstração nasce "alinhado às DCNs" sem parecer humano.

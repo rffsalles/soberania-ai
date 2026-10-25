@@ -26,6 +26,12 @@ export async function findSubjectById(id: string): Promise<{ id: string; discipl
   return db.subject.findUnique({ where: { id }, select: { id: true, disciplineId: true, classId: true } });
 }
 
+export async function findSubjectWithWorkload(
+  id: string
+): Promise<{ id: string; discipline: { workloadHours: number } } | null> {
+  return db.subject.findUnique({ where: { id }, select: { id: true, discipline: { select: { workloadHours: true } } } });
+}
+
 export async function findSubjectByDisciplineAndClass(disciplineId: string, classId: string): Promise<{ id: string } | null> {
   return db.subject.findUnique({
     where: { disciplineId_classId: { disciplineId, classId } },

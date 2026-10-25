@@ -29,9 +29,11 @@ export interface CategoryOption {
   color?: string | null;
 }
 
-/** Horas em null = ainda não informadas pelo professor (plano novo começa vazio, sem valores inventados). */
+/**
+ * Horas em null = ainda não informadas pelo professor (plano novo começa vazio, sem valores inventados).
+ * A carga total não é dado do plano na tela: vem da matriz (discipline.workloadHours da oferta).
+ */
 export interface NdeComplianceData {
-  totalHours: number | null;
   theoryHours: number | null;
   practiceHours: number | null;
   ndeComplianceStatus: string;

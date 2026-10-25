@@ -66,7 +66,12 @@ const bodyOf = (method: string, url: string) => {
   const call = fetchMock.mock.calls.find(([u, init]) => u === url && (init?.method ?? 'GET') === method);
   return JSON.parse(String(call![1]!.body));
 };
-const total = () => (screen.getByLabelText('Carga Horária Total (horas) *') as HTMLInputElement).value;
+const total = () => (screen.getByLabelText('Carga Horária Total (horas)') as HTMLInputElement).value;
+const setHours = (theory: string, practice: string) => {
+  fireEvent.change(screen.getByLabelText('Teoria (h)'), { target: { value: theory } });
+  fireEvent.change(screen.getByLabelText('Prática / Lab (h)'), { target: { value: practice } });
+};
+const SUM_MSG = (n: number) => `A soma das horas teóricas e práticas deve ser igual à carga horária da disciplina (${n}h).`;
 const pick = (id: string) => fireEvent.change(screen.getByLabelText('Oferta *'), { target: { value: id } });
 
 describe('TeachingPlanNewPage', () => {
@@ -77,25 +82,42 @@ describe('TeachingPlanNewPage', () => {
     expect((screen.getByLabelText('Oferta *') as HTMLSelectElement).options).toHaveLength(2);
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes('academic-periods'))).toBe(false);
     expect(screen.queryByText('Cadastrar novo período letivo...')).toBeNull();
-    expect(total()).toBe('');
+    expect(total()).toBe('—');
   });
 
-  it('escolher a oferta preenche só a carga horária total; POST envia subjectId sem academicPeriodId', async () => {
+  it('escolher a oferta mostra a carga da matriz; POST não envia totalHours nem academicPeriodId', async () => {
     stubFetch({ ...subjectsOk([offeringADS]), 'POST /api/v1/teacher/plans': { success: true, plan: { id: 'cplan000009' } } });
     render(<TeachingPlanNewPage />);
     await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
     pick('csubject0001');
     expect(total()).toBe('80');
+    expect((screen.getByLabelText('Carga Horária Total (horas)') as HTMLInputElement).readOnly).toBe(true);
     expect((screen.getByLabelText('Teoria (h)') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Prática / Lab (h)') as HTMLInputElement).value).toBe('');
+    setHours('60', '20');
     fireEvent.click(screen.getByText('Salvar Rascunho'));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
     const body = bodyOf('POST', '/api/v1/teacher/plans');
-    expect(body).toMatchObject({ subjectId: 'csubject0001', totalHours: 80, theoryHours: null, practiceHours: null, status: 'DRAFT' });
-    expect(body).not.toHaveProperty('academicPeriodId');
+    expect(body).toEqual({
+      subjectId: 'csubject0001', syllabus: '', generalObjectives: '', methodology: '', basicBibliography: [],
+      theoryHours: 60, practiceHours: 20, ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS, status: 'DRAFT',
+    });
   });
 
-  it('trocar de oferta atualiza só a carga horária vinda da matriz', async () => {
+  it('soma divergente mostra a mensagem inline e bloqueia o salvar', async () => {
+    stubFetch(subjectsOk([offeringADS]));
+    render(<TeachingPlanNewPage />);
+    await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
+    pick('csubject0001');
+    setHours('60', '10');
+    expect(screen.getByText(SUM_MSG(80))).toBeTruthy();
+    expect((screen.getByText('Salvar Rascunho').closest('button') as HTMLButtonElement).disabled).toBe(true);
+    setHours('60', '20');
+    expect(screen.queryByText(SUM_MSG(80))).toBeNull();
+    expect((screen.getByText('Salvar Rascunho').closest('button') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('trocar de oferta atualiza o total exibido', async () => {
     stubFetch(subjectsOk([offeringADS, offeringEM]));
     render(<TeachingPlanNewPage />);
     await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
@@ -103,9 +125,8 @@ describe('TeachingPlanNewPage', () => {
     expect(total()).toBe('80');
     pick('csubject0002');
     expect(total()).toBe('60');
-    fireEvent.change(screen.getByLabelText('Carga Horária Total (horas) *'), { target: { value: '72' } });
     pick('csubject0001');
-    expect(total()).toBe('72');
+    expect(total()).toBe('80');
   });
 
   it('a IA só destrava com oferta e referência e gera com { subjectId, selectedReferences }', async () => {
@@ -136,8 +157,8 @@ describe('TeachingPlanNewPage', () => {
         success: true,
         plan: {
           id: 'cplan000001', subjectId: 'csubject0001', subject: offeringADS, syllabus: 'Ementa salva',
-          generalObjectives: '', methodology: '', basicBibliography: [], totalHours: 72, theoryHours: 40,
-          practiceHours: 32, ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS, status: 'DRAFT',
+          generalObjectives: '', methodology: '', basicBibliography: [], theoryHours: 50,
+          practiceHours: 30, ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS, status: 'DRAFT',
         },
       },
       'PUT /api/v1/teacher/plans/cplan000001': { success: true, plan: { id: 'cplan000001' } },
@@ -150,12 +171,15 @@ describe('TeachingPlanNewPage', () => {
     });
     expect(screen.getByText('Contexto da oferta')).toBeTruthy();
     expect(screen.getByText('80h')).toBeTruthy();
-    expect(total()).toBe('72');
+    expect(total()).toBe('80');
+    expect((screen.getByLabelText('Teoria (h)') as HTMLInputElement).value).toBe('50');
+    expect((screen.getByLabelText('Prática / Lab (h)') as HTMLInputElement).value).toBe('30');
     fireEvent.click(screen.getByText('Salvar Rascunho'));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
     const body = bodyOf('PUT', '/api/v1/teacher/plans/cplan000001');
     expect(body).not.toHaveProperty('subjectId');
     expect(body).not.toHaveProperty('academicPeriodId');
-    expect(body.totalHours).toBe(72);
+    expect(body).not.toHaveProperty('totalHours');
+    expect(body).toMatchObject({ theoryHours: 50, practiceHours: 30 });
   });
 });

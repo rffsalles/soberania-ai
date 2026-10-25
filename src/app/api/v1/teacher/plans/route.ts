@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { Role } from '@prisma/client';
 import { createTeachingPlanSchema } from '@/lib/validators/teaching-plan.validator';
-import { createPlan, listPlansForTeacher, type CreatePlanInput } from '@/domains/teaching/services/teaching-plan-service';
+import { createPlan, listPlansForTeacher } from '@/domains/teaching/services/teaching-plan-service';
 
 export async function GET(req: Request) {
   try {
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const plan = await createPlan(user, parsed.data as CreatePlanInput);
+    const plan = await createPlan(user, parsed.data);
     return NextResponse.json({ success: true, plan });
   } catch (error) {
     return apiError(error);

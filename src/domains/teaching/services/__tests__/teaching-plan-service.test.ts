@@ -15,6 +15,9 @@ const teacher = { id: 't1', role: Role.TEACHER };
 const otherTeacher = { id: 't2', role: Role.TEACHER };
 const admin = { id: 'a1', role: Role.ADMIN };
 
+const WORKLOAD = 80;
+const SUM_MSG = `A soma das horas teóricas e práticas deve ser igual à carga horária da disciplina (${WORKLOAD}h).`;
+
 function makeDeps(initial: Partial<PlanRecord>[] = [], opts: { offerings?: string[]; assigned?: [string, string][] } = {}) {
   const plans = initial.map((p) => ({ ...p })) as PlanRecord[];
   const deps: TeachingPlanDeps = {
@@ -35,7 +38,10 @@ function makeDeps(initial: Partial<PlanRecord>[] = [], opts: { offerings?: strin
         return rec;
       },
     },
-    offerings: { findSubjectById: async (id) => ((opts.offerings ?? ['s1']).includes(id) ? { id } : null) },
+    offerings: {
+      findSubjectWithWorkload: async (id) =>
+        (opts.offerings ?? ['s1']).includes(id) ? { id, discipline: { workloadHours: WORKLOAD } } : null,
+    },
     assignments: {
       isTeacherAssigned: async (t, s) => (opts.assigned ?? [['t1', 's1']]).some(([a, b]) => a === t && b === s),
     },
@@ -60,32 +66,39 @@ describe('teaching-plan-service', () => {
     expect(await listPlansForTeacher(admin, {}, deps)).toHaveLength(2);
   });
 
-  it('createPlan stores teacherId = user.id, the given hours and a pending NDE status', async () => {
+  it('createPlan grava totalHours = carga da disciplina, ignorando o valor do cliente', async () => {
     const { deps, plans } = makeDeps();
-    await createPlan(teacher, { subjectId: 's1', syllabus: 'x', totalHours: '72', theoryHours: 48, practiceHours: 24 }, deps);
+    await createPlan(teacher, { subjectId: 's1', syllabus: 'x', totalHours: 999, theoryHours: '60', practiceHours: 20 } as never, deps);
     expect(plans[0]).toMatchObject({
       teacherId: 't1',
       status: PLAN_STATUS.DRAFT,
-      totalHours: 72,
-      theoryHours: 48,
-      practiceHours: 24,
+      totalHours: 80,
+      theoryHours: 60,
+      practiceHours: 20,
       ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS,
     });
   });
 
-  it('createPlan rejects missing hours with 400 instead of inventing 80/60/20', async () => {
-    const { deps } = makeDeps();
-    await expect(createPlan(teacher, { subjectId: 's1', syllabus: 'x' }, deps)).rejects.toMatchObject({ status: 400 });
-    await expect(
-      createPlan(teacher, { subjectId: 's1', syllabus: 'x', totalHours: 80, theoryHours: 60 }, deps)
-    ).rejects.toMatchObject({ status: 400 });
+  it('createPlan rejeita soma diferente da carga com a mensagem exata (400)', async () => {
+    const { deps, plans } = makeDeps();
+    await expect(createPlan(teacher, { subjectId: 's1', syllabus: 'x', theoryHours: 60, practiceHours: 10 }, deps))
+      .rejects.toMatchObject({ status: 400, message: SUM_MSG });
+    expect(plans).toHaveLength(0);
   });
 
-  it('createPlan rejects a zero total workload with 400', async () => {
+  it('createPlan rejeita horas ausentes ou inválidas com 400 em pt-BR, sem inventar 80/60/20', async () => {
     const { deps } = makeDeps();
-    await expect(
-      createPlan(teacher, { subjectId: 's1', syllabus: 'x', totalHours: 0, theoryHours: 0, practiceHours: 0 }, deps)
-    ).rejects.toMatchObject({ status: 400 });
+    const msg = 'Informe as horas teóricas e práticas (números inteiros).';
+    await expect(createPlan(teacher, { subjectId: 's1', syllabus: 'x' }, deps)).rejects.toMatchObject({ status: 400, message: msg });
+    await expect(createPlan(teacher, { subjectId: 's1', syllabus: 'x', theoryHours: 80 }, deps)).rejects.toMatchObject({ status: 400, message: msg });
+    await expect(createPlan(teacher, { subjectId: 's1', syllabus: 'x', theoryHours: 90.5, practiceHours: -10.5 }, deps)).rejects.toMatchObject({ status: 400, message: msg });
+    await expect(createPlan(teacher, { subjectId: 's1', syllabus: 'x', theoryHours: -20, practiceHours: 100 }, deps)).rejects.toMatchObject({ status: 400, message: msg });
+  });
+
+  it('createPlan aceita 80 + 0 (soma igual à carga)', async () => {
+    const { deps, plans } = makeDeps();
+    await createPlan(teacher, { subjectId: 's1', syllabus: 'x', theoryHours: 80, practiceHours: 0 }, deps);
+    expect(plans[0]).toMatchObject({ totalHours: 80, theoryHours: 80, practiceHours: 0 });
   });
 
   it('createPlan rejects missing subject or syllabus with 400', async () => {
@@ -124,7 +137,7 @@ describe('teaching-plan-service', () => {
     expect(plans[0]).toMatchObject({ syllabus: 'new', methodology: 'm', subjectId: 's1' });
   });
 
-  const valid = { subjectId: 's1', syllabus: 'x', totalHours: 80, theoryHours: 60, practiceHours: 20 };
+  const valid = { subjectId: 's1', syllabus: 'x', theoryHours: 60, practiceHours: 20 };
 
   it('createPlan rejeita professor não alocado com 403', async () => {
     const { deps, plans } = makeDeps();
@@ -147,8 +160,38 @@ describe('teaching-plan-service', () => {
   });
   it('createPlan responde em pt-BR quando a UI envia horas null', async () => {
     const { deps } = makeDeps();
-    await expect(createPlan(teacher, { ...valid, totalHours: null, theoryHours: null, practiceHours: null }, deps))
-      .rejects.toMatchObject({ status: 400, message: 'Informe a carga horária total (maior que zero), teórica e prática.' });
+    await expect(createPlan(teacher, { ...valid, theoryHours: null, practiceHours: null }, deps))
+      .rejects.toMatchObject({ status: 400, message: 'Informe as horas teóricas e práticas (números inteiros).' });
+  });
+  it('createPlan checa 404 e 403 antes da soma', async () => {
+    const { deps } = makeDeps();
+    const bad = { ...valid, practiceHours: 1 };
+    await expect(createPlan(teacher, { ...bad, subjectId: 'nope' }, deps)).rejects.toMatchObject({ status: 404 });
+    await expect(createPlan(otherTeacher, bad, deps)).rejects.toMatchObject({ status: 403 });
+  });
+  describe('updatePlan e horas', () => {
+    const saved = { id: 'p1', teacherId: 't1', subjectId: 's1', syllabus: 'a', totalHours: 80, theoryHours: 60, practiceHours: 20 };
+    it('rejeita teórica/prática que não somam a carga da oferta do plano salvo', async () => {
+      const { deps, plans } = makeDeps([saved]);
+      await expect(updatePlan('p1', teacher, { theoryHours: 50, practiceHours: 20 }, deps)).rejects.toMatchObject({ status: 400, message: SUM_MSG });
+      expect(plans[0].theoryHours).toBe(60);
+    });
+    it('aceita quando a soma bate e nunca altera totalHours', async () => {
+      const { deps, plans } = makeDeps([saved]);
+      await updatePlan('p1', teacher, { theoryHours: 50, practiceHours: 30, totalHours: 5 } as never, deps);
+      expect(plans[0]).toMatchObject({ totalHours: 80, theoryHours: 50, practiceHours: 30 });
+    });
+    it('envio de só uma das horas completa com o valor salvo da outra', async () => {
+      const { deps, plans } = makeDeps([saved]);
+      await expect(updatePlan('p1', teacher, { theoryHours: 70 }, deps)).rejects.toMatchObject({ status: 400, message: SUM_MSG });
+      await updatePlan('p1', teacher, { practiceHours: 20 }, deps);
+      expect(plans[0]).toMatchObject({ theoryHours: 60, practiceHours: 20 });
+    });
+    it('sem horas no PUT não valida (mesmo com plano legado inconsistente)', async () => {
+      const { deps, plans } = makeDeps([{ ...saved, theoryHours: 1, practiceHours: 1 }]);
+      await updatePlan('p1', teacher, { syllabus: 'novo' }, deps);
+      expect(plans[0].syllabus).toBe('novo');
+    });
   });
   it('createPlan usa a mensagem de oferta e ementa obrigatórias', async () => {
     const { deps } = makeDeps();

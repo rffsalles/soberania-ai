@@ -17,7 +17,7 @@ export type TeachingPlanDeps = {
     insertPlan(data: Prisma.TeachingPlanUncheckedCreateInput): Promise<PlanRecord>;
     updatePlanById(id: string, data: Prisma.TeachingPlanUncheckedUpdateInput): Promise<PlanRecord>;
   };
-  offerings: { findSubjectById(id: string): Promise<{ id: string } | null> };
+  offerings: { findSubjectWithWorkload(id: string): Promise<{ id: string; discipline: { workloadHours: number } } | null> };
   assignments: { isTeacherAssigned(teacherId: string, subjectId: string): Promise<boolean> };
 };
 
@@ -34,7 +34,6 @@ export type CreatePlanInput = {
   basicBibliography?: string[];
   complementaryBiblio?: string[];
   status?: string;
-  totalHours?: number | string | null;
   theoryHours?: number | string | null;
   practiceHours?: number | string | null;
   ndeComplianceStatus?: string;
@@ -45,6 +44,19 @@ function toHours(value: number | string | null | undefined): number | null {
   if (value === undefined || value === null || value === '') return null;
   const n = Number(value);
   return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+const HOURS_REQUIRED_MESSAGE = 'Informe as horas teóricas e práticas (números inteiros).';
+
+/** Teórica + prática devem somar exatamente a carga da disciplina na matriz. */
+function assertHoursMatchWorkload(theory: number | null, practice: number | null, workloadHours: number) {
+  if (theory === null || practice === null) throw new DomainError(400, HOURS_REQUIRED_MESSAGE);
+  if (theory + practice !== workloadHours) {
+    throw new DomainError(
+      400,
+      `A soma das horas teóricas e práticas deve ser igual à carga horária da disciplina (${workloadHours}h).`
+    );
+  }
 }
 
 function assertOwnsPlan(user: PlanActor, plan: { teacherId: string }) {
@@ -75,15 +87,15 @@ export async function createPlan(user: PlanActor, input: CreatePlanInput, deps: 
   if (!input.subjectId || !input.syllabus) {
     throw new DomainError(400, 'Oferta e ementa são obrigatórias.');
   }
-  const hours = [input.totalHours, input.theoryHours, input.practiceHours].map(toHours);
-  if (hours.some((h) => h === null) || (hours[0] as number) <= 0) {
-    throw new DomainError(400, 'Informe a carga horária total (maior que zero), teórica e prática.');
-  }
-  const [totalHours, theoryHours, practiceHours] = hours as number[];
-  if (!(await deps.offerings.findSubjectById(input.subjectId))) {
-    throw new DomainError(404, 'Oferta não encontrada.');
-  }
+  const theoryHours = toHours(input.theoryHours);
+  const practiceHours = toHours(input.practiceHours);
+  if (theoryHours === null || practiceHours === null) throw new DomainError(400, HOURS_REQUIRED_MESSAGE);
+  // A carga só existe depois de ler a oferta: ordem 400 (entrada) -> 404 -> 403 -> 400 (soma) -> gravação.
+  const offering = await deps.offerings.findSubjectWithWorkload(input.subjectId);
+  if (!offering) throw new DomainError(404, 'Oferta não encontrada.');
   await assertTeacherAssigned(user, input.subjectId, deps);
+  const totalHours = offering.discipline.workloadHours;
+  assertHoursMatchWorkload(theoryHours, practiceHours, totalHours);
   return deps.repo.insertPlan({
     subjectId: input.subjectId,
     teacherId: user.id,
@@ -113,7 +125,18 @@ export async function updatePlan(
   if (!existing) throw new DomainError(404, 'Plano de ensino não encontrado para atualização.');
   assertOwnsPlan(user, existing);
 
+  // totalHours nunca vem do cliente; teórica/prática só são validadas se vierem no PUT.
   const { unitsContent, ...rest } = input;
+  if (rest.theoryHours !== undefined || rest.practiceHours !== undefined) {
+    const offering = await deps.offerings.findSubjectWithWorkload(existing.subjectId);
+    if (!offering) throw new DomainError(404, 'Oferta não encontrada.');
+    assertHoursMatchWorkload(
+      rest.theoryHours ?? existing.theoryHours,
+      rest.practiceHours ?? existing.practiceHours,
+      offering.discipline.workloadHours
+    );
+  }
+  delete (rest as { totalHours?: unknown }).totalHours;
   return deps.repo.updatePlanById(id, {
     ...rest,
     ...(unitsContent !== undefined ? { unitsContent: unitsContent as Prisma.InputJsonValue } : {}),

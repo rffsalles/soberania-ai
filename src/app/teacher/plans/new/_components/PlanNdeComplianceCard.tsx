@@ -7,12 +7,27 @@ import { Input } from '@/components/ui/input';
 import { NDE_COMPLIANCE_STATUS } from '@/lib/constants/teaching';
 import type { NdeComplianceData } from '../types';
 
+export const hoursSumMessage = (workloadHours: number) =>
+  `A soma das horas teóricas e práticas deve ser igual à carga horária da disciplina (${workloadHours}h).`;
+
+/** Teórica + prática informadas e somando exatamente a carga da matriz. */
+export function hoursMatchWorkload(data: NdeComplianceData, workloadHours: number | null): boolean {
+  return (
+    workloadHours !== null &&
+    data.theoryHours !== null &&
+    data.practiceHours !== null &&
+    data.theoryHours + data.practiceHours === workloadHours
+  );
+}
+
 interface PlanNdeComplianceCardProps {
   data: NdeComplianceData;
+  /** Carga horária da disciplina na matriz curricular (null sem oferta selecionada). */
+  workloadHours: number | null;
   onChange: (newData: NdeComplianceData) => void;
 }
 
-export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardProps) {
+export function PlanNdeComplianceCard({ data, workloadHours, onChange }: PlanNdeComplianceCardProps) {
   const handleFieldChange = <K extends keyof NdeComplianceData>(
     field: K,
     value: NdeComplianceData[K]
@@ -25,8 +40,9 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
 
   // Campo vazio = null; só valida a soma quando as três horas foram informadas.
   const parseHours = (raw: string): number | null => (raw.trim() === '' ? null : Math.max(0, Math.trunc(Number(raw)) || 0));
-  const allInformed = data.totalHours !== null && data.theoryHours !== null && data.practiceHours !== null;
-  const isHoursSumValid = !allInformed || (data.theoryHours ?? 0) + (data.practiceHours ?? 0) === data.totalHours;
+  const anyInformed = data.theoryHours !== null || data.practiceHours !== null;
+  const sum = (data.theoryHours ?? 0) + (data.practiceHours ?? 0);
+  const sumDiverges = workloadHours !== null && data.theoryHours !== null && data.practiceHours !== null && sum !== workloadHours;
 
   return (
     <Card className="glass rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
@@ -40,16 +56,16 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
       <CardContent className="space-y-3 text-xs">
         <div className="space-y-1">
           <label htmlFor="total-hours-input" className="text-[11px] font-medium text-slate-600 dark:text-slate-400 block">
-            Carga Horária Total (horas) *
+            Carga Horária Total (horas)
           </label>
           <Input
             id="total-hours-input"
-            type="number"
-            min={1}
-            value={data.totalHours ?? ''}
-            onChange={(e) => handleFieldChange('totalHours', parseHours(e.target.value))}
-            className="h-8 text-xs rounded-lg font-mono bg-white dark:bg-slate-900"
+            type="text"
+            readOnly
+            value={workloadHours ?? '—'}
+            className="h-8 text-xs rounded-lg font-mono bg-slate-100 dark:bg-slate-800 cursor-default"
           />
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">Definida na matriz curricular</p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -100,12 +116,16 @@ export function PlanNdeComplianceCard({ data, onChange }: PlanNdeComplianceCardP
           </select>
         </div>
 
-        {!isHoursSumValid && (
-          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-[11px] flex items-center gap-1.5">
+        {workloadHours !== null && anyInformed && (
+          <p className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
+            {`${data.theoryHours ?? 0} + ${data.practiceHours ?? 0} = ${sum}h de ${workloadHours}h`}
+          </p>
+        )}
+
+        {sumDiverges && (
+          <div role="alert" className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-400 text-[11px] flex items-center gap-1.5">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              Atenção: Teoria ({data.theoryHours}h) + Prática ({data.practiceHours}h) ≠ Total ({data.totalHours}h).
-            </span>
+            <span>{hoursSumMessage(workloadHours)}</span>
           </div>
         )}
       </CardContent>

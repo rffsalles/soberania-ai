@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { PlanHeaderControls } from './PlanHeaderControls';
 import { PlanBibliographyCard } from './PlanBibliographyCard';
 import { PlanEditorForm, type SyllabusSource } from './PlanEditorForm';
-import { PlanNdeComplianceCard } from './PlanNdeComplianceCard';
+import { PlanNdeComplianceCard, hoursMatchWorkload } from './PlanNdeComplianceCard';
 import { PlanTelemetryCard } from './PlanTelemetryCard';
 import { PlanFooterDock } from './PlanFooterDock';
 import { ReferenceSelectionModal } from './ReferenceSelectionModal';
@@ -64,9 +64,8 @@ export default function TeachingPlanNewPage() {
   const [methodology, setMethodology] = React.useState('');
   const [citations, setCitations] = React.useState<string[]>([]);
 
-  // Conformidade NDE / MEC: plano novo começa sem carga horária; o professor informa.
+  // Conformidade NDE / MEC: a carga total vem da matriz; teórica e prática começam vazias e o professor informa.
   const [ndeCompliance, setNdeCompliance] = React.useState<NdeComplianceData>({
-    totalHours: null,
     theoryHours: null,
     practiceHours: null,
     ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS,
@@ -112,7 +111,6 @@ export default function TeachingPlanNewPage() {
             void restoreReferences(plan.basicBibliography).then(setReferences);
           }
           setNdeCompliance({
-            totalHours: plan.totalHours ?? null,
             theoryHours: plan.theoryHours ?? null,
             practiceHours: plan.practiceHours ?? null,
             ndeComplianceStatus: plan.ndeComplianceStatus || DEFAULT_NDE_COMPLIANCE_STATUS,
@@ -144,18 +142,8 @@ export default function TeachingPlanNewPage() {
     return undefined;
   }, [selectedSubjectId, references.length]);
 
-  // Regra 11: em plano novo, a carga horária total acompanha a da matriz até o professor digitar outro valor.
-  const handleSelectOffering = (id: string) => {
-    const previous = offeringOptions.find((o) => o.id === selectedSubjectId);
-    const next = offeringOptions.find((o) => o.id === id);
-    setSelectedSubjectId(id);
-    if (editingPlanId || !next) return;
-    setNdeCompliance((prev) =>
-      prev.totalHours === null || prev.totalHours === previous?.discipline.workloadHours
-        ? { ...prev, totalHours: next.discipline.workloadHours }
-        : prev
-    );
-  };
+  const workloadHours = activeOffering?.discipline.workloadHours ?? null;
+  const hoursValid = hoursMatchWorkload(ndeCompliance, workloadHours);
 
   // As citações refletem a última geração da IA; ao mudar as referências elas deixam de corresponder.
   const updateCitationsFromReferences = (refs: DocumentReference[]) => {
@@ -254,9 +242,8 @@ export default function TeachingPlanNewPage() {
           generalObjectives,
           methodology,
           basicBibliography: references.map((r) => `${r.title} (${r.author}) [${r.category}]`),
-          totalHours: ndeCompliance.totalHours,
-          theoryHours: ndeCompliance.theoryHours,
-          practiceHours: ndeCompliance.practiceHours,
+          theoryHours: ndeCompliance.theoryHours ?? undefined,
+          practiceHours: ndeCompliance.practiceHours ?? undefined,
           ndeComplianceStatus: ndeCompliance.ndeComplianceStatus,
           status,
         }),
@@ -285,7 +272,7 @@ export default function TeachingPlanNewPage() {
       <PlanHeaderControls
         offerings={offeringOptions}
         selectedOfferingId={selectedSubjectId}
-        onSelectOffering={handleSelectOffering}
+        onSelectOffering={setSelectedSubjectId}
         activeOffering={activeOffering}
         offeringLocked={Boolean(editingPlanId)}
         isAiLocked={isAiLocked}
@@ -326,6 +313,7 @@ export default function TeachingPlanNewPage() {
         <div className="space-y-6">
           <PlanNdeComplianceCard
             data={ndeCompliance}
+            workloadHours={workloadHours}
             onChange={setNdeCompliance}
           />
 
@@ -341,7 +329,7 @@ export default function TeachingPlanNewPage() {
         saveStatusMessage={saveStatusMessage}
         onSaveDraft={() => handleSavePlan('DRAFT')}
         onApprove={() => handleSavePlan('APPROVED')}
-        canSave={Boolean(selectedSubjectId)}
+        canSave={Boolean(selectedSubjectId) && hoursValid}
       />
 
       {/* Modal de Seleção e Ingestão de Referências Bibliográficas */}

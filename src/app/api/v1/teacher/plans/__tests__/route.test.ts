@@ -42,6 +42,7 @@ describe('POST /api/v1/teacher/plans', () => {
     expect(mocks.requireUser).toHaveBeenCalledWith(expect.anything(), [Role.TEACHER, Role.ADMIN]);
     expect(mocks.createPlan.mock.calls[0][0]).toBe(teacherUser);
     expect(mocks.createPlan.mock.calls[0][1]).not.toHaveProperty('academicPeriodId');
-    expect(mocks.createPlan.mock.calls[0][1]).toMatchObject({ subjectId: 's1', totalHours: 80 });
+    expect(mocks.createPlan.mock.calls[0][1]).not.toHaveProperty('totalHours');
+    expect(mocks.createPlan.mock.calls[0][1]).toMatchObject({ subjectId: 's1', theoryHours: 60, practiceHours: 20 });
   });
 });
