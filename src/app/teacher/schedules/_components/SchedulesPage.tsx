@@ -6,8 +6,9 @@ import { ArrowRight, Calendar as CalendarIcon, Plus, RefreshCw } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ROUTES } from '@/lib/constants/routes';
-import { useTeacherPlans } from '@/components/assessments/use-assessments';
+import { useTeacherPlans, type PlanOption } from '@/components/assessments/use-assessments';
 import { syncSchedule, useScheduleLessons, useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
+import { AdvancedCombobox, type ComboboxItem } from '@/components/ui/advanced-combobox';
 import { MeetingsTable } from './MeetingsTable';
 import { ScheduleForm } from './ScheduleForm';
 
@@ -15,6 +16,18 @@ const SYNC_ERROR = 'Não foi possível sincronizar o calendário. Tente novament
 
 const formatPeriod = (s: ScheduleItem) =>
   `${new Date(s.startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(s.endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`;
+
+export function planToComboboxItem(p: PlanOption): ComboboxItem {
+  const { discipline, class: turma } = p.subject;
+  const subtitle = [turma.course?.name, turma.name, turma.academicPeriod?.name].filter(Boolean).join(' · ');
+  const split = p.theoryHours != null && p.practiceHours != null ? ` (${p.theoryHours}T/${p.practiceHours}P)` : '';
+  return {
+    id: p.id,
+    title: `${discipline.code} · ${discipline.name}`,
+    subtitle: subtitle || undefined,
+    badge: p.totalHours != null ? `${p.totalHours}h${split}` : undefined,
+  };
+}
 
 export function SchedulesPage() {
   const { plans, isLoading: plansLoading, error: plansError } = useTeacherPlans();
@@ -27,6 +40,7 @@ export function SchedulesPage() {
   const { schedules, isLoading, error, reload } = useSchedules(planId);
   const { lessons, reload: reloadLessons } = useScheduleLessons(scheduleId);
 
+  const planItems = React.useMemo(() => plans.map(planToComboboxItem), [plans]);
   const schedule = schedules.find((s) => s.id === scheduleId) ?? null;
 
   async function sync() {
@@ -58,24 +72,20 @@ export function SchedulesPage() {
         <label htmlFor="plan-select" className="text-sm font-medium">
           Plano de ensino
         </label>
-        <select
+        <AdvancedCombobox
           id="plan-select"
-          value={planId ?? ''}
-          onChange={(e) => {
-            setPlanId(e.target.value || null);
+          placeholder={plansLoading ? 'Carregando planos...' : 'Selecione um plano'}
+          searchPlaceholder="Buscar por disciplina, curso, turma ou período..."
+          emptyMessage="Nenhum plano encontrado."
+          items={planItems}
+          selectedId={planId}
+          onSelect={(id) => {
+            setPlanId(id || null);
             setScheduleId(null);
             setCreating(false);
             setNotice(null);
           }}
-          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
-        >
-          <option value="">{plansLoading ? 'Carregando planos...' : 'Selecione um plano'}</option>
-          {plans.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.subject.discipline.name} ({p.subject.discipline.code})
-            </option>
-          ))}
-        </select>
+        />
         {plansError && (
           <p role="alert" className="text-sm text-red-600">
             {plansError}

@@ -8,9 +8,25 @@ const GENERIC_ERROR = 'Não foi possível concluir a operação. Tente novamente
 
 export type PlanOption = {
   id: string;
-  subject: { id: string; classId: string; discipline: { name: string; code: string }; class: { id: string; name: string } };
+  subject: {
+    id: string;
+    classId: string;
+    discipline: { name: string; code: string; workloadHours?: number | null };
+    class: {
+      id: string;
+      name: string;
+      code?: string | null;
+      semester?: string | null;
+      course?: { name: string; code?: string | null; academicLevel?: string | null } | null;
+      academicPeriod?: { name: string; code?: string | null; year?: number | null; semester?: number | null; type?: string | null } | null;
+    };
+  };
   syllabus: string;
   unitsContent: unknown;
+  status?: string;
+  totalHours?: number | null;
+  theoryHours?: number | null;
+  practiceHours?: number | null;
 };
 
 export type AssessmentAgenda = { id: string; classId: string; startTime: string; endTime: string };
