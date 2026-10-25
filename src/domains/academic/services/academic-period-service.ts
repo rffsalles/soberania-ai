@@ -1,4 +1,5 @@
 import { DomainError } from '@/lib/api/domain-error';
+import { formatPeriodName } from '../period-label';
 import * as realRepo from './academic-period-repository';
 
 export type PeriodDeps = {
@@ -10,11 +11,12 @@ export function listPeriods(deps: PeriodDeps = { repo: realRepo }) {
 }
 
 export async function createPeriod(
-  input: { name: string; code: string; year: number; semester?: number | null; type: string },
+  input: { code: string; year: number; semester?: number | null; type: string },
   deps: PeriodDeps = { repo: realRepo }
 ) {
   if (await deps.repo.findPeriodByCode(input.code)) {
     throw new DomainError(409, `Já existe um período letivo com o código ${input.code}.`);
   }
-  return deps.repo.createPeriod({ ...input, semester: input.semester ?? null });
+  const semester = input.semester ?? null;
+  return deps.repo.createPeriod({ ...input, semester, name: formatPeriodName({ ...input, semester }) });
 }

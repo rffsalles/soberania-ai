@@ -96,7 +96,7 @@ export function ClassFormModal({
   }, [open]);
 
   const periodItems: ComboboxItem[] = React.useMemo(
-    () => periods.map((p) => ({ id: p.id, title: p.name, badge: p.code })),
+    () => periods.map((p) => ({ id: p.id, title: p.name })),
     [periods],
   );
 

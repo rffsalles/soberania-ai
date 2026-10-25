@@ -41,13 +41,13 @@ const courses = [
   { id: 'ccourse00001', name: 'Análise e Desenvolvimento de Sistemas', code: 'ADS', academicLevel: 'HIGHER_EDUCATION' },
   { id: 'ccourse00002', name: 'Ensino Médio', code: 'EM', academicLevel: 'HIGH_SCHOOL' },
 ];
-const periods = [{ id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '2026.1', year: 2026, semester: 1, type: 'SEMESTER' }];
+const periods = [{ id: 'cperiod0001', name: '2026.1 · 1º Semestre / 2026', code: '2026.1', year: 2026, semester: 1, type: 'SEMESTER' }];
 const lists = { 'GET /api/v1/admin/courses': { success: true, courses }, 'GET /api/v1/academic-periods': { success: true, periods } };
 const existing: ClassOption = {
   id: 'cclass00001', name: '3º Semestre · ADS', code: 'ADS-2026-3A', semester: 3,
   courseId: 'ccourse00001', academicPeriodId: 'cperiod0001',
   course: { id: 'ccourse00001', name: 'Análise e Desenvolvimento de Sistemas', code: 'ADS', academicLevel: 'HIGHER_EDUCATION' },
-  academicPeriod: { id: 'cperiod0001', name: '1º Semestre / 2026 (2026.1)', code: '2026.1', year: 2026 },
+  academicPeriod: { id: 'cperiod0001', name: '2026.1 · 1º Semestre / 2026', code: '2026.1', year: 2026 },
   _count: { students: 1, subjects: 1 },
 };
 
@@ -146,7 +146,7 @@ describe('ClassFormModal', () => {
   });
 
   it('"Cadastrar novo período..." abre o cadastro e seleciona o período criado', async () => {
-    const newPeriod = { id: 'cperiod0002', name: '2º Semestre / 2026 (2026.2)', code: '2026.2', year: 2026, semester: 2, type: 'SEMESTER' };
+    const newPeriod = { id: 'cperiod0002', name: '2026.2 · 2º Semestre / 2026', code: '2026.2', year: 2026, semester: 2, type: 'SEMESTER' };
     const { fetchMock, onSuccess } = setup({
       handlers: {
         'POST /api/v1/academic-periods': { success: true, period: newPeriod },
@@ -155,8 +155,7 @@ describe('ClassFormModal', () => {
     });
     await waitLists();
     fireEvent.click(screen.getByText('Cadastrar novo período...'));
-    fireEvent.change(screen.getByLabelText('Nome do Período *'), { target: { value: newPeriod.name } });
-    fireEvent.change(screen.getByLabelText('Código / Sigla *'), { target: { value: '2026.2' } });
+    fireEvent.change(screen.getByLabelText('Semestre / Módulo'), { target: { value: '2' } });
     fireEvent.click(screen.getByText('Cadastrar e Selecionar'));
     await waitFor(() => expect((screen.getByLabelText('Período letivo') as HTMLSelectElement).value).toBe('cperiod0002'));
     expect(onSuccess).not.toHaveBeenCalled();
@@ -167,7 +166,7 @@ describe('ClassFormModal', () => {
   });
 
   it('período criado inline antes do GET terminar não é perdido', async () => {
-    const newPeriod = { id: 'cperiod0002', name: '2º Semestre / 2026 (2026.2)', code: '2026.2', year: 2026, semester: 2, type: 'SEMESTER' };
+    const newPeriod = { id: 'cperiod0002', name: '2026.2 · 2º Semestre / 2026', code: '2026.2', year: 2026, semester: 2, type: 'SEMESTER' };
     let release!: (r: Response) => void;
     const pendingPeriods = new Promise<Response>((res) => { release = res; });
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -179,8 +178,7 @@ describe('ClassFormModal', () => {
     }));
     render(<ClassFormModal open editingClass={null} onOpenChange={vi.fn()} onSuccess={vi.fn()} />);
     fireEvent.click(screen.getByText('Cadastrar novo período...'));
-    fireEvent.change(screen.getByLabelText('Nome do Período *'), { target: { value: newPeriod.name } });
-    fireEvent.change(screen.getByLabelText('Código / Sigla *'), { target: { value: '2026.2' } });
+    fireEvent.change(screen.getByLabelText('Semestre / Módulo'), { target: { value: '2' } });
     fireEvent.click(screen.getByText('Cadastrar e Selecionar'));
     await waitFor(() => expect((screen.getByLabelText('Período letivo') as HTMLSelectElement).value).toBe('cperiod0002'));
     release(new Response(JSON.stringify(lists['GET /api/v1/academic-periods']), { status: 200 }));

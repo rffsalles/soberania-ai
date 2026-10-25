@@ -6,7 +6,6 @@ import { Role } from '@prisma/client';
 import { createPeriod, listPeriods } from '@/domains/academic/services/academic-period-service';
 
 const createPeriodSchema = z.object({
-  name: z.string().min(3, 'Nome do período deve ter no mínimo 3 caracteres'),
   code: z.string().min(2, 'Código deve ter no mínimo 2 caracteres'),
   year: z.coerce.number().int().min(2020).max(2050).default(2026),
   semester: z.coerce.number().int().min(1).max(4).nullable().optional(),

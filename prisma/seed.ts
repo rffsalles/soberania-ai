@@ -124,7 +124,7 @@ async function seedEmbeddings(chunks: { id: string; content: string }[]) {
 async function main() {
   // Períodos padrão
   for (const p of DEFAULT_PERIODS) {
-    await prisma.academicPeriod.upsert({ where: { code: p.code }, update: {}, create: { ...p } });
+    await prisma.academicPeriod.upsert({ where: { code: p.code }, update: { name: p.name }, create: { ...p } });
   }
   const period = await prisma.academicPeriod.findUniqueOrThrow({ where: { code: DEMO_PERIOD_CODE } });
 

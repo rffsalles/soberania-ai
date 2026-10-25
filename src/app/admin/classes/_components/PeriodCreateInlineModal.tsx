@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Plus, Calendar } from 'lucide-react';
 import { API_ROUTES } from '@/lib/constants/routes';
+import { formatPeriodName, suggestPeriodCode } from '@/domains/academic/period-label';
 
 export interface AcademicPeriodOption {
   id: string;
@@ -27,27 +28,32 @@ export function PeriodCreateInlineModal({
   onOpenChange,
   onCreated,
 }: PeriodCreateInlineModalProps) {
-  const [name, setName] = React.useState('');
-  const [code, setCode] = React.useState('');
+  // Código digitado pelo usuário; vazio = segue a sugestão derivada de ano/tipo/semestre.
+  const [codeOverride, setCodeOverride] = React.useState('');
   const [year, setYear] = React.useState('2026');
   const [type, setType] = React.useState<'SEMESTER' | 'ANNUAL' | 'TERM' | 'INTENSIVE'>('SEMESTER');
   const [semester, setSemester] = React.useState('1');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  const yearNumber = Number(year) || 2026;
+  const semesterNumber = type === 'ANNUAL' ? null : Number(semester) || 1;
+  const code = codeOverride || suggestPeriodCode({ year: yearNumber, semester: semesterNumber, type });
+  const previewName = formatPeriodName({ code: code.trim(), year: yearNumber, semester: semesterNumber, type });
+
   React.useEffect(() => {
     if (!open) return;
     setError(null);
-    setName('');
-    setCode('');
+    setCodeOverride('');
+    setYear('2026');
     setType('SEMESTER');
     setSemester('1');
   }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim()) {
-      setError('Por favor, informe o nome e o código do período letivo.');
+    if (!code.trim()) {
+      setError('Por favor, informe o código do período letivo.');
       return;
     }
 
@@ -59,11 +65,10 @@ export function PeriodCreateInlineModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name.trim(),
           code: code.trim().toUpperCase(),
-          year: Number(year) || 2026,
+          year: yearNumber,
           type,
-          semester: type === 'ANNUAL' ? null : Number(semester) || 1,
+          semester: semesterNumber,
         }),
       });
 
@@ -79,8 +84,7 @@ export function PeriodCreateInlineModal({
         });
         onOpenChange(false);
         // Reset
-        setName('');
-        setCode('');
+        setCodeOverride('');
         setYear('2026');
       } else {
         setError(data.error || 'Erro ao cadastrar período letivo.');
@@ -106,21 +110,6 @@ export function PeriodCreateInlineModal({
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <label htmlFor="period-name-input" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-            Nome do Período *
-          </label>
-          <Input
-            id="period-name-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: 2º Semestre / 2026 (2026.2)"
-            className="rounded-xl text-xs sm:text-sm"
-            disabled={isSubmitting}
-            required
-          />
-        </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label htmlFor="period-code-input" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -129,7 +118,7 @@ export function PeriodCreateInlineModal({
             <Input
               id="period-code-input"
               value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onChange={(e) => setCodeOverride(e.target.value.toUpperCase())}
               placeholder="Ex: 2026.2 ou 2026.ANUAL"
               className="rounded-xl text-xs sm:text-sm font-mono"
               disabled={isSubmitting}
@@ -193,6 +182,10 @@ export function PeriodCreateInlineModal({
             </div>
           )}
         </div>
+
+        <p className="text-xs text-slate-600 dark:text-slate-400">
+          Nome gerado: <span data-testid="period-name-preview" className="font-semibold">{previewName}</span>
+        </p>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
           <Button
