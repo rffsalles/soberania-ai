@@ -181,6 +181,16 @@ describe('teaching-plan-service', () => {
       await updatePlan('p1', teacher, { theoryHours: 50, practiceHours: 30, totalHours: 5 } as never, deps);
       expect(plans[0]).toMatchObject({ totalHours: 80, theoryHours: 50, practiceHours: 30 });
     });
+    it('com horas válidas sincroniza totalHours com a carga atual da disciplina', async () => {
+      const { deps, plans } = makeDeps([{ ...saved, totalHours: 60 }]);
+      await updatePlan('p1', teacher, { theoryHours: 60, practiceHours: 20, totalHours: 5 } as never, deps);
+      expect(plans[0]).toMatchObject({ totalHours: 80, theoryHours: 60, practiceHours: 20 });
+    });
+    it('sem horas no PUT não inclui totalHours no update', async () => {
+      const { deps, plans } = makeDeps([{ ...saved, totalHours: 60 }]);
+      await updatePlan('p1', teacher, { syllabus: 'novo', totalHours: 5 } as never, deps);
+      expect(plans[0].totalHours).toBe(60);
+    });
     it('envio de só uma das horas completa com o valor salvo da outra', async () => {
       const { deps, plans } = makeDeps([saved]);
       await expect(updatePlan('p1', teacher, { theoryHours: 70 }, deps)).rejects.toMatchObject({ status: 400, message: SUM_MSG });

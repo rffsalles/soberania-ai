@@ -127,6 +127,7 @@ export async function updatePlan(
 
   // totalHours nunca vem do cliente; teórica/prática só são validadas se vierem no PUT.
   const { unitsContent, ...rest } = input;
+  let syncedTotalHours: number | undefined;
   if (rest.theoryHours !== undefined || rest.practiceHours !== undefined) {
     const offering = await deps.offerings.findSubjectWithWorkload(existing.subjectId);
     if (!offering) throw new DomainError(404, 'Oferta não encontrada.');
@@ -135,10 +136,12 @@ export async function updatePlan(
       rest.practiceHours ?? existing.practiceHours,
       offering.discipline.workloadHours
     );
+    syncedTotalHours = offering.discipline.workloadHours;
   }
   delete (rest as { totalHours?: unknown }).totalHours;
   return deps.repo.updatePlanById(id, {
     ...rest,
+    ...(syncedTotalHours !== undefined ? { totalHours: syncedTotalHours } : {}),
     ...(unitsContent !== undefined ? { unitsContent: unitsContent as Prisma.InputJsonValue } : {}),
   });
 }
