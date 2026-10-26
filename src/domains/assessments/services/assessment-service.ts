@@ -3,6 +3,7 @@ import { assertOwner } from '@/domains/teaching/ownership';
 import { z } from 'zod';
 import { DomainError } from '@/lib/api/domain-error';
 import type { AICompletionOptions, AIMessage, StreamChunk } from '@/lib/ai-provider';
+import { collectStream } from '@/domains/agents/collect-stream';
 import { createLoggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
 import { ASSESSMENT_STATUS } from '@/lib/constants/teaching';
 import { executeHybridSearch } from '@/domains/rag/hybrid-search';
@@ -122,15 +123,10 @@ function selectUnits(plan: PlanForAssessment, unitNumbers: number[]): Assessment
 
 async function askModel(messages: AIMessage[], deps: AssessmentDeps) {
   try {
-    let text = '';
-    let fallback = false;
-    for await (const chunk of deps.streamChat(messages, {
+    const { text, fallback } = await collectStream(deps.streamChat, messages, {
       temperature: ASSESSMENT_TEMPERATURE,
       maxTokens: ASSESSMENT_MAX_TOKENS,
-    })) {
-      text += chunk.token;
-      if (chunk.fallback) fallback = true;
-    }
+    });
     return fallback ? null : parseAssessmentText(text);
   } catch (err) {
     console.warn('[assessments] falha ao gerar questões com a IA, usando fallback', err);
