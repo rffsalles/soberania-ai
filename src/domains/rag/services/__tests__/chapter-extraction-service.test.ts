@@ -58,11 +58,12 @@ beforeEach(() => {
   listChapters.mockResolvedValue([]);
   listChapterLinks.mockResolvedValue([]);
   listChapterLinkDetails.mockResolvedValue([]);
-  replaceChapters.mockImplementation(async (_m, rows) =>
-    rows.map((r: { order: number; title: string; startPage: number; endPage: number }) => ({
+  replaceChapters.mockImplementation(async (_m, rows, _s, _r, _a, beforeWrite) => {
+    if (beforeWrite) await beforeWrite({ fake: 'tx' });
+    return rows.map((r: { order: number; title: string; startPage: number; endPage: number }) => ({
       id: `c${r.order}`, order: r.order, title: r.title, startPage: r.startPage, endPage: r.endPage, source: 'OUTLINE',
-    })),
-  );
+    }));
+  });
 });
 
 describe('extractAndSaveChapters', () => {
@@ -80,6 +81,7 @@ describe('extractAndSaveChapters', () => {
       'OUTLINE',
       [],
       expect.arrayContaining([{ order: null, title: null, fromPage: 1, toPage: 11 }]),
+      undefined,
     );
   });
 
@@ -94,7 +96,7 @@ describe('extractAndSaveChapters', () => {
     expect(prompt).toContain('Página física 12');
     expect(prompt).not.toContain('Página física 13');
     expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.1, maxTokens: 1200 });
-    expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'AI', [], expect.any(Array));
+    expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'AI', [], expect.any(Array), undefined);
   });
 
   it.each([
@@ -173,7 +175,7 @@ describe('replaceManualChapters', () => {
   it('válidas gravam com source MANUAL', async () => {
     findMaterial.mockResolvedValue(material);
     await replaceManualChapters('m1', [{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }], { user: teacher }, depsWith());
-    expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'MANUAL', [], expect.any(Array));
+    expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'MANUAL', [], expect.any(Array), expect.anything());
   });
 
   it('não-PDF dá 400', async () => {
@@ -206,7 +208,8 @@ describe('guarda de vínculos', () => {
       message: LINKS_CONFLICT_MESSAGE,
       details: [{ disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana' }],
     });
-    expect(replaceChapters).not.toHaveBeenCalled();
+    // a checagem roda dentro da transação (recebe o tx) e aborta antes de qualquer escrita
+    expect(listChapterLinkDetails).toHaveBeenCalledWith('m1', { fake: 'tx' });
   });
 
   it('vínculos só do próprio professor não bloqueiam', async () => {
@@ -239,6 +242,6 @@ describe('guarda de vínculos', () => {
     listChapterLinkDetails.mockResolvedValue([foreign]);
     const outline = [{ title: 'A', pageNumber: 2 }, { title: 'B', pageNumber: 5 }, { title: 'C', pageNumber: 8 }];
     await expect(reextractMaterialChapters('m1', { user: teacher }, depsWith({ outline }))).rejects.toMatchObject({ status: 409 });
-    expect(replaceChapters).not.toHaveBeenCalled();
+    expect(listChapterLinkDetails).toHaveBeenCalledWith('m1', { fake: 'tx' });
   });
 });

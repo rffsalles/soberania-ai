@@ -36,6 +36,26 @@ describe('replaceChapters', () => {
     const sql = (tx.$executeRaw.mock.calls[0][0] as string[]).join('?');
     expect(sql).toContain('IS DISTINCT FROM');
   });
+
+  it('chama beforeWrite com o tx antes do deleteMany', async () => {
+    vi.clearAllMocks();
+    const order: string[] = [];
+    tx.materialChapter.deleteMany.mockImplementationOnce(async () => { order.push('delete'); return {}; });
+    const beforeWrite = vi.fn(async () => { order.push('before'); });
+    await replaceChapters('m1', [{ order: 1, title: 'Intro', startPage: 1, endPage: 10 }], 'AUTO' as never, [], [], beforeWrite);
+    expect(beforeWrite).toHaveBeenCalledWith(tx);
+    expect(order).toEqual(['before', 'delete']);
+  });
+
+  it('se beforeWrite lança, nada é gravado', async () => {
+    vi.clearAllMocks();
+    const beforeWrite = vi.fn().mockRejectedValue(new Error('conflito'));
+    await expect(
+      replaceChapters('m1', [{ order: 1, title: 'Intro', startPage: 1, endPage: 10 }], 'AUTO' as never, [], [], beforeWrite),
+    ).rejects.toThrow('conflito');
+    expect(tx.materialChapter.deleteMany).not.toHaveBeenCalled();
+    expect(tx.materialChapter.createManyAndReturn).not.toHaveBeenCalled();
+  });
 });
 
 describe('listChapterLinkDetails', () => {

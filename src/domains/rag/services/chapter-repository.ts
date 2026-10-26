@@ -1,4 +1,4 @@
-import type { ChapterSource } from '@prisma/client';
+import type { ChapterSource, Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import type { ChapterLinks, ChapterRow, ChunkAssignment } from '@/domains/rag/chapters';
 
@@ -36,8 +36,11 @@ export type ChapterLinkConflict = {
 export type ChapterLinkDetail = ChapterLinkConflict & { lessonPlanId: string; teacherId: string };
 
 /** Aulas vinculadas a capítulos do material, uma linha por aula, com disciplina, turma e professor. */
-export async function listChapterLinkDetails(materialId: string): Promise<ChapterLinkDetail[]> {
-  const links = await db.lessonPlanChapter.findMany({
+export async function listChapterLinkDetails(
+  materialId: string,
+  client: Prisma.TransactionClient | typeof db = db,
+): Promise<ChapterLinkDetail[]> {
+  const links = await client.lessonPlanChapter.findMany({
     where: { chapter: { materialId } },
     select: {
       lessonPlan: {
@@ -74,7 +77,7 @@ export async function listChapterLinkDetails(materialId: string): Promise<Chapte
   }
   const teacherIds = [...new Set([...byPlan.values()].map((d) => d.teacherId))];
   const users = teacherIds.length > 0
-    ? await db.user.findMany({ where: { id: { in: teacherIds } }, select: { id: true, name: true } })
+    ? await client.user.findMany({ where: { id: { in: teacherIds } }, select: { id: true, name: true } })
     : [];
   const nameById = new Map(users.map((u) => [u.id, u.name]));
   return [...byPlan.values()]
@@ -95,8 +98,10 @@ export function replaceChapters(
   source: ChapterSource,
   relinks: { order: number; lessonPlanId: string }[],
   assignments: ChunkAssignment[],
+  beforeWrite?: (tx: Prisma.TransactionClient) => Promise<void>,
 ): Promise<ChapterDTO[]> {
   return db.$transaction(async (tx) => {
+    if (beforeWrite) await beforeWrite(tx);
     await tx.materialChapter.deleteMany({ where: { materialId } });
     const idByOrder = new Map<number, string>();
     const created = await tx.materialChapter.createManyAndReturn({

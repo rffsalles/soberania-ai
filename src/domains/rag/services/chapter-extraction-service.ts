@@ -1,4 +1,4 @@
-import { Role, type ChapterSource } from '@prisma/client';
+import { Role, type ChapterSource, type Prisma } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { loggedStreamChat, type StreamChatFn } from '@/domains/telemetry/services/logged-stream-chat';
 import { parseDocumentFile, readPdfNavigation } from '@/domains/rag/file-parser';
@@ -125,24 +125,27 @@ async function saveDrafts(
   opts?: ChapterWriteOptions,
 ): Promise<ChapterSaveResult> {
   const oldLinks = await deps.repo.listChapterLinks(materialId);
-  if (opts && !opts.force && drafts.length !== oldLinks.length) {
-    const details = await deps.repo.listChapterLinkDetails(materialId);
-    const foreign = details.filter((d) => d.teacherId !== opts.user.id);
-    if (foreign.length > 0) {
-      const conflicts: ChapterLinkConflict[] = foreign.map((d) => ({
-        disciplina: d.disciplina,
-        turma: d.turma,
-        classNumber: d.classNumber,
-        topicTitle: d.topicTitle,
-        professor: d.professor,
-      }));
-      throw new DomainError(409, LINKS_CONFLICT_MESSAGE, conflicts);
-    }
-  }
   const { relinks, lostLessonLinks } = relinkByOrder(oldLinks, drafts.length);
   const rows = toChapterRows(drafts, totalPages);
   const assignments = buildChunkAssignments(rows, totalPages);
-  const chapters = await deps.repo.replaceChapters(materialId, rows, source, relinks, assignments);
+  const beforeWrite =
+    opts && !opts.force && drafts.length !== oldLinks.length
+      ? async (tx: Prisma.TransactionClient) => {
+          const details = await deps.repo.listChapterLinkDetails(materialId, tx);
+          const foreign = details.filter((d) => d.teacherId !== opts.user.id);
+          if (foreign.length > 0) {
+            const conflicts: ChapterLinkConflict[] = foreign.map((d) => ({
+              disciplina: d.disciplina,
+              turma: d.turma,
+              classNumber: d.classNumber,
+              topicTitle: d.topicTitle,
+              professor: d.professor,
+            }));
+            throw new DomainError(409, LINKS_CONFLICT_MESSAGE, conflicts);
+          }
+        }
+      : undefined;
+  const chapters = await deps.repo.replaceChapters(materialId, rows, source, relinks, assignments, beforeWrite);
   return { source, chapters, lostLessonLinks };
 }
 
