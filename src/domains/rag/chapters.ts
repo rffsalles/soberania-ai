@@ -45,6 +45,42 @@ export function outlineToDrafts(entries: OutlineEntry[]): ChapterDraft[] | null 
   return nested.length >= MIN_NESTED_OUTLINE_CHAPTERS ? nested : null;
 }
 
+const HEADING_SCAN_LINES = 3;
+const HEADING_PATTERN = /^(Unidade|Cap[íi]tulo|Cap\.|Parte|M[óo]dulo)\s+(\d+)\b(.*)$/i;
+/** Linha de sumário: líder de pontos/reticências ou número de página após espaçamento largo. */
+const TOC_LINE_PATTERN = /(\.{3,}|…|\.\s\.\s\.)|(\s{2,}|\t)\d+\s*$/;
+
+/**
+ * Detecta cabeçalhos "Unidade N", "Capítulo N"... no topo das páginas. Exige numeração sequencial
+ * a partir de 1 e páginas crescentes; ≥ 2 acertos ou null. Repetições do mesmo número ficam na 1ª ocorrência.
+ */
+export function headingsToDrafts(pages: { pageNumber: number; text: string }[]): ChapterDraft[] | null {
+  const drafts: ChapterDraft[] = [];
+  let lastPage = 0;
+  for (const page of pages) {
+    const lines = page.text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .slice(0, HEADING_SCAN_LINES);
+    for (const raw of lines) {
+      if (TOC_LINE_PATTERN.test(raw)) continue;
+      const line = raw.replace(/\s+/g, ' ');
+      const m = HEADING_PATTERN.exec(line);
+      if (!m) continue;
+      const num = Number(m[2]);
+      if (num === drafts.length + 1 && page.pageNumber > lastPage) {
+        drafts.push({ title: line, startPage: page.pageNumber });
+        lastPage = page.pageNumber;
+      } else if (num > drafts.length + 1) {
+        return null;
+      }
+      break;
+    }
+  }
+  return drafts.length >= MIN_EXTRACTED_CHAPTERS ? drafts : null;
+}
+
 export function isValidChapterSequence(drafts: ChapterDraft[], totalPages: number, minCount: number): boolean {
   if (drafts.length < minCount) return false;
   let prev = 0;

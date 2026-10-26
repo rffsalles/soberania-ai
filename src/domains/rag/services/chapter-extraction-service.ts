@@ -8,6 +8,7 @@ import type { PdfNavigation, RawDocumentPage } from '@/domains/rag/types';
 import { CHAPTER_TOC_PAGES } from '@/domains/rag/constants';
 import {
   buildChunkAssignments,
+  headingsToDrafts,
   isValidChapterSequence,
   outlineToDrafts,
   relinkByOrder,
@@ -92,7 +93,7 @@ async function askModel(
   }
 }
 
-/** Cascata: outline do PDF, depois IA sobre o sumário, depois nada. Nunca lança. */
+/** Cascata: outline do PDF, títulos no texto, depois IA sobre o sumário, depois nada. Nunca lança. */
 export async function extractChapterDrafts(
   input: ExtractionInput,
   deps: ChapterExtractionDeps = defaultDeps,
@@ -107,6 +108,11 @@ export async function extractChapterDrafts(
   const fromOutline = outlineToDrafts(nav.outline);
   if (fromOutline && isValidChapterSequence(fromOutline, input.totalPages, 2)) {
     return { source: 'OUTLINE', drafts: fromOutline };
+  }
+
+  const fromHeadings = headingsToDrafts(input.pages);
+  if (fromHeadings && isValidChapterSequence(fromHeadings, input.totalPages, 2)) {
+    return { source: 'HEADINGS', drafts: fromHeadings };
   }
 
   const fromAi = await askModel(input, nav, deps);
@@ -186,7 +192,6 @@ export async function reextractMaterialChapters(
   const material = await loadPdfMaterial(materialId, deps);
   const { buffer } = await deps.files.getFileBuffer(material.filePath);
   const parsed = await parseDocumentFile(buffer, material.originalFilename ?? 'material.pdf', {
-    maxPages: CHAPTER_TOC_PAGES,
     skipOcr: true,
   });
   return extractAndSaveChapters(materialId, { buffer, pages: parsed.pages, totalPages: material.totalPages }, deps, opts);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildChunkAssignments,
   isValidChapterSequence,
+  headingsToDrafts,
   isGenericOutlineTitle,
   outlineToDrafts,
   relinkByOrder,
@@ -151,4 +152,56 @@ describe('relinkByOrder', () => {
     ]);
     expect(relinkByOrder(old, 3)).toEqual({ relinks: [], lostLessonLinks: 2 });
   });
+});
+
+describe('headingsToDrafts', () => {
+  const page = (pageNumber: number, text: string) => ({ pageNumber, text });
+  const body = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => page(from + i, `Texto corrido da página ${from + i}`));
+
+  it('detecta 5 unidades pelo topo das páginas', () => {
+    const pages = [
+      page(9, 'Sumário\nUnidade 1 – Conjuntos Numéricos ........ 15'),
+      ...body(10, 16),
+      page(17, 'Unidade 1 – Conjuntos  Numéricos\nTexto'),
+      ...body(18, 39),
+      page(40, '\n  \nUnidade 2 – Funções\nTexto'),
+      page(70, 'UNIDADE 3 – Geometria\nTexto'),
+      page(100, 'Unidade 4 – Trigonometria'),
+      page(130, 'Texto\nUnidade 5 – Estatística'),
+    ];
+    expect(headingsToDrafts(pages)).toEqual([
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 17 },
+      { title: 'Unidade 2 – Funções', startPage: 40 },
+      { title: 'UNIDADE 3 – Geometria', startPage: 70 },
+      { title: 'Unidade 4 – Trigonometria', startPage: 100 },
+      { title: 'Unidade 5 – Estatística', startPage: 130 },
+    ]);
+  });
+
+  it('cabeçalho repetido mantém a primeira ocorrência', () => {
+    expect(
+      headingsToDrafts([
+        page(5, 'Unidade 1 – A'),
+        page(6, 'Unidade 1 – A\nmais texto'),
+        page(20, 'Capítulo 2 - B'),
+      ]),
+    ).toEqual([
+      { title: 'Unidade 1 – A', startPage: 5 },
+      { title: 'Capítulo 2 - B', startPage: 20 },
+    ]);
+  });
+
+  it('só olha as 3 primeiras linhas não vazias', () => {
+    expect(headingsToDrafts([page(1, 'a\nb\nc\nUnidade 1 – X'), page(2, 'Unidade 2 – Y')])).toBeNull();
+  });
+
+  it('numeração fora de sequência devolve null', () =>
+    expect(headingsToDrafts([page(5, 'Unidade 1 – A'), page(9, 'Unidade 3 – C'), page(12, 'Unidade 4 – D')])).toBeNull());
+
+  it('numeração que não começa em 1 devolve null', () =>
+    expect(headingsToDrafts([page(5, 'Capítulo 2 – A'), page(9, 'Capítulo 3 – C')])).toBeNull());
+
+  it('um único acerto devolve null', () =>
+    expect(headingsToDrafts([page(5, 'Unidade 1 – A'), page(9, 'Texto')])).toBeNull());
 });

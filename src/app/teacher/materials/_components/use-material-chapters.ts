@@ -1,7 +1,7 @@
 import { requestJson } from '@/components/assessments/use-assessments';
 import { API_ROUTES } from '@/lib/constants/routes';
 
-export type ChapterSource = 'OUTLINE' | 'AI' | 'MANUAL';
+export type ChapterSource = 'OUTLINE' | 'AI' | 'MANUAL' | 'HEADINGS';
 
 export interface ChapterDTO {
   id: string;
@@ -23,6 +23,7 @@ export const CHAPTER_SOURCE_LABEL = {
   OUTLINE: 'Marcadores do PDF',
   AI: 'Extraído por IA',
   MANUAL: 'Manual',
+  HEADINGS: 'Títulos no texto',
 } as const;
 
 const chaptersUrl = (id: string) => `${API_ROUTES.LIBRARY}/materials/${id}/chapters`;

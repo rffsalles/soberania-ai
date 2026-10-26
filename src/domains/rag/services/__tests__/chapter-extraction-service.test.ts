@@ -85,6 +85,38 @@ describe('extractAndSaveChapters', () => {
     );
   });
 
+  it('outline lixo + "Unidade N" no texto grava HEADINGS sem chamar a IA', async () => {
+    const withHeadings = pages.map((p) =>
+      [3, 8, 14].includes(p.pageNumber)
+        ? { ...p, text: `Unidade ${[3, 8, 14].indexOf(p.pageNumber) + 1} – Tema\nTexto` }
+        : p,
+    );
+    const r = await extractAndSaveChapters(
+      'm1',
+      { buffer, pages: withHeadings, totalPages: 20 },
+      depsWith({
+        outline: [
+          { title: 'Página em branco', pageNumber: 2, depth: 0 },
+          { title: 'Página em branco', pageNumber: 19, depth: 0 },
+        ],
+      }),
+    );
+    expect(r.source).toBe('HEADINGS');
+    expect(streamChat).not.toHaveBeenCalled();
+    expect(replaceChapters).toHaveBeenCalledWith(
+      'm1',
+      [
+        expect.objectContaining({ title: 'Unidade 1 – Tema', startPage: 3, endPage: 7 }),
+        expect.objectContaining({ startPage: 8, endPage: 13 }),
+        expect.objectContaining({ startPage: 14, endPage: 20 }),
+      ],
+      'HEADINGS',
+      [],
+      expect.any(Array),
+      undefined,
+    );
+  });
+
   it('PDF sem outline usa a IA nas 12 primeiras páginas e grava AI', async () => {
     const r = await extractAndSaveChapters(
       'm1',
@@ -155,7 +187,7 @@ describe('reextractMaterialChapters', () => {
     const current = [{ id: 'c1', order: 1, title: 'Velho', startPage: 1, endPage: 20, source: 'MANUAL' }];
     listChapters.mockResolvedValue(current);
     const r = await reextractMaterialChapters('m1', { user: teacher }, depsWith({ ai: 'lixo' }));
-    expect(parseDocumentFile).toHaveBeenCalledWith(buffer, 'livro.pdf', { maxPages: 12, skipOcr: true });
+    expect(parseDocumentFile).toHaveBeenCalledWith(buffer, 'livro.pdf', { skipOcr: true });
     expect(r).toEqual({ source: null, chapters: current, lostLessonLinks: 0 });
     expect(replaceChapters).not.toHaveBeenCalled();
   });

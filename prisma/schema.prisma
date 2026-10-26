@@ -242,6 +242,7 @@ enum ChapterSource {
   OUTLINE
   AI
   MANUAL
+  HEADINGS
 }
 
 enum ReferenceKind {
