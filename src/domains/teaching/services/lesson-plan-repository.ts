@@ -61,3 +61,66 @@ export async function replaceLessonChapters(lessonPlanId: string, chapterIds: st
     db.lessonPlanChapter.createMany({ data: chapterIds.map((chapterId) => ({ lessonPlanId, chapterId })) }),
   ]);
 }
+
+const generationInclude = {
+  courseSchedule: {
+    select: {
+      totalClasses: true,
+      teachingPlan: {
+        select: {
+          teacherId: true,
+          syllabus: true,
+          generalObjectives: true,
+          subject: { select: { discipline: { select: { name: true } } } },
+        },
+      },
+    },
+  },
+  chapters: {
+    select: {
+      chapter: {
+        select: {
+          id: true,
+          order: true,
+          title: true,
+          startPage: true,
+          endPage: true,
+          material: { select: { title: true, author: true } },
+        },
+      },
+    },
+    orderBy: { chapter: { order: 'asc' } },
+  },
+} satisfies Prisma.LessonPlanInclude;
+
+export type GenerationLesson = {
+  id: string;
+  classNumber: number;
+  topicTitle: string;
+  courseSchedule: {
+    totalClasses: number;
+    teachingPlan: {
+      teacherId: string;
+      syllabus: string;
+      generalObjectives: string;
+      subject: { discipline: { name: string } };
+    };
+  };
+  chapters: {
+    chapter: {
+      id: string;
+      order: number;
+      title: string;
+      startPage: number;
+      endPage: number | null;
+      material: { title: string; author: string };
+    };
+  }[];
+};
+
+export function findLessonForGeneration(id: string): Promise<GenerationLesson | null> {
+  return db.lessonPlan.findUnique({
+    where: { id },
+    select: { id: true, classNumber: true, topicTitle: true, ...generationInclude },
+  });
+}
