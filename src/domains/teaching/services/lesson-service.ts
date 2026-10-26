@@ -19,12 +19,16 @@ import {
 } from '@/domains/storage/storage-service';
 import * as agendaRepo from '@/domains/agendas/services/agenda-repository';
 import * as lessonRepo from './lesson-plan-repository';
+import * as planRepo from './teaching-plan-repository';
+import { planChapterIds, type PlanChapterBook } from './plan-chapters-service';
 import { assertOwner } from '../ownership';
 import { publishBlockReason } from '../lesson-publish';
 
 const BYTES_PER_MB = 1024 * 1024;
 const MS_PER_MINUTE = 60 * 1000;
 const MEDIA_PREFIX: StoragePrefix = 'media';
+
+export const CHAPTER_OUTSIDE_PLAN = 'Há capítulos que não pertencem à bibliografia do plano.';
 
 export type LessonActor = { id: string; role: Role; classId: string | null };
 
@@ -39,8 +43,9 @@ export type LessonWithContext = {
   mediaType: string | null;
   mediaUrl: string | null;
   s3ObjectKey: string | null;
+  chapters: { chapterId: string }[];
   courseSchedule: {
-    teachingPlan: { teacherId: string; subject: { id: string; classId: string; discipline: { name: string } } };
+    teachingPlan: { id: string; teacherId: string; subject: { id: string; classId: string; discipline: { name: string } } };
   };
 };
 
@@ -48,6 +53,8 @@ export type LessonDeps = {
   repo: {
     findLessonWithContext(id: string): Promise<LessonWithContext | null>;
     updateLesson(id: string, data: Prisma.LessonPlanUncheckedUpdateInput): Promise<LessonWithContext>;
+    listPlanChapters(planId: string): Promise<PlanChapterBook[]>;
+    replaceLessonChapters(lessonPlanId: string, chapterIds: string[]): Promise<void>;
     upsertAgendaByLessonPlanId(lessonPlanId: string, data: agendaRepo.LessonAgendaData): Promise<unknown>;
     setAgendaStatusByLessonPlanId(lessonPlanId: string, status: AgendaStatus): Promise<{ count: number }>;
   };
@@ -63,6 +70,8 @@ const defaultDeps: LessonDeps = {
   repo: {
     findLessonWithContext: lessonRepo.findLessonWithContext,
     updateLesson: lessonRepo.updateLessonWithContext,
+    listPlanChapters: planRepo.listPlanChapters,
+    replaceLessonChapters: lessonRepo.replaceLessonChapters,
     upsertAgendaByLessonPlanId: agendaRepo.upsertAgendaByLessonPlanId,
     setAgendaStatusByLessonPlanId: agendaRepo.setAgendaStatusByLessonPlanId,
   },
@@ -134,6 +143,13 @@ export async function updateLesson(id: string, user: LessonActor, raw: unknown, 
   const existing = await loadOwned(id, user, deps);
   const input = parseLessonInput(raw, existing);
 
+  // Valida os capítulos antes de qualquer gravação.
+  const chapterIds = input.chapterIds === undefined ? undefined : [...new Set(input.chapterIds)];
+  if (chapterIds !== undefined) {
+    const allowed = planChapterIds(await deps.repo.listPlanChapters(existing.courseSchedule.teachingPlan.id));
+    if (chapterIds.some((cid) => !allowed.has(cid))) throw new DomainError(400, CHAPTER_OUTSIDE_PLAN);
+  }
+
   // Explicit whitelist: the parent schedule can never be changed through an update.
   const data: Prisma.LessonPlanUncheckedUpdateInput = {};
   if (input.classDate) data.classDate = new Date(input.classDate);
@@ -154,6 +170,7 @@ export async function updateLesson(id: string, user: LessonActor, raw: unknown, 
   if (leavingUpload) data.s3ObjectKey = null;
 
   const updated = await deps.repo.updateLesson(id, data);
+  if (chapterIds !== undefined) await deps.repo.replaceLessonChapters(id, chapterIds);
   if (leavingUpload && existing.s3ObjectKey) await discardStoredMedia(existing.s3ObjectKey, deps);
   await syncAgendaForLesson(updated, deps);
   return updated;

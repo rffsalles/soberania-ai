@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import { INSTITUTION_TIMEZONE, LESSON_TEXT_MAX_LENGTH, LESSON_TITLE_MAX_LENGTH } from '@/lib/constants/teaching';
 import { localDateTimeToUtc, toLocalDateTimeInput } from '@/lib/timezone';
 import {
+  CHAPTER_OUTSIDE_PLAN,
   openLessonMedia,
   setLessonStatus,
   syncAgendaForLesson,
@@ -28,7 +29,8 @@ const baseLesson = (teacherId: string): LessonWithContext => ({
   mediaType: null,
   mediaUrl: null,
   s3ObjectKey: null,
-  courseSchedule: { teachingPlan: { teacherId, subject: { id: 'sub1', classId: 'c1', discipline: { name: 'BD' } } } },
+  chapters: [],
+  courseSchedule: { teachingPlan: { id: 'plan1', teacherId, subject: { id: 'sub1', classId: 'c1', discipline: { name: 'BD' } } } },
 });
 
 function makeDeps(opts: { lesson?: Partial<LessonWithContext>; teacherId?: string; s3ObjectKey?: string | null; mediaType?: string | null; mediaUrl?: string | null; failDelete?: boolean } = {}) {
@@ -50,6 +52,12 @@ function makeDeps(opts: { lesson?: Partial<LessonWithContext>; teacherId?: strin
       updateLesson: async (id, data) => {
         rec('updateLesson', { id, data });
         return { ...lessonRow, ...(data as object) } as LessonWithContext;
+      },
+      listPlanChapters: async () => [
+        { id: 'b1', title: 'Livro', chapters: [{ id: 'ch1', order: 1, title: 'C1' }, { id: 'ch2', order: 2, title: 'C2' }] },
+      ] as never,
+      replaceLessonChapters: async (lessonPlanId, chapterIds) => {
+        rec('replaceLessonChapters', { lessonPlanId, chapterIds });
       },
       setAgendaStatusByLessonPlanId: async (lessonPlanId, status) => {
         rec('setAgendaStatus', { lessonPlanId, status });
@@ -84,6 +92,24 @@ function makeDeps(opts: { lesson?: Partial<LessonWithContext>; teacherId?: strin
 }
 
 describe('lesson-service updateLesson', () => {
+  it('grava capítulos do plano', async () => {
+    const { deps, calls } = makeDeps();
+    await updateLesson('own', teacher, { chapterIds: ['ch1', 'ch1', 'ch2'] }, deps);
+    expect(calls.replaceLessonChapters).toEqual([{ lessonPlanId: 'own', chapterIds: ['ch1', 'ch2'] }]);
+  });
+
+  it('rejeita capítulo de fora do plano; salvar sem chapterIds preserva vínculos', async () => {
+    const { deps, calls } = makeDeps();
+    await expect(updateLesson('own', teacher, { chapterIds: ['chX'] }, deps)).rejects.toMatchObject({
+      status: 400,
+      message: CHAPTER_OUTSIDE_PLAN,
+    });
+    expect(calls.updateLesson).toBeUndefined();
+    expect(calls.replaceLessonChapters).toBeUndefined();
+    await updateLesson('own', teacher, { topicTitle: 'Novo' }, deps);
+    expect(calls.replaceLessonChapters).toBeUndefined();
+  });
+
   it('rejects an invalid YouTube URL with 400', async () => {
     const { deps, calls } = makeDeps();
     await expect(

@@ -66,6 +66,7 @@ export const lessonInputSchema = z.object({
   mediaType: z.enum([LESSON_MEDIA_TYPE.NONE, LESSON_MEDIA_TYPE.YOUTUBE, LESSON_MEDIA_TYPE.S3_UPLOAD]).optional(),
   mediaUrl: z.string().max(LESSON_URL_MAX_LENGTH).nullable().optional(),
   s3ObjectKey: z.string().max(LESSON_URL_MAX_LENGTH).nullable().optional(),
+  chapterIds: z.array(z.string().min(1)).max(50).optional(),
 });
 
 export type LessonInput = z.infer<typeof lessonInputSchema>;

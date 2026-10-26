@@ -21,8 +21,9 @@ export function createLesson(data: Prisma.LessonPlanUncheckedCreateInput) {
 
 const lessonContextInclude = {
   courseSchedule: {
-    include: { teachingPlan: { select: { teacherId: true, subject: { select: { id: true, classId: true, discipline: { select: { name: true } } } } } } },
+    include: { teachingPlan: { select: { id: true, teacherId: true, subject: { select: { id: true, classId: true, discipline: { select: { name: true } } } } } } },
   },
+  chapters: { select: { chapterId: true } },
 } satisfies Prisma.LessonPlanInclude;
 
 export function findLessonWithContext(id: string) {
@@ -50,5 +51,13 @@ export async function applyChapterDistribution(
       data: rows.flatMap((r) => r.chapterIds.map((chapterId) => ({ lessonPlanId: r.lessonPlanId, chapterId }))),
     }),
     ...rows.map((r) => db.lessonPlan.update({ where: { id: r.lessonPlanId }, data: { topicTitle: r.topicTitle } })),
+  ]);
+}
+
+/** Substitui os capítulos de uma aula, tudo ou nada. */
+export async function replaceLessonChapters(lessonPlanId: string, chapterIds: string[]): Promise<void> {
+  await db.$transaction([
+    db.lessonPlanChapter.deleteMany({ where: { lessonPlanId } }),
+    db.lessonPlanChapter.createMany({ data: chapterIds.map((chapterId) => ({ lessonPlanId, chapterId })) }),
   ]);
 }
