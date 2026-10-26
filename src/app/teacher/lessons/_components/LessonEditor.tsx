@@ -78,7 +78,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   };
   const { generate, generating, citations, lockReason: generateLock } = useLessonGeneration({
     lessonId: lesson.id,
-    savedChapterIds,
+    savedKey,
     selectionKey,
     hasContent: [dailyObjective, methodology, fixationExercise].some((v) => v.trim() !== '') || steps.length > 0,
     applyGenerated: (data) => {

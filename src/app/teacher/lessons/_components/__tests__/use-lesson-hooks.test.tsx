@@ -13,17 +13,17 @@ vi.mock('@/components/teaching/use-lessons', () => ({
 
 const feedback = { onStart: vi.fn(), onError: vi.fn() };
 
-function generation(savedChapterIds: string[], selectionKey: string) {
+function generation(savedKey: string, selectionKey: string) {
   return renderHook(() =>
-    useLessonGeneration({ ...feedback, lessonId: 'l1', savedChapterIds, selectionKey, hasContent: false, applyGenerated: vi.fn() })
+    useLessonGeneration({ ...feedback, lessonId: 'l1', savedKey, selectionKey, hasContent: false, applyGenerated: vi.fn() })
   ).result.current;
 }
 
 describe('hooks de aula', () => {
   it('useLessonGeneration: sem capítulo salvo e seleção diferente dão o motivo certo', () => {
-    expect(generation([], '').lockReason).toBe(NO_LESSON_CHAPTERS);
-    expect(generation(['b', 'a'], 'a').lockReason).toBe('Salve os capítulos selecionados antes de gerar.');
-    expect(generation(['b', 'a'], 'a,b').lockReason).toBeUndefined();
+    expect(generation('', '').lockReason).toBe(NO_LESSON_CHAPTERS);
+    expect(generation('a,b', 'a').lockReason).toBe('Salve os capítulos selecionados antes de gerar.');
+    expect(generation('a,b', 'a,b').lockReason).toBeUndefined();
   });
 
   it('useLessonStatus: formulário sujo bloqueia publicar', () => {

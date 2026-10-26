@@ -11,18 +11,17 @@ type Feedback = { onStart(): void; onError(message: string): void };
 export function useLessonGeneration(
   args: Feedback & {
     lessonId: string;
-    savedChapterIds: string[];
+    savedKey: string;
     selectionKey: string;
     hasContent: boolean;
     applyGenerated(data: Awaited<ReturnType<typeof generateLesson>>): void;
   }
 ) {
-  const { lessonId, savedChapterIds, selectionKey, hasContent, applyGenerated, onStart, onError } = args;
+  const { lessonId, savedKey, selectionKey, hasContent, applyGenerated, onStart, onError } = args;
   const [generating, setGenerating] = React.useState(false);
   const [citations, setCitations] = React.useState<string[]>([]);
-  const savedKey = savedChapterIds.slice().sort().join(',');
   const lockReason =
-    savedChapterIds.length === 0 ? NO_LESSON_CHAPTERS : selectionKey !== savedKey ? UNSAVED_CHAPTERS : undefined;
+    savedKey === '' ? NO_LESSON_CHAPTERS : selectionKey !== savedKey ? UNSAVED_CHAPTERS : undefined;
 
   async function generate() {
     if (hasContent && !window.confirm(CONFIRM_REPLACE)) return;
