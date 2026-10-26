@@ -1,0 +1,184 @@
+import type { ChapterSource } from '@prisma/client';
+import { DomainError } from '@/lib/api/domain-error';
+import { loggedStreamChat, type StreamChatFn } from '@/domains/telemetry/services/logged-stream-chat';
+import { parseDocumentFile, readPdfNavigation } from '@/domains/rag/file-parser';
+import { findMaterial } from '@/domains/rag/services/material-repository';
+import { storageService } from '@/domains/storage/storage-service';
+import type { PdfNavigation, RawDocumentPage } from '@/domains/rag/types';
+import { CHAPTER_TOC_PAGES } from '@/domains/rag/constants';
+import {
+  buildChunkAssignments,
+  isValidChapterSequence,
+  outlineToDrafts,
+  relinkByOrder,
+  toChapterRows,
+  type ChapterDraft,
+} from '@/domains/rag/chapters';
+import {
+  buildChapterExtractionMessages,
+  parseChapterExtraction,
+} from '@/domains/agents/prompts/chapter-extraction-prompt';
+import {
+  listChapterLinks,
+  listChapters,
+  replaceChapters,
+  type ChapterDTO,
+} from '@/domains/rag/services/chapter-repository';
+
+export const CHAPTERS_PDF_ONLY = 'A extração de capítulos está disponível apenas para PDF.';
+
+export type ChapterExtractionDeps = {
+  readNavigation(buffer: Buffer): Promise<PdfNavigation>;
+  streamChat: StreamChatFn;
+  repo: {
+    listChapters: typeof listChapters;
+    listChapterLinks: typeof listChapterLinks;
+    replaceChapters: typeof replaceChapters;
+  };
+  materials: {
+    findMaterial(id: string): Promise<{
+      id: string;
+      totalPages: number;
+      mimeType: string | null;
+      filePath: string;
+      originalFilename: string | null;
+    } | null>;
+  };
+  files: { getFileBuffer(path: string): Promise<{ buffer: Buffer }> };
+};
+
+export type ExtractionInput = { buffer: Buffer; pages: RawDocumentPage[]; totalPages: number };
+export type ChapterSaveResult = { source: ChapterSource | null; chapters: ChapterDTO[]; lostLessonLinks: number };
+
+const defaultDeps: ChapterExtractionDeps = {
+  readNavigation: readPdfNavigation,
+  streamChat: loggedStreamChat,
+  repo: { listChapters, listChapterLinks, replaceChapters },
+  materials: { findMaterial },
+  files: { getFileBuffer: (path) => storageService.getFileBuffer(path) },
+};
+
+const EXTRACTION_TEMPERATURE = 0.1;
+const EXTRACTION_MAX_TOKENS = 1200;
+
+async function askModel(
+  input: ExtractionInput,
+  nav: PdfNavigation,
+  deps: ChapterExtractionDeps,
+): Promise<ChapterDraft[] | null> {
+  try {
+    const tocPages = input.pages.slice(0, CHAPTER_TOC_PAGES).map((p) => ({
+      pageNumber: p.pageNumber,
+      label: nav.pageLabels?.[p.pageNumber - 1] ?? undefined,
+      text: p.text,
+    }));
+    const messages = buildChapterExtractionMessages({ pages: tocPages, totalPages: input.totalPages });
+    let text = '';
+    let fallback = false;
+    for await (const chunk of deps.streamChat(messages, {
+      temperature: EXTRACTION_TEMPERATURE,
+      maxTokens: EXTRACTION_MAX_TOKENS,
+    })) {
+      text += chunk.token;
+      if (chunk.fallback) fallback = true;
+    }
+    return fallback ? null : parseChapterExtraction(text);
+  } catch (err) {
+    console.warn('[chapters] falha ao extrair capítulos com a IA', err);
+    return null;
+  }
+}
+
+/** Cascata: outline do PDF, depois IA sobre o sumário, depois nada. Nunca lança. */
+export async function extractChapterDrafts(
+  input: ExtractionInput,
+  deps: ChapterExtractionDeps = defaultDeps,
+): Promise<{ source: ChapterSource; drafts: ChapterDraft[] } | null> {
+  let nav: PdfNavigation = { outline: [], pageLabels: null };
+  try {
+    nav = await deps.readNavigation(input.buffer);
+  } catch (err) {
+    console.warn('[chapters] falha ao ler a navegação do PDF', err);
+  }
+
+  const fromOutline = outlineToDrafts(nav.outline);
+  if (fromOutline && isValidChapterSequence(fromOutline, input.totalPages, 2)) {
+    return { source: 'OUTLINE', drafts: fromOutline };
+  }
+
+  const fromAi = await askModel(input, nav, deps);
+  if (fromAi && isValidChapterSequence(fromAi, input.totalPages, 2)) {
+    return { source: 'AI', drafts: fromAi };
+  }
+  return null;
+}
+
+async function saveDrafts(
+  materialId: string,
+  drafts: ChapterDraft[],
+  totalPages: number,
+  source: ChapterSource,
+  deps: ChapterExtractionDeps,
+): Promise<ChapterSaveResult> {
+  const oldLinks = await deps.repo.listChapterLinks(materialId);
+  const { relinks, lostLessonLinks } = relinkByOrder(oldLinks, drafts.length);
+  const rows = toChapterRows(drafts, totalPages);
+  const assignments = buildChunkAssignments(rows, totalPages);
+  const chapters = await deps.repo.replaceChapters(materialId, rows, source, relinks, assignments);
+  return { source, chapters, lostLessonLinks };
+}
+
+export async function extractAndSaveChapters(
+  materialId: string,
+  input: ExtractionInput,
+  deps: ChapterExtractionDeps = defaultDeps,
+): Promise<ChapterSaveResult> {
+  const found = await extractChapterDrafts(input, deps);
+  if (!found) {
+    return { source: null, chapters: await deps.repo.listChapters(materialId), lostLessonLinks: 0 };
+  }
+  return saveDrafts(materialId, found.drafts, input.totalPages, found.source, deps);
+}
+
+type MaterialRecord = NonNullable<Awaited<ReturnType<ChapterExtractionDeps['materials']['findMaterial']>>>;
+
+async function loadPdfMaterial(materialId: string, deps: ChapterExtractionDeps): Promise<MaterialRecord> {
+  const material = await deps.materials.findMaterial(materialId);
+  if (!material) throw new DomainError(404, 'Material não encontrado.');
+  const isPdf =
+    material.mimeType === 'application/pdf' || (material.originalFilename ?? '').toLowerCase().endsWith('.pdf');
+  if (!isPdf) throw new DomainError(400, CHAPTERS_PDF_ONLY);
+  return material;
+}
+
+export async function reextractMaterialChapters(
+  materialId: string,
+  deps: ChapterExtractionDeps = defaultDeps,
+): Promise<ChapterSaveResult> {
+  const material = await loadPdfMaterial(materialId, deps);
+  const { buffer } = await deps.files.getFileBuffer(material.filePath);
+  const parsed = await parseDocumentFile(buffer, material.originalFilename ?? 'material.pdf', {
+    maxPages: CHAPTER_TOC_PAGES,
+    skipOcr: true,
+  });
+  return extractAndSaveChapters(materialId, { buffer, pages: parsed.pages, totalPages: material.totalPages }, deps);
+}
+
+export async function replaceManualChapters(
+  materialId: string,
+  drafts: ChapterDraft[],
+  deps: ChapterExtractionDeps = defaultDeps,
+): Promise<ChapterSaveResult> {
+  const material = await loadPdfMaterial(materialId, deps);
+  if (!isValidChapterSequence(drafts, material.totalPages, 0)) {
+    throw new DomainError(400, `As páginas iniciais devem ser crescentes e estar entre 1 e ${material.totalPages}.`);
+  }
+  return saveDrafts(materialId, drafts, material.totalPages, 'MANUAL', deps);
+}
+
+export function listMaterialChapters(
+  materialId: string,
+  deps: ChapterExtractionDeps = defaultDeps,
+): Promise<ChapterDTO[]> {
+  return deps.repo.listChapters(materialId);
+}
