@@ -38,6 +38,9 @@ type UiStep = TimeScriptItem & { uiKey: string };
 let stepKeyCounter = 0;
 const withKey = (step: TimeScriptItem): UiStep => ({ ...step, uiKey: `step-${stepKeyCounter++}` });
 
+// Mesma normalização que o submit aplica antes de enviar.
+const normalizeResources = (text: string) => text.split('\n').map((r) => r.trim()).filter(Boolean);
+
 type Props = { lesson: LessonItem; onSaved: () => void };
 
 export function LessonEditor({ lesson, onSaved }: Props) {
@@ -92,10 +95,10 @@ export function LessonEditor({ lesson, onSaved }: Props) {
       dailyObjective !== lesson.dailyObjective ||
       methodology !== lesson.methodology ||
       fixationExercise !== lesson.fixationExercise ||
-      resources !== lesson.resourcesNeeded.join('\n') ||
+      normalizeResources(resources).join('\n') !== lesson.resourcesNeeded.join('\n') ||
       steps.map(sig).join('|') !== lesson.timeScript.map(sig).join('|') ||
-      media.type !== lesson.mediaType ||
-      media.url !== lesson.mediaUrl ||
+      (media.type ?? LESSON_MEDIA_TYPE.NONE) !== (lesson.mediaType ?? LESSON_MEDIA_TYPE.NONE) ||
+      (media.url ?? null) !== (lesson.mediaUrl ?? null) ||
       selectionKey !== savedKey
     );
   }
@@ -148,7 +151,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
         dailyObjective,
         methodology,
         fixationExercise,
-        resourcesNeeded: resources.split('\n').map((r) => r.trim()).filter(Boolean),
+        resourcesNeeded: normalizeResources(resources),
         timeScript: steps.map(({ uiKey: _uiKey, socraticQuestion, ...step }) => (socraticQuestion ? { ...step, socraticQuestion } : step)),
         mediaType: media.type ?? LESSON_MEDIA_TYPE.NONE,
         // Uploaded media is managed by the upload endpoint only.

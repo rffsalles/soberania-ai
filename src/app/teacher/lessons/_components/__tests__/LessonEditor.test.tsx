@@ -202,6 +202,18 @@ describe('LessonEditor', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === `${BASE}/status`)).toBe(true));
   });
 
+  it('estado salvo normalizado (mídia null/NONE, recursos com linhas vazias) não é "não salvo"', () => {
+    render(
+      <LessonEditor
+        lesson={makeLesson({ topicTitle: 'Modelagem', dailyObjective: 'Obj', timeScript: GENERATED.timeScript, resourcesNeeded: ['A'], mediaType: 'NONE' as never })}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Recursos necessários (um por linha)'), { target: { value: 'A\n\n  ' } });
+    expect((screen.getByRole('button', { name: 'Publicar' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText('Salve as alterações antes de publicar.')).toBeNull();
+  });
+
   it('aula publicada mostra badge "Publicada" e botão "Despublicar"', () => {
     render(<LessonEditor lesson={makeLesson({ status: 'PUBLISHED' })} onSaved={() => {}} />);
     expect(screen.getByText('Publicada')).toBeTruthy();
