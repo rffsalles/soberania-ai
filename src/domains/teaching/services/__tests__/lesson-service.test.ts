@@ -4,6 +4,7 @@ import { INSTITUTION_TIMEZONE, LESSON_TEXT_MAX_LENGTH, LESSON_TITLE_MAX_LENGTH }
 import { localDateTimeToUtc, toLocalDateTimeInput } from '@/lib/timezone';
 import {
   openLessonMedia,
+  setLessonStatus,
   syncAgendaForLesson,
   syncAgendasForSchedule,
   updateLesson,
@@ -18,6 +19,10 @@ const otherStudent = { id: 's2', role: Role.STUDENT, classId: 'c9' };
 
 const baseLesson = (teacherId: string): LessonWithContext => ({
   id: 'own',
+  classNumber: 1,
+  status: 'PUBLISHED',
+  dailyObjective: 'Obj',
+  timeScript: [{ title: 'Abertura', timeSeconds: 600 }],
   topicTitle: 'Aula 1',
   classDate: new Date('2026-03-02T13:00:00Z'),
   mediaType: null,
@@ -26,7 +31,7 @@ const baseLesson = (teacherId: string): LessonWithContext => ({
   courseSchedule: { teachingPlan: { teacherId, subject: { id: 'sub1', classId: 'c1', discipline: { name: 'BD' } } } },
 });
 
-function makeDeps(opts: { teacherId?: string; s3ObjectKey?: string | null; mediaType?: string | null; mediaUrl?: string | null; failDelete?: boolean } = {}) {
+function makeDeps(opts: { lesson?: Partial<LessonWithContext>; teacherId?: string; s3ObjectKey?: string | null; mediaType?: string | null; mediaUrl?: string | null; failDelete?: boolean } = {}) {
   const calls: Record<string, unknown[]> = {};
   const rec = (name: string, arg: unknown) => {
     (calls[name] ||= []).push(arg);
@@ -37,6 +42,7 @@ function makeDeps(opts: { teacherId?: string; s3ObjectKey?: string | null; media
     s3ObjectKey: opts.s3ObjectKey ?? null,
     mediaType: opts.mediaType ?? null,
     mediaUrl: opts.mediaUrl ?? null,
+    ...opts.lesson,
   };
   const deps: LessonDeps = {
     repo: {
@@ -44,6 +50,12 @@ function makeDeps(opts: { teacherId?: string; s3ObjectKey?: string | null; media
       updateLesson: async (id, data) => {
         rec('updateLesson', { id, data });
         return { ...lessonRow, ...(data as object) } as LessonWithContext;
+      },
+      setAgendaStatusByLessonPlanId: async (lessonPlanId, status) => {
+        rec('setAgendaStatus', { lessonPlanId, status });
+        const existing = agendas.get(lessonPlanId);
+        if (existing) agendas.set(lessonPlanId, { ...existing, status });
+        return { count: existing ? 1 : 0 };
       },
       upsertAgendaByLessonPlanId: async (lessonPlanId, data) => {
         const existing = agendas.get(lessonPlanId);
@@ -286,5 +298,47 @@ describe('syncAgendasForSchedule', () => {
     expect(result).toEqual({ synced: 2, failed: 1 });
     expect(synced).toEqual(['a', 'c']);
     error.mockRestore();
+  });
+});
+
+describe('lesson-service status', () => {
+  it('aula DRAFT não cria agenda ao sincronizar', async () => {
+    const { deps, agendas } = makeDeps();
+    await syncAgendaForLesson({ ...baseLesson('t1'), status: 'DRAFT' }, deps);
+    expect(agendas.size).toBe(0);
+  });
+
+  it('publicar exige título, objetivo e etapa, nesta ordem', async () => {
+    const reason = async (lesson: Partial<LessonWithContext>) => {
+      const { deps } = makeDeps({ lesson: { status: 'DRAFT', ...lesson } });
+      return setLessonStatus('own', teacher, 'PUBLISHED', deps).catch((e) => e);
+    };
+    const a = await reason({ topicTitle: 'Aula 1', dailyObjective: '', timeScript: [] });
+    expect(a).toMatchObject({ status: 400, message: 'Defina um título diferente de "Aula N".' });
+    const b = await reason({ topicTitle: 'Banco', dailyObjective: '  ', timeScript: [] });
+    expect(b).toMatchObject({ status: 400, message: 'Preencha o objetivo da aula.' });
+    const c = await reason({ topicTitle: 'Banco', dailyObjective: 'Obj', timeScript: [] });
+    expect(c).toMatchObject({ status: 400, message: 'Adicione ao menos uma etapa ao roteiro.' });
+  });
+
+  it('despublicar cancela, republicar volta a SCHEDULED; editar rascunho não cria agenda', async () => {
+    const { deps, agendas, calls } = makeDeps({ lesson: { topicTitle: 'Banco' } });
+    await syncAgendaForLesson(baseLesson('t1'), deps);
+    await setLessonStatus('own', teacher, 'DRAFT', deps);
+    expect(calls.setAgendaStatus.at(-1)).toEqual({ lessonPlanId: 'own', status: 'CANCELLED' });
+    expect(agendas.get('own')!.status).toBe('CANCELLED');
+
+    const draft = makeDeps({ lesson: { topicTitle: 'Banco', status: 'DRAFT' } });
+    await updateLesson('own', teacher, { dailyObjective: 'Novo' }, draft.deps);
+    expect(draft.agendas.size).toBe(0);
+
+    await setLessonStatus('own', teacher, 'PUBLISHED', deps);
+    expect(calls.setAgendaStatus.at(-1)).toEqual({ lessonPlanId: 'own', status: 'SCHEDULED' });
+    expect(agendas.get('own')!.status).toBe('SCHEDULED');
+  });
+
+  it('setLessonStatus respeita o dono (403)', async () => {
+    const { deps } = makeDeps({ teacherId: 't2' });
+    await expect(setLessonStatus('own', teacher, 'DRAFT', deps)).rejects.toMatchObject({ status: 403 });
   });
 });

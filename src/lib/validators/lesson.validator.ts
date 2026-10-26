@@ -15,6 +15,8 @@ import {
 import { localDateTimeToUtc } from '@/lib/timezone';
 import { timeScriptSchema } from '@/domains/teaching/time-script';
 
+export const lessonStatusSchema = z.object({ status: z.enum(['DRAFT', 'PUBLISHED']) });
+
 const INVALID_LESSON = 'Dados da aula inválidos.';
 const INVALID_CLASS_DATE = 'Data da aula inválida.';
 /** Valor de `<input type="datetime-local">`: horário de parede no fuso da instituição. */

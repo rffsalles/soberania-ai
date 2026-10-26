@@ -1,11 +1,12 @@
 import path from 'path';
-import { AgendaType, Role, type Prisma } from '@prisma/client';
+import { AgendaStatus, AgendaType, LessonStatus, Role, type Prisma } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { API_ROUTES } from '@/lib/constants/routes';
 import {
   LESSON_DEFAULT_DURATION_MINUTES,
   LESSON_MEDIA_CONTENT_TYPES,
   LESSON_MEDIA_TYPE,
+  LESSON_STATUS,
   MEDIA_MAX_UPLOAD_MB,
 } from '@/lib/constants/teaching';
 import { parseRangeHeader } from '@/lib/http-range';
@@ -19,6 +20,7 @@ import {
 import * as agendaRepo from '@/domains/agendas/services/agenda-repository';
 import * as lessonRepo from './lesson-plan-repository';
 import { assertOwner } from '../ownership';
+import { publishBlockReason } from '../lesson-publish';
 
 const BYTES_PER_MB = 1024 * 1024;
 const MS_PER_MINUTE = 60 * 1000;
@@ -28,6 +30,10 @@ export type LessonActor = { id: string; role: Role; classId: string | null };
 
 export type LessonWithContext = {
   id: string;
+  classNumber: number;
+  status: LessonStatus;
+  dailyObjective: string;
+  timeScript: Prisma.JsonValue;
   topicTitle: string;
   classDate: Date;
   mediaType: string | null;
@@ -43,6 +49,7 @@ export type LessonDeps = {
     findLessonWithContext(id: string): Promise<LessonWithContext | null>;
     updateLesson(id: string, data: Prisma.LessonPlanUncheckedUpdateInput): Promise<LessonWithContext>;
     upsertAgendaByLessonPlanId(lessonPlanId: string, data: agendaRepo.LessonAgendaData): Promise<unknown>;
+    setAgendaStatusByLessonPlanId(lessonPlanId: string, status: AgendaStatus): Promise<{ count: number }>;
   };
   storage: {
     uploadFile(buffer: Buffer, name: string, mime: string, prefix?: StoragePrefix): Promise<UploadResult>;
@@ -57,6 +64,7 @@ const defaultDeps: LessonDeps = {
     findLessonWithContext: lessonRepo.findLessonWithContext,
     updateLesson: lessonRepo.updateLessonWithContext,
     upsertAgendaByLessonPlanId: agendaRepo.upsertAgendaByLessonPlanId,
+    setAgendaStatusByLessonPlanId: agendaRepo.setAgendaStatusByLessonPlanId,
   },
   storage: storageService,
 };
@@ -70,8 +78,9 @@ async function loadOwned(id: string, user: LessonActor, deps: LessonDeps) {
   return lesson;
 }
 
-/** Creates or updates the CLASSROOM agenda of a dated lesson (one agenda per lesson plan). */
+/** Creates or updates the CLASSROOM agenda of a published lesson (one agenda per lesson plan); drafts get none. */
 export async function syncAgendaForLesson(lesson: LessonWithContext, deps: LessonDeps = defaultDeps) {
+  if (lesson.status !== LESSON_STATUS.PUBLISHED) return;
   const { teacherId, subject } = lesson.courseSchedule.teachingPlan;
   await deps.repo.upsertAgendaByLessonPlanId(lesson.id, {
     title: lesson.topicTitle,
@@ -147,6 +156,27 @@ export async function updateLesson(id: string, user: LessonActor, raw: unknown, 
   const updated = await deps.repo.updateLesson(id, data);
   if (leavingUpload && existing.s3ObjectKey) await discardStoredMedia(existing.s3ObjectKey, deps);
   await syncAgendaForLesson(updated, deps);
+  return updated;
+}
+
+export async function setLessonStatus(
+  id: string,
+  user: LessonActor,
+  status: LessonStatus,
+  deps: LessonDeps = defaultDeps
+): Promise<LessonWithContext> {
+  const lesson = await loadOwned(id, user, deps);
+  if (status === LESSON_STATUS.PUBLISHED) {
+    const reason = publishBlockReason(lesson);
+    if (reason) throw new DomainError(400, reason);
+  }
+  const updated = await deps.repo.updateLesson(id, { status });
+  if (status === LESSON_STATUS.PUBLISHED) {
+    await syncAgendaForLesson(updated, deps);
+    await deps.repo.setAgendaStatusByLessonPlanId(id, AgendaStatus.SCHEDULED);
+  } else {
+    await deps.repo.setAgendaStatusByLessonPlanId(id, AgendaStatus.CANCELLED);
+  }
   return updated;
 }
 

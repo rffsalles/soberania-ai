@@ -15,6 +15,9 @@ export const NDE_COMPLIANCE_STATUS = {
 } as const;
 export const DEFAULT_NDE_COMPLIANCE_STATUS = NDE_COMPLIANCE_STATUS.PENDING;
 
+export const LESSON_STATUS = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' } as const;
+export type LessonStatusValue = (typeof LESSON_STATUS)[keyof typeof LESSON_STATUS];
+
 export const LESSON_MEDIA_TYPE = { NONE: 'NONE', YOUTUBE: 'YOUTUBE', S3_UPLOAD: 'S3_UPLOAD' } as const;
 export type LessonMediaType = (typeof LESSON_MEDIA_TYPE)[keyof typeof LESSON_MEDIA_TYPE];
 
