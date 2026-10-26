@@ -61,7 +61,14 @@ export function findScheduleForDistribution(id: string) {
       },
       lessonPlans: {
         orderBy: { classNumber: 'asc' },
-        select: { id: true, classNumber: true, classDate: true, status: true },
+        select: {
+          id: true,
+          classNumber: true,
+          classDate: true,
+          status: true,
+          topicTitle: true,
+          chapters: { select: { chapterId: true } },
+        },
       },
     },
   });
