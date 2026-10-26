@@ -4,7 +4,7 @@ import * as React from 'react';
 import { API_ROUTES } from '@/lib/constants/routes';
 import { requestJson, RequestError } from '@/components/assessments/use-assessments';
 import type { TimeScriptItem } from '@/domains/teaching/time-script';
-import type { LessonMediaType } from '@/lib/constants/teaching';
+import type { LessonMediaType, LessonStatusValue } from '@/lib/constants/teaching';
 
 export type LessonItem = {
   id: string;
@@ -18,6 +18,9 @@ export type LessonItem = {
   fixationExercise: string;
   mediaType: LessonMediaType | null;
   mediaUrl: string | null;
+  status: LessonStatusValue;
+  chapters: { chapterId: string; chapter: { order: number } }[];
+  courseSchedule: { teachingPlanId: string };
 };
 
 export type LessonDraft = Pick<
@@ -27,6 +30,7 @@ export type LessonDraft = Pick<
   mediaUrl?: string | null;
   /** `AAAA-MM-DDTHH:mm` no fuso da instituição (valor do datetime-local). */
   classDate?: string;
+  chapterIds?: string[];
 };
 
 const NO_LESSONS: LessonItem[] = [];
@@ -61,6 +65,38 @@ export function useLessons(scheduleId: string | null) {
 
 export async function saveLesson(id: string, draft: LessonDraft): Promise<LessonItem> {
   const body = await requestJson<{ lesson: LessonItem }>(`${API_ROUTES.TEACHER_LESSONS}/${id}`, 'PUT', draft);
+  return body.lesson;
+}
+
+export type GeneratedLesson = {
+  dailyObjective: string;
+  methodology: string;
+  resourcesNeeded: string[];
+  fixationExercise: string;
+  timeScript: TimeScriptItem[];
+  citations: string[];
+};
+
+export async function generateLesson(id: string): Promise<GeneratedLesson> {
+  const body = await requestJson<{ data: GeneratedLesson }>(`${API_ROUTES.TEACHER_LESSONS}/${id}/generate`, 'POST');
+  return body.data;
+}
+
+export async function refineLesson(
+  id: string,
+  body: {
+    field: 'dailyObjective' | 'methodology' | 'fixationExercise' | 'timeScript';
+    stepIndex?: number;
+    instruction: string;
+    current: string;
+  },
+): Promise<string> {
+  const res = await requestJson<{ text: string }>(`${API_ROUTES.TEACHER_LESSONS}/${id}/refine`, 'POST', body);
+  return res.text;
+}
+
+export async function setLessonStatus(id: string, status: LessonStatusValue): Promise<LessonItem> {
+  const body = await requestJson<{ lesson: LessonItem }>(`${API_ROUTES.TEACHER_LESSONS}/${id}/status`, 'PUT', { status });
   return body.lesson;
 }
 
