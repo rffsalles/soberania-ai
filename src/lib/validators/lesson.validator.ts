@@ -17,6 +17,18 @@ import { timeScriptSchema } from '@/domains/teaching/time-script';
 
 export const lessonStatusSchema = z.object({ status: z.enum(['DRAFT', 'PUBLISHED']) });
 
+export const REFINE_FIELDS = ['dailyObjective', 'methodology', 'fixationExercise', 'timeScript'] as const;
+/** `stepIndex` é obrigatório para `timeScript` (descrição de uma etapa) e proibido nos demais campos. */
+export const refineLessonSchema = z
+  .object({
+    field: z.enum(REFINE_FIELDS),
+    stepIndex: z.number().int().min(0).optional(),
+    instruction: z.string().trim().min(1).max(500),
+    current: z.string().max(LESSON_TEXT_MAX_LENGTH),
+  })
+  .refine((b) => (b.field === 'timeScript') === (b.stepIndex !== undefined));
+export type RefineLessonInput = z.infer<typeof refineLessonSchema>;
+
 const INVALID_LESSON = 'Dados da aula inválidos.';
 const INVALID_CLASS_DATE = 'Data da aula inválida.';
 /** Valor de `<input type="datetime-local">`: horário de parede no fuso da instituição. */

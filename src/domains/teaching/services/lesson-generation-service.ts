@@ -4,10 +4,12 @@ import { executeHybridSearch, formatCitation } from '@/domains/rag/hybrid-search
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
 import {
   buildLessonGenerationMessages,
+  buildLessonRefineMessages,
   parseLessonGeneration,
   stepsToTimeScript,
   type GeneratedLessonText,
 } from '@/domains/agents/prompts/lesson-generation-prompt';
+import type { RefineLessonInput } from '@/lib/validators/lesson.validator';
 import { LESSON_DEFAULT_DURATION_MINUTES, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
@@ -107,4 +109,67 @@ export async function generateLessonContent(
 
   const { steps: _steps, ...text } = generated;
   return { ...text, timeScript: timeScript.data, citations: Array.from(new Set(chunks.map(formatCitation))) };
+}
+
+export const REFINE_TEMPERATURE = 0.4;
+const REFINE_MAX_TOKENS = 600;
+const REFINE_TOP_K = 2;
+
+async function askRefine(
+  messages: ReturnType<typeof buildLessonRefineMessages>,
+  deps: LessonGenerationDeps
+): Promise<string | null> {
+  try {
+    let text = '';
+    let fallback = false;
+    for await (const chunk of deps.streamChat(messages, {
+      temperature: REFINE_TEMPERATURE,
+      maxTokens: REFINE_MAX_TOKENS,
+    })) {
+      text += chunk.token;
+      if (chunk.fallback) fallback = true;
+    }
+    return fallback ? null : text.trim() || null;
+  } catch (err) {
+    console.warn('[lesson-generation] falha ao refinar o campo com a IA', err);
+    return null;
+  }
+}
+
+/** Refina um campo da aula conforme a instrução do professor, com 2 trechos dos capítulos. Não grava nada. */
+export async function refineLessonField(
+  lessonId: string,
+  user: PlanActor,
+  input: RefineLessonInput,
+  deps: LessonGenerationDeps = defaultDeps
+): Promise<{ text: string }> {
+  const lesson = await deps.findLesson(lessonId);
+  if (!lesson) throw new DomainError(404, 'Plano de aula não encontrado.');
+  const plan = lesson.courseSchedule.teachingPlan;
+  assertOwner(user, plan.teacherId);
+  if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
+
+  const allowedChapterIds = lesson.chapters.map((c) => c.chapter.id);
+  const { chunks } = await deps.search({
+    query: `${input.instruction} ${lesson.topicTitle}`,
+    allowedChapterIds,
+    topK: REFINE_TOP_K,
+  });
+  if (chunks.length === 0) throw new DomainError(422, NO_INDEXED_CHAPTER_CONTENT);
+
+  const text = await askRefine(
+    buildLessonRefineMessages({
+      subjectName: plan.subject.discipline.name,
+      topicTitle: lesson.topicTitle,
+      chapters: lesson.chapters,
+      field: input.field,
+      stepIndex: input.stepIndex,
+      instruction: input.instruction,
+      current: input.current,
+      chunks,
+    }),
+    deps
+  );
+  if (!text) throw new DomainError(503, AI_UNAVAILABLE_MESSAGE);
+  return { text };
 }

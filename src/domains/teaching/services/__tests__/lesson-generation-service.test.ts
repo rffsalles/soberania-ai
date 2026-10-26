@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
 import {
   generateLessonContent,
+  refineLessonField,
   NO_INDEXED_CHAPTER_CONTENT,
   type LessonGenerationDeps,
 } from '../lesson-generation-service';
@@ -15,9 +16,9 @@ const chunk: DidacticChunk = {
   pageNumber: 41, content: 'Texto.',
 };
 
-function lesson(opts: { chapters?: boolean; teacherId?: string } = {}) {
+function lesson(opts: { chapters?: boolean; teacherId?: string; topicTitle?: string } = {}) {
   return {
-    id: 'l1', classNumber: 3, topicTitle: 'Modelagem',
+    id: 'l1', classNumber: 3, topicTitle: opts.topicTitle ?? 'Modelagem',
     courseSchedule: {
       totalClasses: 20,
       teachingPlan: {
@@ -115,5 +116,47 @@ describe('generateLessonContent', () => {
       await expect(generateLessonContent('l1', teacher, makeDeps(o).deps)).rejects.toMatchObject({ status: 503, message: AI_UNAVAILABLE_MESSAGE });
     }
     warn.mockRestore();
+  });
+});
+
+describe('refineLessonField', () => {
+  const input = { field: 'methodology' as const, instruction: 'mais prática', current: 'Aula expositiva' };
+  const er = () => lesson({ topicTitle: 'Modelo ER' });
+
+  it('refino usa 2 chunks dos capítulos, temperatura 0.4 e devolve o texto aparado', async () => {
+    const { deps, search, streamChat } = makeDeps({ lesson: er(), text: '  Metodologia refinada \n' });
+    const r = await refineLessonField('l1', teacher, input, deps);
+    expect(r).toEqual({ text: 'Metodologia refinada' });
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ query: 'mais prática Modelo ER', topK: 2, allowedChapterIds: ['ch3'] }));
+    expect(streamChat.mock.calls[0][1]).toMatchObject({ temperature: 0.4, maxTokens: 600 });
+  });
+
+  it('timeScript refina a descrição da etapa stepIndex + 1', async () => {
+    const { deps, streamChat } = makeDeps({ lesson: er(), text: 'Nova descrição' });
+    const r = await refineLessonField('l1', teacher, { field: 'timeScript', stepIndex: 1, instruction: 'mais curta', current: 'Antiga' }, deps);
+    expect(r).toEqual({ text: 'Nova descrição' });
+    const user = streamChat.mock.calls[0][0].find((m: { role: string }) => m.role === 'user').content as string;
+    expect(user).toContain('etapa 2');
+  });
+
+  it('sem chunks → 422; sem chamar o modelo', async () => {
+    const { deps, streamChat } = makeDeps({ lesson: er(), chunks: [] });
+    await expect(refineLessonField('l1', teacher, input, deps)).rejects.toMatchObject({ status: 422, message: NO_INDEXED_CHAPTER_CONTENT });
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it('resposta vazia, fallback ou exceção → 503', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const o of [{ text: '   ' }, { fallback: true }, { throws: true }]) {
+      await expect(refineLessonField('l1', teacher, input, makeDeps({ lesson: er(), ...o }).deps)).rejects.toMatchObject({ status: 503, message: AI_UNAVAILABLE_MESSAGE });
+    }
+    warn.mockRestore();
+  });
+
+  it('aula inexistente → 404; sem capítulos → 400; outro professor → 403', async () => {
+    await expect(refineLessonField('x', teacher, input, makeDeps({ lesson: null }).deps)).rejects.toMatchObject({ status: 404 });
+    await expect(refineLessonField('l1', teacher, input, makeDeps({ lesson: lesson({ chapters: false }) }).deps)).rejects.toMatchObject({ status: 400, message: NO_LESSON_CHAPTERS });
+    await expect(refineLessonField('l1', teacher, input, makeDeps({ lesson: lesson({ teacherId: 't2' }) }).deps)).rejects.toMatchObject({ status: 403 });
   });
 });
