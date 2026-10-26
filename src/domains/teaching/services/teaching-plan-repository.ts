@@ -58,3 +58,29 @@ export function findPlanForAssessment(id: string) {
     select: { id: true, teacherId: true, subjectId: true, syllabus: true, unitsContent: true, subject: { select: { discipline: { select: { name: true } } } } },
   });
 }
+
+export async function listPlanChapters(planId: string) {
+  const refs = await db.teachingPlanReference.findMany({
+    where: { teachingPlanId: planId },
+    select: {
+      kind: true,
+      material: {
+        select: {
+          id: true,
+          title: true,
+          author: true,
+          chapters: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, startPage: true, endPage: true } },
+        },
+      },
+    },
+  });
+  return refs
+    .map((r) => ({
+      materialId: r.material.id,
+      title: r.material.title,
+      author: r.material.author,
+      kind: r.kind as 'BASIC' | 'COMPLEMENTARY',
+      chapters: r.material.chapters,
+    }))
+    .sort((a, b) => (a.kind === b.kind ? a.title.localeCompare(b.title, 'pt-BR') : a.kind === 'BASIC' ? -1 : 1));
+}
