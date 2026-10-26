@@ -9,6 +9,7 @@ export function listLessonsBySchedule(filter: { scheduleId?: string; teacherId?:
     },
     include: {
       courseSchedule: { include: { teachingPlan: { include: { subject: { include: { discipline: true } } } } } },
+      chapters: { select: { chapterId: true, chapter: { select: { order: true } } } },
     },
     orderBy: { classNumber: 'asc' },
   });

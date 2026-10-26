@@ -2,16 +2,21 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowRight, Calendar as CalendarIcon, Plus, RefreshCw } from 'lucide-react';
+import { ArrowRight, Calendar as CalendarIcon, Lock, Plus, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ROUTES } from '@/lib/constants/routes';
 import { useTeacherPlans } from '@/components/assessments/use-assessments';
-import { syncSchedule, useScheduleLessons, useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
+import { distributeChapters, syncSchedule, useScheduleLessons, useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
+import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
+import { NO_PLAN_CHAPTERS, NO_SYNCED_LESSONS } from '@/lib/constants/teaching';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
 import { planToComboboxItem } from '@/components/teaching/plan-combobox-item';
 import { MeetingsTable } from './MeetingsTable';
 import { ScheduleForm } from './ScheduleForm';
+
+const DISTRIBUTE_ERROR = 'Não foi possível distribuir os capítulos. Tente novamente.';
+const DISTRIBUTE_CONFIRM = 'Algumas aulas já têm capítulos. Substituir a distribuição das aulas em rascunho?';
 
 const SYNC_ERROR = 'Não foi possível sincronizar o calendário. Tente novamente.';
 
@@ -28,6 +33,9 @@ export function SchedulesPage() {
   const [syncError, setSyncError] = React.useState<string | null>(null);
   const { schedules, isLoading, error, reload } = useSchedules(planId);
   const { lessons, reload: reloadLessons } = useScheduleLessons(scheduleId);
+  const [distributing, setDistributing] = React.useState(false);
+  const schedulePlanId = schedules.find((s) => s.id === scheduleId)?.teachingPlanId ?? null;
+  const { books } = usePlanChapters(schedulePlanId);
 
   const planItems = React.useMemo(() => plans.map(planToComboboxItem), [plans]);
   const schedule = schedules.find((s) => s.id === scheduleId) ?? null;
@@ -45,6 +53,26 @@ export function SchedulesPage() {
       setSyncError(err instanceof Error ? err.message : SYNC_ERROR);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  const lockReason =
+    lessons.length === 0 ? NO_SYNCED_LESSONS : !books.some((b) => b.chapters.length > 0) ? NO_PLAN_CHAPTERS : null;
+
+  async function distribute() {
+    if (!scheduleId || lockReason) return;
+    if (lessons.some((l) => l.chapters.length > 0) && !window.confirm(DISTRIBUTE_CONFIRM)) return;
+    setDistributing(true);
+    setSyncError(null);
+    setNotice(null);
+    try {
+      const { updated, skippedPublished } = await distributeChapters(scheduleId);
+      setNotice(`Capítulos distribuídos em ${updated} aulas; ${skippedPublished} aulas publicadas não foram alteradas.`);
+      reloadLessons();
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : DISTRIBUTE_ERROR);
+    } finally {
+      setDistributing(false);
     }
   }
 
@@ -144,6 +172,18 @@ export function SchedulesPage() {
                   <RefreshCw className="h-3.5 w-3.5" />
                   {syncing ? 'Sincronizando...' : 'Sincronizar calendário'}
                 </Button>
+                <span className="flex flex-col items-start gap-1">
+                  <Button variant="outline" size="sm" onClick={distribute} disabled={distributing || lockReason !== null} className="gap-2">
+                    {lockReason ? <Lock className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {distributing ? 'Distribuindo...' : 'Distribuir capítulos com IA'}
+                  </Button>
+                  {lockReason && (
+                    <span className="flex max-w-xs items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      <Lock className="h-3 w-3 shrink-0" />
+                      <span>{lockReason}</span>
+                    </span>
+                  )}
+                </span>
                 <Button asChild size="sm" className="gap-2 bg-brand-teal text-white hover:bg-brand-teal-dark">
                   <Link href={`${ROUTES.TEACHER_LESSONS}?planId=${encodeURIComponent(schedule.teachingPlanId)}&scheduleId=${encodeURIComponent(schedule.id)}`}>
                     Ir para planos de aula <ArrowRight className="h-4 w-4" />

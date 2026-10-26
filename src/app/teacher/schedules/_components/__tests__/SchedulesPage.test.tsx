@@ -40,17 +40,29 @@ const plans = [
 vi.mock('@/components/assessments/use-assessments', () => ({
   useTeacherPlans: () => ({ plans, isLoading: false, error: null }),
 }));
+const lessonsState = vi.hoisted(() => ({ lessons: [] as unknown[], reloadLessons: vi.fn(), distributeChapters: vi.fn(), books: [] as unknown[] }));
 vi.mock('@/components/teaching/use-schedules', () => ({
   useSchedules: (id: string | null) => useSchedules(id),
-  useScheduleLessons: () => ({ lessons: [], reload: vi.fn() }),
+  useScheduleLessons: () => ({ lessons: lessonsState.lessons, reload: lessonsState.reloadLessons }),
   syncSchedule: vi.fn(),
+  distributeChapters: (id: string) => lessonsState.distributeChapters(id),
+}));
+vi.mock('@/components/teaching/use-plan-chapters', () => ({
+  usePlanChapters: () => ({ books: lessonsState.books, isLoading: false, error: null, reload: vi.fn() }),
 }));
 vi.mock('../ScheduleForm', () => ({ ScheduleForm: () => null }));
-vi.mock('../MeetingsTable', () => ({ MeetingsTable: () => null }));
 
 import { SchedulesPage } from '../SchedulesPage';
 
-afterEach(() => { cleanup(); useSchedules.mockClear(); });
+afterEach(() => {
+  cleanup();
+  useSchedules.mockClear();
+  vi.restoreAllMocks();
+  lessonsState.lessons = [];
+  lessonsState.books = [];
+  lessonsState.reloadLessons.mockClear();
+  lessonsState.distributeChapters.mockReset();
+});
 
 function open() {
   render(<SchedulesPage />);
@@ -95,5 +107,65 @@ describe('SchedulesPage seletor de plano', () => {
     const href = screen.getByRole('link', { name: /Ir para planos de aula/ }).getAttribute('href') ?? '';
     expect(href).toContain('planId=plan-2');
     expect(href).toContain('scheduleId=sch-9');
+  });
+});
+
+const BOOKS = [{ materialId: 'm1', title: 'Livro', author: 'A', kind: 'BASIC', chapters: [{ id: 'ch3', order: 3, title: 'C3', startPage: 1, endPage: 2 }] }];
+const DISTRIBUTE = /Distribuir capítulos com IA/;
+
+function openSchedule() {
+  open();
+  fireEvent.click(screen.getByText('FIS · Física'));
+  fireEvent.click(screen.getByRole('button', { name: /20 aulas/ }));
+}
+
+describe('SchedulesPage distribuição de capítulos', () => {
+  it('distribuir fica bloqueado sem aulas sincronizadas e mostra o motivo', () => {
+    lessonsState.books = BOOKS;
+    openSchedule();
+    expect((screen.getByRole('button', { name: DISTRIBUTE }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Sincronize o calendário antes de distribuir os capítulos.')).toBeTruthy();
+  });
+
+  it('distribuir fica bloqueado quando nenhum livro do plano tem capítulos', () => {
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [] }];
+    lessonsState.books = [{ ...BOOKS[0], chapters: [] }];
+    openSchedule();
+    expect((screen.getByRole('button', { name: DISTRIBUTE }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Nenhum livro do plano tem capítulos cadastrados.')).toBeTruthy();
+  });
+
+  it('com aulas já mapeadas pede confirmação; cancelar não chama a API', () => {
+    lessonsState.books = BOOKS;
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3 } }] }];
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
+    expect(confirm).toHaveBeenCalledWith('Algumas aulas já têm capítulos. Substituir a distribuição das aulas em rascunho?');
+    expect(lessonsState.distributeChapters).not.toHaveBeenCalled();
+  });
+
+  it('sem capítulos nas aulas não pede confirmação e sucesso mostra atualizadas e puladas', async () => {
+    lessonsState.books = BOOKS;
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [] }];
+    lessonsState.distributeChapters.mockResolvedValue({ updated: 4, skippedPublished: 2 });
+    const confirm = vi.spyOn(window, 'confirm');
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
+    const status = await screen.findByRole('status');
+    expect(status.textContent).toBe('Capítulos distribuídos em 4 aulas; 2 aulas publicadas não foram alteradas.');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(lessonsState.distributeChapters).toHaveBeenCalledWith('sch-9');
+    expect(lessonsState.reloadLessons).toHaveBeenCalled();
+  });
+
+  it('erro 503 mostra a mensagem do servidor em alerta', async () => {
+    lessonsState.books = BOOKS;
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [] }];
+    lessonsState.distributeChapters.mockRejectedValue(new Error('IA indisponível'));
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('IA indisponível');
   });
 });

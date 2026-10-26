@@ -4,7 +4,14 @@ import * as React from 'react';
 import { API_ROUTES } from '@/lib/constants/routes';
 import { requestJson } from '@/components/assessments/use-assessments';
 
-export type ScheduleLesson = { id: string; classNumber: number };
+export type ScheduleLesson = {
+  id: string;
+  classNumber: number;
+  status: 'DRAFT' | 'PUBLISHED';
+  chapters: { chapterId: string; chapter: { order: number } }[];
+};
+
+export type DistributionResult = { updated: number; skippedPublished: number };
 
 export type ScheduleItem = {
   id: string;
@@ -73,5 +80,10 @@ export async function createSchedule(draft: ScheduleDraft) {
 
 export async function syncSchedule(scheduleId: string): Promise<SyncResult> {
   const body = await requestJson<{ result: SyncResult }>(`${API_ROUTES.TEACHER_SCHEDULES}/${scheduleId}/sync`, 'POST');
+  return body.result;
+}
+
+export async function distributeChapters(scheduleId: string): Promise<DistributionResult> {
+  const body = await requestJson<{ result: DistributionResult }>(`${API_ROUTES.TEACHER_SCHEDULES}/${scheduleId}/distribute-chapters`, 'POST');
   return body.result;
 }

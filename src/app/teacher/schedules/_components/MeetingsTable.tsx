@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { generateMeetings } from '@/domains/teaching/schedule-generator';
+import { formatChapterShortList } from '@/components/teaching/chapter-combobox-item';
 import type { ScheduleItem, ScheduleLesson } from '@/components/teaching/use-schedules';
 
 const ISO_DATE_LENGTH = 10;
@@ -31,6 +32,7 @@ export function MeetingsTable({ schedule, lessons }: Props) {
     [schedule]
   );
   const created = new Set(lessons.map((l) => l.classNumber));
+  const chaptersByClass = new Map(lessons.map((l) => [l.classNumber, formatChapterShortList(l.chapters.map((c) => c.chapter.order))]));
 
   return (
     <table className="w-full text-sm">
@@ -39,6 +41,7 @@ export function MeetingsTable({ schedule, lessons }: Props) {
           <th className="py-2">Aula</th>
           <th className="py-2">Data</th>
           <th className="py-2">Plano de aula</th>
+          <th className="py-2">Capítulos</th>
         </tr>
       </thead>
       <tbody>
@@ -51,6 +54,7 @@ export function MeetingsTable({ schedule, lessons }: Props) {
                 {created.has(m.classNumber) ? LESSON_CREATED : LESSON_PENDING}
               </Badge>
             </td>
+            <td className="py-2">{chaptersByClass.get(m.classNumber) ?? '—'}</td>
           </tr>
         ))}
       </tbody>
