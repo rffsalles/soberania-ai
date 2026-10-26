@@ -10,9 +10,17 @@ const tx = {
   $executeRaw: vi.fn().mockResolvedValue(0),
 };
 const $transaction = vi.fn(async (fn: (t: typeof tx) => unknown, _opts?: unknown) => fn(tx));
-vi.mock('@/lib/db', () => ({ db: { $transaction: (fn: never, o: never) => $transaction(fn, o) } }));
+const lessonPlanChapterFindMany = vi.fn();
+const userFindMany = vi.fn();
+vi.mock('@/lib/db', () => ({
+  db: {
+    $transaction: (fn: never, o: never) => $transaction(fn, o),
+    lessonPlanChapter: { findMany: (a: never) => lessonPlanChapterFindMany(a) },
+    user: { findMany: (a: never) => userFindMany(a) },
+  },
+}));
 
-import { replaceChapters } from '../chapter-repository';
+import { listChapterLinkDetails, replaceChapters } from '../chapter-repository';
 
 describe('replaceChapters', () => {
   it('usa timeout de 60 s, cria capítulos em lote e só reescreve chunks alterados', async () => {
@@ -27,5 +35,30 @@ describe('replaceChapters', () => {
     expect(tx.materialChapter.createManyAndReturn).toHaveBeenCalledTimes(1);
     const sql = (tx.$executeRaw.mock.calls[0][0] as string[]).join('?');
     expect(sql).toContain('IS DISTINCT FROM');
+  });
+});
+
+describe('listChapterLinkDetails', () => {
+  it('listChapterLinkDetails deduplica por aula e resolve o nome do professor', async () => {
+    const plan = (id: string, teacherId: string, classNumber: number, topicTitle: string) => ({
+      lessonPlan: {
+        id,
+        classNumber,
+        topicTitle,
+        courseSchedule: {
+          teachingPlan: { teacherId, subject: { discipline: { name: 'BD' }, class: { name: 'A' } } },
+        },
+      },
+    });
+    lessonPlanChapterFindMany.mockResolvedValue([
+      plan('l1', 't1', 2, 'Modelagem'),
+      plan('l1', 't1', 2, 'Modelagem'),
+      plan('l9', 't2', 4, 'Joins'),
+    ]);
+    userFindMany.mockResolvedValue([{ id: 't2', name: 'Ana' }]);
+    const r = await listChapterLinkDetails('m1');
+    expect(r).toHaveLength(2);
+    expect(r.find((x) => x.lessonPlanId === 'l9')).toMatchObject({ teacherId: 't2', professor: 'Ana', disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins' });
+    expect(r.find((x) => x.lessonPlanId === 'l1')?.professor).toBe('—');
   });
 });

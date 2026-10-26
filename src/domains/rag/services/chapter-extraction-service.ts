@@ -1,4 +1,4 @@
-import type { ChapterSource } from '@prisma/client';
+import { Role, type ChapterSource } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { loggedStreamChat, type StreamChatFn } from '@/domains/telemetry/services/logged-stream-chat';
 import { parseDocumentFile, readPdfNavigation } from '@/domains/rag/file-parser';
@@ -19,14 +19,20 @@ import {
   parseChapterExtraction,
 } from '@/domains/agents/prompts/chapter-extraction-prompt';
 import {
+  listChapterLinkDetails,
   listChapterLinks,
   listChapters,
   replaceChapters,
   type ChapterDTO,
+  type ChapterLinkConflict,
 } from '@/domains/rag/services/chapter-repository';
 import { collectStream } from '@/domains/agents/collect-stream';
 
 export const CHAPTERS_PDF_ONLY = 'A extração de capítulos está disponível apenas para PDF.';
+export const LINKS_CONFLICT_MESSAGE = 'Alterar o número de capítulos desfaz vínculos de aulas de outros professores.';
+export const FORCE_ADMIN_ONLY_MESSAGE = 'Apenas administradores podem forçar a alteração dos capítulos.';
+
+export type ChapterWriteOptions = { user: { id: string; role: Role }; force?: boolean };
 
 export type ChapterExtractionDeps = {
   readNavigation(buffer: Buffer): Promise<PdfNavigation>;
@@ -34,6 +40,7 @@ export type ChapterExtractionDeps = {
   repo: {
     listChapters: typeof listChapters;
     listChapterLinks: typeof listChapterLinks;
+    listChapterLinkDetails: typeof listChapterLinkDetails;
     replaceChapters: typeof replaceChapters;
   };
   materials: {
@@ -54,7 +61,7 @@ export type ChapterSaveResult = { source: ChapterSource | null; chapters: Chapte
 const defaultDeps: ChapterExtractionDeps = {
   readNavigation: readPdfNavigation,
   streamChat: loggedStreamChat,
-  repo: { listChapters, listChapterLinks, replaceChapters },
+  repo: { listChapters, listChapterLinks, listChapterLinkDetails, replaceChapters },
   materials: { findMaterial },
   files: { getFileBuffer: (path) => storageService.getFileBuffer(path) },
 };
@@ -115,8 +122,23 @@ async function saveDrafts(
   totalPages: number,
   source: ChapterSource,
   deps: ChapterExtractionDeps,
+  opts?: ChapterWriteOptions,
 ): Promise<ChapterSaveResult> {
   const oldLinks = await deps.repo.listChapterLinks(materialId);
+  if (opts && !opts.force && drafts.length !== oldLinks.length) {
+    const details = await deps.repo.listChapterLinkDetails(materialId);
+    const foreign = details.filter((d) => d.teacherId !== opts.user.id);
+    if (foreign.length > 0) {
+      const conflicts: ChapterLinkConflict[] = foreign.map((d) => ({
+        disciplina: d.disciplina,
+        turma: d.turma,
+        classNumber: d.classNumber,
+        topicTitle: d.topicTitle,
+        professor: d.professor,
+      }));
+      throw new DomainError(409, LINKS_CONFLICT_MESSAGE, conflicts);
+    }
+  }
   const { relinks, lostLessonLinks } = relinkByOrder(oldLinks, drafts.length);
   const rows = toChapterRows(drafts, totalPages);
   const assignments = buildChunkAssignments(rows, totalPages);
@@ -128,12 +150,13 @@ export async function extractAndSaveChapters(
   materialId: string,
   input: ExtractionInput,
   deps: ChapterExtractionDeps = defaultDeps,
+  opts?: ChapterWriteOptions,
 ): Promise<ChapterSaveResult> {
   const found = await extractChapterDrafts(input, deps);
   if (!found) {
     return { source: null, chapters: await deps.repo.listChapters(materialId), lostLessonLinks: 0 };
   }
-  return saveDrafts(materialId, found.drafts, input.totalPages, found.source, deps);
+  return saveDrafts(materialId, found.drafts, input.totalPages, found.source, deps, opts);
 }
 
 type MaterialRecord = NonNullable<Awaited<ReturnType<ChapterExtractionDeps['materials']['findMaterial']>>>;
@@ -147,29 +170,37 @@ async function loadPdfMaterial(materialId: string, deps: ChapterExtractionDeps):
   return material;
 }
 
+function assertForceAllowed(opts: ChapterWriteOptions): void {
+  if (opts.force && opts.user.role !== Role.ADMIN) throw new DomainError(403, FORCE_ADMIN_ONLY_MESSAGE);
+}
+
 export async function reextractMaterialChapters(
   materialId: string,
+  opts: ChapterWriteOptions,
   deps: ChapterExtractionDeps = defaultDeps,
 ): Promise<ChapterSaveResult> {
+  assertForceAllowed(opts);
   const material = await loadPdfMaterial(materialId, deps);
   const { buffer } = await deps.files.getFileBuffer(material.filePath);
   const parsed = await parseDocumentFile(buffer, material.originalFilename ?? 'material.pdf', {
     maxPages: CHAPTER_TOC_PAGES,
     skipOcr: true,
   });
-  return extractAndSaveChapters(materialId, { buffer, pages: parsed.pages, totalPages: material.totalPages }, deps);
+  return extractAndSaveChapters(materialId, { buffer, pages: parsed.pages, totalPages: material.totalPages }, deps, opts);
 }
 
 export async function replaceManualChapters(
   materialId: string,
   drafts: ChapterDraft[],
+  opts: ChapterWriteOptions,
   deps: ChapterExtractionDeps = defaultDeps,
 ): Promise<ChapterSaveResult> {
+  assertForceAllowed(opts);
   const material = await loadPdfMaterial(materialId, deps);
   if (!isValidChapterSequence(drafts, material.totalPages, 0)) {
     throw new DomainError(400, `As páginas iniciais devem ser crescentes e estar entre 1 e ${material.totalPages}.`);
   }
-  return saveDrafts(materialId, drafts, material.totalPages, 'MANUAL', deps);
+  return saveDrafts(materialId, drafts, material.totalPages, 'MANUAL', deps, opts);
 }
 
 export function listMaterialChapters(

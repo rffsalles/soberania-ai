@@ -26,6 +26,62 @@ export async function listChapterLinks(materialId: string): Promise<ChapterLinks
   return chapters.map((c) => ({ order: c.order, lessonPlanIds: c.lessonLinks.map((l) => l.lessonPlanId) }));
 }
 
+export type ChapterLinkConflict = {
+  disciplina: string;
+  turma: string;
+  classNumber: number;
+  topicTitle: string;
+  professor: string;
+};
+export type ChapterLinkDetail = ChapterLinkConflict & { lessonPlanId: string; teacherId: string };
+
+/** Aulas vinculadas a capítulos do material, uma linha por aula, com disciplina, turma e professor. */
+export async function listChapterLinkDetails(materialId: string): Promise<ChapterLinkDetail[]> {
+  const links = await db.lessonPlanChapter.findMany({
+    where: { chapter: { materialId } },
+    select: {
+      lessonPlan: {
+        select: {
+          id: true,
+          classNumber: true,
+          topicTitle: true,
+          courseSchedule: {
+            select: {
+              teachingPlan: {
+                select: {
+                  teacherId: true,
+                  subject: { select: { discipline: { select: { name: true } }, class: { select: { name: true } } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  const byPlan = new Map<string, Omit<ChapterLinkDetail, 'professor'>>();
+  for (const { lessonPlan: lp } of links) {
+    if (byPlan.has(lp.id)) continue;
+    const plan = lp.courseSchedule.teachingPlan;
+    byPlan.set(lp.id, {
+      lessonPlanId: lp.id,
+      teacherId: plan.teacherId,
+      disciplina: plan.subject.discipline.name,
+      turma: plan.subject.class.name,
+      classNumber: lp.classNumber,
+      topicTitle: lp.topicTitle,
+    });
+  }
+  const teacherIds = [...new Set([...byPlan.values()].map((d) => d.teacherId))];
+  const users = teacherIds.length > 0
+    ? await db.user.findMany({ where: { id: { in: teacherIds } }, select: { id: true, name: true } })
+    : [];
+  const nameById = new Map(users.map((u) => [u.id, u.name]));
+  return [...byPlan.values()]
+    .map((d) => ({ ...d, professor: nameById.get(d.teacherId) ?? '—' }))
+    .sort((a, b) => a.disciplina.localeCompare(b.disciplina) || a.classNumber - b.classNumber);
+}
+
 // Livros grandes (milhares de chunks, índices HNSW/GIN) estouram o timeout padrão de 5 s.
 export const REPLACE_CHAPTERS_TX_OPTIONS = { timeout: 60_000, maxWait: 10_000 } as const;
 

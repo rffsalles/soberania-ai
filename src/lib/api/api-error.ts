@@ -16,7 +16,7 @@ export function apiError(err: unknown): NextResponse {
   // Corpo malformado em req.json(): erro do cliente, não do servidor.
   if (err instanceof SyntaxError) return fail(400, 'JSON inválido');
   if (err instanceof ZodError) return fail(400, 'Dados inválidos', err.flatten());
-  if (err instanceof DomainError) return fail(err.status, err.message);
+  if (err instanceof DomainError) return fail(err.status, err.message, err.details);
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') return fail(409, 'Registro já existe');
     if (err.code === 'P2025') return fail(404, 'Registro não encontrado');

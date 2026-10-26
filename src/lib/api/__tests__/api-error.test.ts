@@ -15,6 +15,12 @@ function prismaError(code: string) {
 }
 
 describe('apiError', () => {
+  it('DomainError com details devolve details no corpo', async () => {
+    const { status, body } = await run(new DomainError(409, 'x', [{ a: 1 }]));
+    expect(status).toBe(409);
+    expect(body).toEqual({ success: false, error: 'x', details: [{ a: 1 }] });
+  });
+
   it('AuthError mantém o status', async () => {
     expect((await run(new AuthError(401, 'no'))).status).toBe(401);
     expect((await run(new AuthError(403, 'no'))).status).toBe(403);

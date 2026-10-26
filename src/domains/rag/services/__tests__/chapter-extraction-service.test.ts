@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { StreamChunk } from '@/lib/ai-provider';
 import type { OutlineEntry, RawDocumentPage } from '@/domains/rag/types';
+import { Role } from '@prisma/client';
 import {
   CHAPTERS_PDF_ONLY,
+  FORCE_ADMIN_ONLY_MESSAGE,
+  LINKS_CONFLICT_MESSAGE,
   extractAndSaveChapters,
   reextractMaterialChapters,
   replaceManualChapters,
@@ -30,6 +33,9 @@ const replaceChapters = vi.fn();
 const listChapters = vi.fn();
 const listChapterLinks = vi.fn();
 const findMaterial = vi.fn();
+const listChapterLinkDetails = vi.fn();
+const teacher = { id: 't1', role: Role.TEACHER };
+const admin = { id: 'a1', role: Role.ADMIN };
 
 function depsWith(
   opts: { outline?: OutlineEntry[]; ai?: string; fallback?: boolean; throws?: boolean } = {},
@@ -41,7 +47,7 @@ function depsWith(
   return {
     readNavigation: async () => ({ outline: opts.outline ?? [], pageLabels: null }),
     streamChat,
-    repo: { listChapters, listChapterLinks, replaceChapters },
+    repo: { listChapters, listChapterLinks, listChapterLinkDetails, replaceChapters },
     materials: { findMaterial },
     files: { getFileBuffer: async () => ({ buffer }) },
   } as unknown as ChapterExtractionDeps;
@@ -51,6 +57,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   listChapters.mockResolvedValue([]);
   listChapterLinks.mockResolvedValue([]);
+  listChapterLinkDetails.mockResolvedValue([]);
   replaceChapters.mockImplementation(async (_m, rows) =>
     rows.map((r: { order: number; title: string; startPage: number; endPage: number }) => ({
       id: `c${r.order}`, order: r.order, title: r.title, startPage: r.startPage, endPage: r.endPage, source: 'OUTLINE',
@@ -132,12 +139,12 @@ describe('reextractMaterialChapters', () => {
 
   it('material inexistente dá 404', async () => {
     findMaterial.mockResolvedValue(null);
-    await expect(reextractMaterialChapters('x', depsWith())).rejects.toMatchObject({ status: 404, message: 'Material não encontrado.' });
+    await expect(reextractMaterialChapters('x', { user: teacher }, depsWith())).rejects.toMatchObject({ status: 404, message: 'Material não encontrado.' });
   });
 
   it('DOCX dá 400', async () => {
     findMaterial.mockResolvedValue({ ...material, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', originalFilename: 'a.docx' });
-    await expect(reextractMaterialChapters('m1', depsWith())).rejects.toMatchObject({ status: 400, message: CHAPTERS_PDF_ONLY });
+    await expect(reextractMaterialChapters('m1', { user: teacher }, depsWith())).rejects.toMatchObject({ status: 400, message: CHAPTERS_PDF_ONLY });
   });
 
   it('cascata vazia mantém capítulos atuais', async () => {
@@ -145,7 +152,7 @@ describe('reextractMaterialChapters', () => {
     vi.mocked(parseDocumentFile).mockResolvedValue({ pages } as never);
     const current = [{ id: 'c1', order: 1, title: 'Velho', startPage: 1, endPage: 20, source: 'MANUAL' }];
     listChapters.mockResolvedValue(current);
-    const r = await reextractMaterialChapters('m1', depsWith({ ai: 'lixo' }));
+    const r = await reextractMaterialChapters('m1', { user: teacher }, depsWith({ ai: 'lixo' }));
     expect(parseDocumentFile).toHaveBeenCalledWith(buffer, 'livro.pdf', { maxPages: 12, skipOcr: true });
     expect(r).toEqual({ source: null, chapters: current, lostLessonLinks: 0 });
     expect(replaceChapters).not.toHaveBeenCalled();
@@ -158,19 +165,80 @@ describe('replaceManualChapters', () => {
   it('páginas decrescentes dão 400 com a mensagem exata', async () => {
     findMaterial.mockResolvedValue(material);
     await expect(
-      replaceManualChapters('m1', [{ title: 'A', startPage: 9 }, { title: 'B', startPage: 3 }], depsWith()),
+      replaceManualChapters('m1', [{ title: 'A', startPage: 9 }, { title: 'B', startPage: 3 }], { user: teacher }, depsWith()),
     ).rejects.toMatchObject({ status: 400, message: 'As páginas iniciais devem ser crescentes e estar entre 1 e 20.' });
     expect(replaceChapters).not.toHaveBeenCalled();
   });
 
   it('válidas gravam com source MANUAL', async () => {
     findMaterial.mockResolvedValue(material);
-    await replaceManualChapters('m1', [{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }], depsWith());
+    await replaceManualChapters('m1', [{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }], { user: teacher }, depsWith());
     expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'MANUAL', [], expect.any(Array));
   });
 
   it('não-PDF dá 400', async () => {
     findMaterial.mockResolvedValue({ ...material, mimeType: 'text/plain', originalFilename: 'a.txt' });
-    await expect(replaceManualChapters('m1', [], depsWith())).rejects.toMatchObject({ status: 400, message: CHAPTERS_PDF_ONLY });
+    await expect(replaceManualChapters('m1', [], { user: teacher }, depsWith())).rejects.toMatchObject({ status: 400, message: CHAPTERS_PDF_ONLY });
+  });
+});
+
+describe('guarda de vínculos', () => {
+  const material = { id: 'm1', totalPages: 20, mimeType: 'application/pdf', filePath: 'f.pdf', originalFilename: 'livro.pdf' };
+  const three = [{ title: 'A', startPage: 2 }, { title: 'B', startPage: 5 }, { title: 'C', startPage: 8 }];
+  const two = three.slice(0, 2);
+  const linked = [
+    { order: 1, lessonPlanIds: ['l1'] },
+    { order: 2, lessonPlanIds: ['l9'] },
+  ];
+  const foreign = {
+    lessonPlanId: 'l9', teacherId: 't2', disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana',
+  };
+
+  beforeEach(() => {
+    findMaterial.mockResolvedValue(material);
+    listChapterLinks.mockResolvedValue(linked);
+  });
+
+  it('contagem diferente com aula de outro professor → 409 com details e nada gravado', async () => {
+    listChapterLinkDetails.mockResolvedValue([foreign]);
+    await expect(replaceManualChapters('m1', three, { user: teacher }, depsWith())).rejects.toMatchObject({
+      status: 409,
+      message: LINKS_CONFLICT_MESSAGE,
+      details: [{ disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana' }],
+    });
+    expect(replaceChapters).not.toHaveBeenCalled();
+  });
+
+  it('vínculos só do próprio professor não bloqueiam', async () => {
+    listChapterLinkDetails.mockResolvedValue([{ ...foreign, teacherId: 't1' }]);
+    const r = await replaceManualChapters('m1', three, { user: teacher }, depsWith());
+    expect(replaceChapters).toHaveBeenCalled();
+    expect(r.lostLessonLinks).toBe(2);
+  });
+
+  it('mesma contagem nunca bloqueia', async () => {
+    listChapterLinkDetails.mockResolvedValue([foreign]);
+    await replaceManualChapters('m1', two, { user: teacher }, depsWith());
+    expect(replaceChapters).toHaveBeenCalled();
+    expect(listChapterLinkDetails).not.toHaveBeenCalled();
+  });
+
+  it('force: TEACHER → 403; ADMIN grava', async () => {
+    listChapterLinkDetails.mockResolvedValue([foreign]);
+    await expect(replaceManualChapters('m1', three, { user: teacher, force: true }, depsWith())).rejects.toMatchObject({
+      status: 403,
+      message: FORCE_ADMIN_ONLY_MESSAGE,
+    });
+    expect(findMaterial).not.toHaveBeenCalled();
+    await replaceManualChapters('m1', three, { user: admin, force: true }, depsWith());
+    expect(replaceChapters).toHaveBeenCalled();
+  });
+
+  it('reextração com contagem diferente e vínculo alheio → 409', async () => {
+    vi.mocked(parseDocumentFile).mockResolvedValue({ pages } as never);
+    listChapterLinkDetails.mockResolvedValue([foreign]);
+    const outline = [{ title: 'A', pageNumber: 2 }, { title: 'B', pageNumber: 5 }, { title: 'C', pageNumber: 8 }];
+    await expect(reextractMaterialChapters('m1', { user: teacher }, depsWith({ outline }))).rejects.toMatchObject({ status: 409 });
+    expect(replaceChapters).not.toHaveBeenCalled();
   });
 });
