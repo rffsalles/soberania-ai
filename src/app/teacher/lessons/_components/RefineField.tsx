@@ -30,6 +30,7 @@ export function RefineField({ label, value, onApply, request, disabled }: Props)
     setError(null);
     try {
       const refined = await request(instruction.trim());
+      if (!refined.trim()) throw new Error(REFINE_ERROR);
       onApply(refined);
       setPrevious(before);
       setInstruction('');
@@ -55,7 +56,10 @@ export function RefineField({ label, value, onApply, request, disabled }: Props)
         size="sm"
         className="gap-1"
         disabled={disabled || busy}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+          setError(null);
+        }}
       >
         <Sparkles className="h-3.5 w-3.5" />
         {`Refinar ${label}`}

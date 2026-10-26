@@ -32,6 +32,11 @@ const UNSAVED_CHAPTERS = 'Salve os capítulos selecionados antes de gerar.';
 const CONFIRM_REPLACE = 'Gerar com IA substitui o conteúdo atual do formulário. Continuar?';
 const EMPTY_STEP: TimeScriptItem = { timeSeconds: 0, timeRange: '', activity: '', description: '', socraticQuestion: '' };
 
+// Id estável só de UI: o índice muda quando uma etapa anterior é removida.
+type UiStep = TimeScriptItem & { uiKey: string };
+let stepKeyCounter = 0;
+const withKey = (step: TimeScriptItem): UiStep => ({ ...step, uiKey: `step-${stepKeyCounter++}` });
+
 type Props = { lesson: LessonItem; onSaved: () => void };
 
 export function LessonEditor({ lesson, onSaved }: Props) {
@@ -44,7 +49,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   const [methodology, setMethodology] = React.useState(lesson.methodology);
   const [fixationExercise, setFixationExercise] = React.useState(lesson.fixationExercise);
   const [resources, setResources] = React.useState(lesson.resourcesNeeded.join('\n'));
-  const [steps, setSteps] = React.useState<TimeScriptItem[]>(lesson.timeScript);
+  const [steps, setSteps] = React.useState<UiStep[]>(() => lesson.timeScript.map(withKey));
   const [media, setMedia] = React.useState<{ type: LessonMediaType | null; url: string | null }>({
     type: lesson.mediaType,
     url: lesson.mediaUrl,
@@ -64,8 +69,8 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
 
-  const updateStep = (index: number, patch: Partial<TimeScriptItem>) =>
-    setSteps((current) => current.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  const updateStep = (uiKey: string, patch: Partial<TimeScriptItem>) =>
+    setSteps((current) => current.map((s) => (s.uiKey === uiKey ? { ...s, ...patch } : s)));
 
   const selectionKey = chapterIds.slice().sort().join(',');
   const generateLock =
@@ -86,7 +91,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
       setMethodology(data.methodology);
       setResources(data.resourcesNeeded.join('\n'));
       setFixationExercise(data.fixationExercise);
-      setSteps(data.timeScript);
+      setSteps(data.timeScript.map(withKey));
       setCitations(data.citations);
     } catch (err) {
       setError(err instanceof Error ? err.message : GENERATE_ERROR);
@@ -123,7 +128,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
         methodology,
         fixationExercise,
         resourcesNeeded: resources.split('\n').map((r) => r.trim()).filter(Boolean),
-        timeScript: steps.map(({ socraticQuestion, ...step }) => (socraticQuestion ? { ...step, socraticQuestion } : step)),
+        timeScript: steps.map(({ uiKey: _uiKey, socraticQuestion, ...step }) => (socraticQuestion ? { ...step, socraticQuestion } : step)),
         mediaType: media.type ?? LESSON_MEDIA_TYPE.NONE,
         // Uploaded media is managed by the upload endpoint only.
         ...(media.type === LESSON_MEDIA_TYPE.S3_UPLOAD ? {} : { mediaUrl: media.url }),
@@ -260,7 +265,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
             Roteiro por etapas
-            <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setSteps((c) => [...c, { ...EMPTY_STEP }])}>
+            <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setSteps((c) => [...c, withKey(EMPTY_STEP)])}>
               <Plus className="h-4 w-4" /> Etapa
             </Button>
           </CardTitle>
@@ -268,7 +273,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
         <CardContent className="space-y-3">
           {steps.length === 0 && <p className="text-sm text-slate-500">Nenhuma etapa. Adicione a primeira etapa do roteiro.</p>}
           {steps.map((step, i) => (
-            <div key={i} className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+            <div key={step.uiKey} className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
               <div className="grid gap-2 sm:grid-cols-3">
                 <Input
                   type="number"
@@ -276,19 +281,19 @@ export function LessonEditor({ lesson, onSaved }: Props) {
                   aria-label={`Início da etapa ${i + 1} (segundos)`}
                   placeholder="Início (s)"
                   value={step.timeSeconds}
-                  onChange={(e) => updateStep(i, { timeSeconds: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                  onChange={(e) => updateStep(step.uiKey, { timeSeconds: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
                 />
                 <Input
                   aria-label={`Faixa de tempo da etapa ${i + 1}`}
                   placeholder="Faixa (ex.: 00:00-15:00)"
                   value={step.timeRange}
-                  onChange={(e) => updateStep(i, { timeRange: e.target.value })}
+                  onChange={(e) => updateStep(step.uiKey, { timeRange: e.target.value })}
                 />
                 <Input
                   aria-label={`Atividade da etapa ${i + 1}`}
                   placeholder="Atividade"
                   value={step.activity}
-                  onChange={(e) => updateStep(i, { activity: e.target.value })}
+                  onChange={(e) => updateStep(step.uiKey, { activity: e.target.value })}
                 />
               </div>
               <Textarea
@@ -296,13 +301,13 @@ export function LessonEditor({ lesson, onSaved }: Props) {
                 aria-label={`Descrição da etapa ${i + 1}`}
                 placeholder="Descrição"
                 value={step.description}
-                onChange={(e) => updateStep(i, { description: e.target.value })}
+                onChange={(e) => updateStep(step.uiKey, { description: e.target.value })}
               />
               <RefineField
                 label={`etapa ${i + 1}`}
                 value={step.description}
                 disabled={refineDisabled}
-                onApply={(text) => updateStep(i, { description: text })}
+                onApply={(text) => updateStep(step.uiKey, { description: text })}
                 request={(instruction) =>
                   refineLesson(lesson.id, { field: 'timeScript', stepIndex: i, instruction, current: step.description })
                 }
@@ -312,7 +317,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
                   aria-label={`Pergunta socrática da etapa ${i + 1}`}
                   placeholder="Pergunta socrática (opcional)"
                   value={step.socraticQuestion ?? ''}
-                  onChange={(e) => updateStep(i, { socraticQuestion: e.target.value })}
+                  onChange={(e) => updateStep(step.uiKey, { socraticQuestion: e.target.value })}
                 />
                 <Button type="button" variant="ghost" size="sm" aria-label={`Remover etapa ${i + 1}`} onClick={() => setSteps((c) => c.filter((_, idx) => idx !== i))}>
                   <Trash2 className="h-4 w-4" />

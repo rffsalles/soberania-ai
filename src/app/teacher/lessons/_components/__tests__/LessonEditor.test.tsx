@@ -182,4 +182,54 @@ describe('LessonEditor', () => {
     expect(JSON.parse(init!.body as string).chapterIds).toEqual(['ch2']);
     expect(screen.getByRole('status').textContent).toBe('Aula salva.');
   });
+
+  describe('refino por etapa', () => {
+    const TWO_STEPS = [
+      { timeSeconds: 0, timeRange: '00:00-10:00', activity: 'A1', description: 'Desc 1' },
+      { timeSeconds: 600, timeRange: '10:00-20:00', activity: 'A2', description: 'Desc 2' },
+    ];
+    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1 } }];
+
+    function startRefine(label: string) {
+      fireEvent.click(screen.getByRole('button', { name: `Refinar ${label}` }));
+      fireEvent.change(screen.getByLabelText(`Instrução para refinar ${label}`), { target: { value: 'mais curto' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    }
+
+    it('refina a descrição da etapa 2 sem tocar na etapa 1', async () => {
+      const fetchMock = routeFetch({ [`POST ${BASE}/refine`]: { success: true, text: 'Desc 2 refinada' } });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<LessonEditor lesson={makeLesson({ chapters: SAVED, timeScript: TWO_STEPS })} onSaved={() => {}} />);
+      startRefine('etapa 2');
+      await waitFor(() => expect((screen.getByLabelText('Descrição da etapa 2') as HTMLTextAreaElement).value).toBe('Desc 2 refinada'));
+      expect((screen.getByLabelText('Descrição da etapa 1') as HTMLTextAreaElement).value).toBe('Desc 1');
+      const [, init] = fetchMock.mock.calls[0];
+      expect(JSON.parse(init!.body as string)).toEqual({
+        field: 'timeScript',
+        stepIndex: 1,
+        instruction: 'mais curto',
+        current: 'Desc 2',
+      });
+    });
+
+    it('remover a etapa 1 durante o pedido aplica o texto na etapa certa e não vaza uiKey ao salvar', async () => {
+      let resolveRefine: (r: Response) => void = () => {};
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') return new Promise<Response>((res) => (resolveRefine = res));
+        return Promise.resolve(new Response(JSON.stringify({ success: true, lesson: makeLesson() }), { status: 200 }));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<LessonEditor lesson={makeLesson({ chapters: SAVED, timeScript: TWO_STEPS, topicTitle: 'Modelagem' })} onSaved={() => {}} />);
+      startRefine('etapa 2');
+      fireEvent.click(screen.getByRole('button', { name: 'Remover etapa 1' }));
+      resolveRefine(new Response(JSON.stringify({ success: true, text: 'Desc 2 refinada' }), { status: 200 }));
+      await waitFor(() => expect((screen.getByLabelText('Descrição da etapa 1') as HTMLTextAreaElement).value).toBe('Desc 2 refinada'));
+      expect(screen.queryByLabelText('Descrição da etapa 2')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar aula' }));
+      await waitFor(() => expect(fetchMock.mock.calls.length).toBe(2));
+      const saved = JSON.parse(fetchMock.mock.calls[1][1]!.body as string);
+      expect(saved.timeScript).toEqual([{ ...TWO_STEPS[1], description: 'Desc 2 refinada' }]);
+    });
+  });
 });
