@@ -78,7 +78,7 @@ export async function executeHybridSearch(
   deps: HybridSearchDeps = defaultDeps
 ): Promise<RAGSearchResult> {
   const startTime = Date.now();
-  const { query, categories, allowedMaterialIds, subject } = searchQuery;
+  const { query, categories, allowedMaterialIds, allowedChapterIds, subject } = searchQuery;
   const topK = clampTopK(searchQuery.topK);
 
   const categoryIds = await resolveCategoryIds(categories, deps);
@@ -93,6 +93,7 @@ export async function executeHybridSearch(
     topK,
     categoryIds,
     materialIds: allowedMaterialIds && allowedMaterialIds.length > 0 ? allowedMaterialIds : undefined,
+    chapterIds: allowedChapterIds && allowedChapterIds.length > 0 ? allowedChapterIds : undefined,
     subjectId: subject,
   });
 

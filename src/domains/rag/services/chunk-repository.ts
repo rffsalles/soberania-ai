@@ -27,6 +27,7 @@ export interface HybridSearchParams {
   topK: number;
   categoryIds?: string[];
   materialIds?: string[];
+  chapterIds?: string[];
   /** Kept for compatibility: materials are not linked to subjects in the schema yet, so it is ignored. */
   subjectId?: string;
 }
@@ -108,6 +109,9 @@ function chunkFilters(params: HybridSearchParams): Prisma.Sql {
   const filters: Prisma.Sql[] = [];
   if (params.materialIds && params.materialIds.length > 0) {
     filters.push(Prisma.sql`material_chunks."materialId" = ANY(${params.materialIds}::text[])`);
+  }
+  if (params.chapterIds && params.chapterIds.length > 0) {
+    filters.push(Prisma.sql`material_chunks."chapterId" = ANY(${params.chapterIds}::text[])`);
   }
   if (params.categoryIds && params.categoryIds.length > 0) {
     filters.push(Prisma.sql`EXISTS (

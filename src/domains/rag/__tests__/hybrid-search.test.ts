@@ -103,6 +103,15 @@ describe('executeHybridSearch', () => {
     );
   });
 
+  it('repassa allowedChapterIds como chapterIds e omite quando vazio', async () => {
+    const deps = makeDeps();
+    await executeHybridSearch({ query: 'q', allowedChapterIds: ['ch1'] }, deps);
+    expect(deps.search).toHaveBeenLastCalledWith(expect.objectContaining({ chapterIds: ['ch1'] }));
+    await executeHybridSearch({ query: 'q', allowedChapterIds: [] }, deps);
+    const calls = vi.mocked(deps.search).mock.calls;
+    expect(calls[calls.length - 1][0].chapterIds).toBeUndefined();
+  });
+
   it('fails closed when none of the requested categories exist', async () => {
     const deps = makeDeps({ findCategoryByName: vi.fn(async () => null) });
     const result = await executeHybridSearch(

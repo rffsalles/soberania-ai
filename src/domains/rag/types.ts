@@ -19,6 +19,7 @@ export interface RAGSearchQuery {
   subjectName?: string;
   categories?: string[];
   allowedMaterialIds?: string[];
+  allowedChapterIds?: string[];
   minRelevanceScore?: number;
   topK?: number;
 }
