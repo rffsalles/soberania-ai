@@ -238,6 +238,22 @@ model AcademicPeriod {
   @@map("academic_periods")
 }
 
+enum ChapterSource {
+  OUTLINE
+  AI
+  MANUAL
+}
+
+enum ReferenceKind {
+  BASIC
+  COMPLEMENTARY
+}
+
+enum LessonStatus {
+  DRAFT
+  PUBLISHED
+}
+
 // 1. Plano de Ensino (Macro)
 model TeachingPlan {
   id                  String   @id @default(cuid())
@@ -259,12 +275,26 @@ model TeachingPlan {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  subject     Subject          @relation(fields: [subjectId], references: [id])
+  subject     Subject                 @relation(fields: [subjectId], references: [id])
   schedules   CourseSchedule[]
   assessments Assessment[]
+  references  TeachingPlanReference[]
 
   @@index([subjectId])
   @@map("teaching_plans")
+}
+
+model TeachingPlanReference {
+  id             String        @id @default(cuid())
+  teachingPlanId String
+  materialId     String
+  kind           ReferenceKind
+
+  teachingPlan TeachingPlan     @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  material     DidacticMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([teachingPlanId, materialId])
+  @@map("teaching_plan_references")
 }
 
 // 2. Cronograma de Aulas (Calendário)
@@ -287,27 +317,40 @@ model CourseSchedule {
 
 // 3. Plano de Aula (Micro / Encontro Específico)
 model LessonPlan {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
   courseScheduleId String
   classDate        DateTime
   classNumber      Int
   topicTitle       String
-  dailyObjective   String   @db.Text
+  dailyObjective   String       @db.Text
   timeScript       Json // Roteiro minuto a minuto [{ timeRange, activity, description }]
-  methodology      String   @db.Text
+  methodology      String       @db.Text
   resourcesNeeded  String[]
-  fixationExercise String   @db.Text
+  fixationExercise String       @db.Text
   mediaType        String? // "YOUTUBE" | "S3_UPLOAD" | "NONE"
   mediaUrl         String? // URL do YouTube ou URI do S3
   s3ObjectKey      String? // Chave do objeto no S3 da instituição
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  status           LessonStatus @default(DRAFT)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
-  courseSchedule CourseSchedule @relation(fields: [courseScheduleId], references: [id], onDelete: Cascade)
+  courseSchedule CourseSchedule      @relation(fields: [courseScheduleId], references: [id], onDelete: Cascade)
   agenda         Agenda?
+  chapters       LessonPlanChapter[]
 
   @@index([courseScheduleId])
   @@map("lesson_plans")
+}
+
+model LessonPlanChapter {
+  lessonPlanId String
+  chapterId    String
+
+  lessonPlan LessonPlan      @relation(fields: [lessonPlanId], references: [id], onDelete: Cascade)
+  chapter    MaterialChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@id([lessonPlanId, chapterId])
+  @@map("lesson_plan_chapters")
 }
 
 // 4. Instrumentos de Avaliação
@@ -361,16 +404,37 @@ model DidacticMaterial {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  chunks     MaterialChunk[]
-  categories DocumentCategory[]
+  chunks         MaterialChunk[]
+  categories     DocumentCategory[]
+  chapters       MaterialChapter[]
+  planReferences TeachingPlanReference[]
 
   @@map("didactic_materials")
+}
+
+model MaterialChapter {
+  id         String        @id @default(cuid())
+  materialId String
+  title      String
+  order      Int
+  startPage  Int
+  endPage    Int?
+  source     ChapterSource
+  createdAt  DateTime      @default(now())
+
+  material    DidacticMaterial    @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  chunks      MaterialChunk[]
+  lessonLinks LessonPlanChapter[]
+
+  @@unique([materialId, order])
+  @@map("material_chapters")
 }
 
 model MaterialChunk {
   id         String   @id @default(cuid())
   materialId String
   chapter    String
+  chapterId  String?
   section    String?
   pageNumber Int
   content    String   @db.Text
@@ -380,9 +444,11 @@ model MaterialChunk {
   embedding  Unsupported("vector(1024)")?
   contentTsv Unsupported("tsvector")?     @map("content_tsv")
 
-  material DidacticMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  material   DidacticMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  chapterRef MaterialChapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
 
   @@index([materialId])
+  @@index([chapterId])
   @@index([pageNumber])
   @@map("material_chunks")
 }

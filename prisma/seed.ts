@@ -239,6 +239,21 @@ async function main() {
 
   await seedCorpus();
 
+  // Aula vinculada a uma agenda fica publicada
+  await prisma.lessonPlan.update({ where: { id: lessonPlans[3] }, data: { status: 'PUBLISHED' } });
+
+  // Referências estruturadas: materiais do acervo cujo título aparece na bibliografia básica
+  const seededMaterials = await prisma.didacticMaterial.findMany({ select: { id: true, title: true } });
+  for (const material of seededMaterials) {
+    const title = material.title.trim().toLowerCase();
+    if (!DEMO_TEACHING_PLAN.basicBibliography.some((entry) => entry.toLowerCase().includes(title))) continue;
+    await prisma.teachingPlanReference.upsert({
+      where: { teachingPlanId_materialId: { teachingPlanId: plan.id, materialId: material.id } },
+      update: { kind: 'BASIC' },
+      create: { teachingPlanId: plan.id, materialId: material.id, kind: 'BASIC' },
+    });
+  }
+
   const counts = {
     users: await prisma.user.count(),
     courses: await prisma.course.count(),
@@ -255,6 +270,7 @@ async function main() {
     agendas: await prisma.agenda.count(),
     didacticMaterials: await prisma.didacticMaterial.count(),
     materialChunks: await prisma.materialChunk.count(),
+    teachingPlanReferences: await prisma.teachingPlanReference.count(),
   };
   console.table(counts);
   console.log('Seed concluído');
