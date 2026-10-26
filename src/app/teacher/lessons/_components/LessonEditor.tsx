@@ -19,10 +19,11 @@ import {
 import { toLocalDateTimeInput } from '@/lib/timezone';
 import type { TimeScriptItem } from '@/domains/teaching/time-script';
 import { publishBlockReason } from '@/domains/teaching/lesson-publish';
-import { generateLesson, saveLesson, setLessonStatus, type LessonItem } from '@/components/teaching/use-lessons';
+import { generateLesson, refineLesson, saveLesson, setLessonStatus, type LessonItem } from '@/components/teaching/use-lessons';
 import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
 import { planChaptersToComboboxItems } from '@/components/teaching/chapter-combobox-item';
 import { MediaTabs } from './MediaTabs';
+import { RefineField } from './RefineField';
 
 const SAVE_ERROR = 'Não foi possível salvar a aula. Tente novamente.';
 const GENERATE_ERROR = 'Não foi possível gerar a aula. Tente novamente.';
@@ -69,6 +70,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   const selectionKey = chapterIds.slice().sort().join(',');
   const generateLock =
     savedChapterIds.length === 0 ? NO_LESSON_CHAPTERS : selectionKey !== savedKey ? UNSAVED_CHAPTERS : undefined;
+  const refineDisabled = savedChapterIds.length === 0;
   const publishLock = publishBlockReason(lesson);
   const published = lesson.status === LESSON_STATUS.PUBLISHED;
 
@@ -211,12 +213,26 @@ export function LessonEditor({ lesson, onSaved }: Props) {
               Objetivo diário
             </label>
             <Textarea id="daily-objective" rows={3} value={dailyObjective} onChange={(e) => setDailyObjective(e.target.value)} />
+            <RefineField
+              label="objetivo diário"
+              value={dailyObjective}
+              disabled={refineDisabled}
+              onApply={setDailyObjective}
+              request={(instruction) => refineLesson(lesson.id, { field: 'dailyObjective', instruction, current: dailyObjective })}
+            />
           </div>
           <div className="space-y-1.5">
             <label htmlFor="methodology" className="text-xs font-semibold">
               Metodologia
             </label>
             <Textarea id="methodology" rows={2} value={methodology} onChange={(e) => setMethodology(e.target.value)} />
+            <RefineField
+              label="metodologia"
+              value={methodology}
+              disabled={refineDisabled}
+              onApply={setMethodology}
+              request={(instruction) => refineLesson(lesson.id, { field: 'methodology', instruction, current: methodology })}
+            />
           </div>
           <div className="space-y-1.5">
             <label htmlFor="resources" className="text-xs font-semibold">
@@ -229,6 +245,13 @@ export function LessonEditor({ lesson, onSaved }: Props) {
               Exercício de fixação
             </label>
             <Textarea id="fixation" rows={2} value={fixationExercise} onChange={(e) => setFixationExercise(e.target.value)} />
+            <RefineField
+              label="exercício de fixação"
+              value={fixationExercise}
+              disabled={refineDisabled}
+              onApply={setFixationExercise}
+              request={(instruction) => refineLesson(lesson.id, { field: 'fixationExercise', instruction, current: fixationExercise })}
+            />
           </div>
         </CardContent>
       </Card>
@@ -274,6 +297,15 @@ export function LessonEditor({ lesson, onSaved }: Props) {
                 placeholder="Descrição"
                 value={step.description}
                 onChange={(e) => updateStep(i, { description: e.target.value })}
+              />
+              <RefineField
+                label={`etapa ${i + 1}`}
+                value={step.description}
+                disabled={refineDisabled}
+                onApply={(text) => updateStep(i, { description: text })}
+                request={(instruction) =>
+                  refineLesson(lesson.id, { field: 'timeScript', stepIndex: i, instruction, current: step.description })
+                }
               />
               <div className="flex gap-2">
                 <Input
