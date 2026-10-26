@@ -244,4 +244,41 @@ describe('TeachingPlanNewPage', () => {
     expect(screen.getByText('Sistemas de Banco de Dados')).toBeTruthy();
     expect(screen.getByText('Complementar')).toBeTruthy();
   });
+
+  it('falha ao consultar o acervo na edição mostra o texto salvo e o PUT não zera a bibliografia nem envia references', async () => {
+    nav.id = 'cplan000001';
+    stubFetch({
+      ...subjectsOk([offeringADS]),
+      'GET /api/v1/teacher/plans/cplan000001': savedPlan({
+        basicBibliography: ['Sistemas de Banco de Dados (Elmasri) [Banco de Dados]'],
+        references: [{ materialId: 'cdoc0000001', kind: 'BASIC' }],
+      }),
+      'PUT /api/v1/teacher/plans/cplan000001': { success: true, plan: { id: 'cplan000001' } },
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<TeachingPlanNewPage />);
+    await screen.findByText('Sistemas de Banco de Dados');
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
+    const body = bodyOf('PUT', '/api/v1/teacher/plans/cplan000001');
+    expect(body.basicBibliography).toEqual(['Sistemas de Banco de Dados (Elmasri) [Banco de Dados]']);
+    expect(body).not.toHaveProperty('references');
+    vi.restoreAllMocks();
+  });
+
+  it('editar um plano sem referências envia complementaryBiblio e references vazios; plano novo vazio omite as chaves', async () => {
+    nav.id = 'cplan000001';
+    stubFetch({
+      ...subjectsOk([offeringADS]),
+      'GET /api/v1/teacher/plans/cplan000001': savedPlan({}),
+      'PUT /api/v1/teacher/plans/cplan000001': { success: true, plan: { id: 'cplan000001' } },
+    });
+    render(<TeachingPlanNewPage />);
+    await waitFor(() => expect((screen.getByLabelText('Teoria (h)') as HTMLInputElement).value).toBe('50'));
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
+    const body = bodyOf('PUT', '/api/v1/teacher/plans/cplan000001');
+    expect(body.complementaryBiblio).toEqual([]);
+    expect(body.references).toEqual([]);
+  });
 });

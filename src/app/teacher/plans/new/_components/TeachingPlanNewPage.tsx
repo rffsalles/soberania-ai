@@ -27,7 +27,7 @@ async function restoreReferences(plan: {
   references?: { materialId: string; kind: ReferenceKindValue }[];
   basicBibliography: string[];
   complementaryBiblio: string[];
-}): Promise<DocumentReference[]> {
+}): Promise<{ refs: DocumentReference[]; ok: boolean }> {
   const byId = Array.isArray(plan.references) && plan.references.length > 0;
   const parseText = (items: string[], kind: ReferenceKindValue, offset: number): DocumentReference[] =>
     items.map((item, index) => ({
@@ -38,26 +38,32 @@ async function restoreReferences(plan: {
       kind,
     }));
   const basic = plan.basicBibliography ?? [];
-  const parsed = byId
-    ? []
-    : [...parseText(basic, 'BASIC', 0), ...parseText(plan.complementaryBiblio ?? [], 'COMPLEMENTARY', basic.length)];
+  // Sempre calculado: se a restauração por id falhar, o texto salvo evita zerar a bibliografia.
+  const parsed = [...parseText(basic, 'BASIC', 0), ...parseText(plan.complementaryBiblio ?? [], 'COMPLEMENTARY', basic.length)];
   try {
     const res = await fetch(`${API_ROUTES.LIBRARY}/documents`);
     const data = await res.json();
     const library: DocumentReference[] = data.success && Array.isArray(data.documents) ? data.documents : [];
     if (byId) {
-      return plan.references!.flatMap(({ materialId, kind }) => {
-        const doc = library.find((d) => d.id === materialId);
-        return doc ? [{ ...doc, kind }] : [];
-      });
+      if (!data.success) return { refs: parsed, ok: false };
+      return {
+        ok: true,
+        refs: plan.references!.flatMap(({ materialId, kind }) => {
+          const doc = library.find((d) => d.id === materialId);
+          return doc ? [{ ...doc, kind }] : [];
+        }),
+      };
     }
-    return parsed.map((ref) => {
-      const match = library.find((doc) => doc.title.trim().toLowerCase() === ref.title.toLowerCase());
-      return match ? { ...ref, id: match.id, author: match.author, category: match.category } : ref;
-    });
+    return {
+      ok: true,
+      refs: parsed.map((ref) => {
+        const match = library.find((doc) => doc.title.trim().toLowerCase() === ref.title.toLowerCase());
+        return match ? { ...ref, id: match.id, author: match.author, category: match.category } : ref;
+      }),
+    };
   } catch (err) {
     console.warn('Não foi possível conferir as referências no acervo:', err);
-    return parsed;
+    return { refs: parsed, ok: !byId };
   }
 }
 
@@ -73,6 +79,8 @@ export default function TeachingPlanNewPage() {
 
   // References: Starts clean or loaded from DB
   const [references, setReferences] = React.useState<DocumentReference[]>([]);
+  // Enquanto a restauração por id não conclui (ou falhou), não enviamos `references`: omitir mantém os vínculos do banco.
+  const [referencesUntrusted, setReferencesUntrusted] = React.useState(false);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
 
   // Form Fields
@@ -128,11 +136,15 @@ export default function TeachingPlanNewPage() {
           if (plan.methodology) setMethodology(plan.methodology);
           const hasText = (plan.basicBibliography?.length ?? 0) + (plan.complementaryBiblio?.length ?? 0) > 0;
           if (hasText || plan.references?.length > 0) {
+            if (plan.references?.length > 0) setReferencesUntrusted(true);
             void restoreReferences({
               references: plan.references,
               basicBibliography: plan.basicBibliography ?? [],
               complementaryBiblio: plan.complementaryBiblio ?? [],
-            }).then(setReferences);
+            }).then(({ refs, ok }) => {
+              setReferences(refs);
+              if (ok) setReferencesUntrusted(false);
+            });
           }
           setNdeCompliance({
             theoryHours: plan.theoryHours ?? null,
@@ -277,7 +289,7 @@ export default function TeachingPlanNewPage() {
           basicBibliography: textOf('BASIC'),
           // Plano novo sem complementar não envia as chaves; na edição, [] limpa o que havia.
           ...(editingPlanId || complementary.length > 0 ? { complementaryBiblio: textOf('COMPLEMENTARY') } : {}),
-          ...(editingPlanId || linkedReferences.length > 0 ? { references: linkedReferences } : {}),
+          ...(!referencesUntrusted && (editingPlanId || linkedReferences.length > 0) ? { references: linkedReferences } : {}),
           theoryHours: ndeCompliance.theoryHours ?? undefined,
           practiceHours: ndeCompliance.practiceHours ?? undefined,
           ndeComplianceStatus: ndeCompliance.ndeComplianceStatus,
