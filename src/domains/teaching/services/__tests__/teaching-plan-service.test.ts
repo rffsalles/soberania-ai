@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { DEFAULT_NDE_COMPLIANCE_STATUS, PLAN_STATUS } from '@/lib/constants/teaching';
@@ -38,6 +38,7 @@ function makeDeps(initial: Partial<PlanRecord>[] = [], opts: { offerings?: strin
         return rec;
       },
     },
+    references: { replacePlanReferences: vi.fn(async () => {}) },
     offerings: {
       findSubjectWithWorkload: async (id) =>
         (opts.offerings ?? ['s1']).includes(id) ? { id, discipline: { workloadHours: WORKLOAD } } : null,
@@ -206,5 +207,42 @@ describe('teaching-plan-service', () => {
   it('createPlan usa a mensagem de oferta e ementa obrigatórias', async () => {
     const { deps } = makeDeps();
     await expect(createPlan(teacher, { syllabus: 'x' }, deps)).rejects.toMatchObject({ status: 400, message: 'Oferta e ementa são obrigatórias.' });
+  });
+
+  describe('referências ligadas aos materiais', () => {
+    const refs = [
+      { materialId: 'cm1', kind: 'BASIC' as const },
+      { materialId: 'cm2', kind: 'COMPLEMENTARY' as const },
+    ];
+
+    it('create grava as referências com o id do plano criado', async () => {
+      const { deps } = makeDeps();
+      const created = await createPlan(
+        teacher,
+        { subjectId: 's1', syllabus: 'x', theoryHours: 60, practiceHours: 20, references: [...refs, { materialId: 'cm1', kind: 'COMPLEMENTARY' }] } as never,
+        deps
+      );
+      expect(deps.references.replacePlanReferences).toHaveBeenCalledTimes(1);
+      expect(deps.references.replacePlanReferences).toHaveBeenCalledWith(created.id, refs);
+    });
+
+    it('update sem references preserva o conjunto; com [] limpa', async () => {
+      const { deps } = makeDeps(seed);
+      await updatePlan('p1', teacher, { syllabus: 'novo' }, deps);
+      expect(deps.references.replacePlanReferences).not.toHaveBeenCalled();
+      await updatePlan('p1', teacher, { references: [] }, deps);
+      expect(deps.references.replacePlanReferences).toHaveBeenCalledWith('p1', []);
+    });
+
+    it('references não vai para o repo do plano', async () => {
+      const { deps } = makeDeps(seed);
+      const insert = vi.spyOn(deps.repo, 'insertPlan');
+      const update = vi.spyOn(deps.repo, 'updatePlanById');
+      await createPlan(teacher, { subjectId: 's1', syllabus: 'x', theoryHours: 60, practiceHours: 20, references: refs } as never, deps);
+      await updatePlan('p1', teacher, { references: refs }, deps);
+      expect(insert.mock.calls[0][0]).not.toHaveProperty('references');
+      expect(update.mock.calls[0][1]).not.toHaveProperty('references');
+      expect(deps.references.replacePlanReferences).toHaveBeenCalledWith('p1', refs);
+    });
   });
 });

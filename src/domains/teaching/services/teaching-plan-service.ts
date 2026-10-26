@@ -1,7 +1,7 @@
 import { Prisma, Role, type TeachingPlan } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { DEFAULT_NDE_COMPLIANCE_STATUS, PLAN_STATUS } from '@/lib/constants/teaching';
-import type { UpdateTeachingPlanInput } from '@/lib/validators/teaching-plan.validator';
+import type { PlanReferenceInput, UpdateTeachingPlanInput } from '@/lib/validators/teaching-plan.validator';
 import * as realRepo from './teaching-plan-repository';
 import * as subjectRepo from '@/domains/academic/services/subject-repository';
 import * as teacherSubjectRepo from '@/domains/academic/services/teacher-subject-repository';
@@ -17,11 +17,12 @@ export type TeachingPlanDeps = {
     insertPlan(data: Prisma.TeachingPlanUncheckedCreateInput): Promise<PlanRecord>;
     updatePlanById(id: string, data: Prisma.TeachingPlanUncheckedUpdateInput): Promise<PlanRecord>;
   };
+  references: { replacePlanReferences(teachingPlanId: string, refs: PlanReferenceInput[]): Promise<void> };
   offerings: { findSubjectWithWorkload(id: string): Promise<{ id: string; discipline: { workloadHours: number } } | null> };
   assignments: { isTeacherAssigned(teacherId: string, subjectId: string): Promise<boolean> };
 };
 
-const defaultDeps: TeachingPlanDeps = { repo: realRepo, offerings: subjectRepo, assignments: teacherSubjectRepo };
+const defaultDeps: TeachingPlanDeps = { repo: realRepo, references: realRepo, offerings: subjectRepo, assignments: teacherSubjectRepo };
 
 export type CreatePlanInput = {
   subjectId?: string;
@@ -37,7 +38,14 @@ export type CreatePlanInput = {
   theoryHours?: number | string | null;
   practiceHours?: number | string | null;
   ndeComplianceStatus?: string;
+  references?: PlanReferenceInput[];
 };
+
+/** Ids duplicados: o primeiro vence. */
+function dedupeReferences(refs: PlanReferenceInput[]): PlanReferenceInput[] {
+  const seen = new Set<string>();
+  return refs.filter((r) => !seen.has(r.materialId) && seen.add(r.materialId));
+}
 
 /** Inteiro não negativo informado pelo professor; null quando ausente ou inválido (sem valor inventado). */
 function toHours(value: number | string | null | undefined): number | null {
@@ -96,7 +104,7 @@ export async function createPlan(user: PlanActor, input: CreatePlanInput, deps: 
   await assertTeacherAssigned(user, input.subjectId, deps);
   const totalHours = offering.discipline.workloadHours;
   assertHoursMatchWorkload(theoryHours, practiceHours, totalHours);
-  return deps.repo.insertPlan({
+  const plan = await deps.repo.insertPlan({
     subjectId: input.subjectId,
     teacherId: user.id,
     syllabus: input.syllabus,
@@ -113,6 +121,10 @@ export async function createPlan(user: PlanActor, input: CreatePlanInput, deps: 
     practiceHours,
     ndeComplianceStatus: input.ndeComplianceStatus || DEFAULT_NDE_COMPLIANCE_STATUS,
   });
+  if (input.references !== undefined) {
+    await deps.references.replacePlanReferences(plan.id, dedupeReferences(input.references));
+  }
+  return plan;
 }
 
 export async function updatePlan(
@@ -126,7 +138,7 @@ export async function updatePlan(
   assertOwnsPlan(user, existing);
 
   // totalHours nunca vem do cliente; teórica/prática só são validadas se vierem no PUT.
-  const { unitsContent, ...rest } = input;
+  const { unitsContent, references, ...rest } = input;
   let syncedTotalHours: number | undefined;
   if (rest.theoryHours !== undefined || rest.practiceHours !== undefined) {
     const offering = await deps.offerings.findSubjectWithWorkload(existing.subjectId);
@@ -139,9 +151,11 @@ export async function updatePlan(
     syncedTotalHours = offering.discipline.workloadHours;
   }
   delete (rest as { totalHours?: unknown }).totalHours;
-  return deps.repo.updatePlanById(id, {
+  const plan = await deps.repo.updatePlanById(id, {
     ...rest,
     ...(syncedTotalHours !== undefined ? { totalHours: syncedTotalHours } : {}),
     ...(unitsContent !== undefined ? { unitsContent: unitsContent as Prisma.InputJsonValue } : {}),
   });
+  if (references !== undefined) await deps.references.replacePlanReferences(id, dedupeReferences(references));
+  return plan;
 }
