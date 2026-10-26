@@ -13,24 +13,19 @@ import {
   LESSON_MEDIA_TYPE,
   LESSON_STATUS,
   LESSON_TITLE_MAX_LENGTH,
-  NO_LESSON_CHAPTERS,
   type LessonMediaType,
 } from '@/lib/constants/teaching';
 import { toLocalDateTimeInput } from '@/lib/timezone';
 import type { TimeScriptItem } from '@/domains/teaching/time-script';
-import { publishBlockReason } from '@/domains/teaching/lesson-publish';
-import { generateLesson, refineLesson, saveLesson, setLessonStatus, type LessonItem } from '@/components/teaching/use-lessons';
+import { refineLesson, saveLesson, type LessonItem } from '@/components/teaching/use-lessons';
 import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
 import { planChaptersToComboboxItems } from '@/components/teaching/chapter-combobox-item';
 import { MediaTabs } from './MediaTabs';
 import { RefineField } from './RefineField';
+import { useLessonGeneration } from './use-lesson-generation';
+import { useLessonStatus } from './use-lesson-status';
 
 const SAVE_ERROR = 'Não foi possível salvar a aula. Tente novamente.';
-const GENERATE_ERROR = 'Não foi possível gerar a aula. Tente novamente.';
-const STATUS_ERROR = 'Não foi possível alterar a situação da aula. Tente novamente.';
-const UNSAVED_CHAPTERS = 'Salve os capítulos selecionados antes de gerar.';
-const UNSAVED_PUBLISH = 'Salve as alterações antes de publicar.';
-const CONFIRM_REPLACE = 'Gerar com IA substitui o conteúdo atual do formulário. Continuar?';
 const EMPTY_STEP: TimeScriptItem = { timeSeconds: 0, timeRange: '', activity: '', description: '', socraticQuestion: '' };
 
 // Id estável só de UI: o índice muda quando uma etapa anterior é removida.
@@ -67,8 +62,6 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   }, [savedKey]);
   const { books } = usePlanChapters(lesson.courseSchedule.teachingPlanId);
   const chapterItems = React.useMemo(() => planChaptersToComboboxItems(books), [books]);
-  const [citations, setCitations] = React.useState<string[]>([]);
-  const [busy, setBusy] = React.useState<'generate' | 'status' | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -77,11 +70,35 @@ export function LessonEditor({ lesson, onSaved }: Props) {
     setSteps((current) => current.map((s) => (s.uiKey === uiKey ? { ...s, ...patch } : s)));
 
   const selectionKey = chapterIds.slice().sort().join(',');
-  const generateLock =
-    savedChapterIds.length === 0 ? NO_LESSON_CHAPTERS : selectionKey !== savedKey ? UNSAVED_CHAPTERS : undefined;
   const refineDisabled = savedChapterIds.length === 0;
   const dirty = isDirty();
-  const publishLock = dirty ? UNSAVED_PUBLISH : publishBlockReason(lesson);
+  const startAction = () => {
+    setError(null);
+    setNotice(null);
+  };
+  const { generate, generating, citations, lockReason: generateLock } = useLessonGeneration({
+    lessonId: lesson.id,
+    savedChapterIds,
+    selectionKey,
+    hasContent: [dailyObjective, methodology, fixationExercise].some((v) => v.trim() !== '') || steps.length > 0,
+    applyGenerated: (data) => {
+      setDailyObjective(data.dailyObjective);
+      setMethodology(data.methodology);
+      setResources(data.resourcesNeeded.join('\n'));
+      setFixationExercise(data.fixationExercise);
+      setSteps(data.timeScript.map(withKey));
+    },
+    onStart: startAction,
+    onError: setError,
+  });
+  const { changeStatus, changing, publishLock } = useLessonStatus({
+    lesson,
+    dirty,
+    onSaved,
+    onStart: startAction,
+    onError: setError,
+  });
+  const busy = generating || changing;
   const published = lesson.status === LESSON_STATUS.PUBLISHED;
 
   // Compara o formulário com a aula salva; publicar só vale para o que está salvo.
@@ -101,41 +118,6 @@ export function LessonEditor({ lesson, onSaved }: Props) {
       (media.url ?? null) !== (lesson.mediaUrl ?? null) ||
       selectionKey !== savedKey
     );
-  }
-
-  async function generate() {
-    const hasContent = [dailyObjective, methodology, fixationExercise].some((v) => v.trim() !== '') || steps.length > 0;
-    if (hasContent && !window.confirm(CONFIRM_REPLACE)) return;
-    setBusy('generate');
-    setError(null);
-    setNotice(null);
-    try {
-      const data = await generateLesson(lesson.id);
-      setDailyObjective(data.dailyObjective);
-      setMethodology(data.methodology);
-      setResources(data.resourcesNeeded.join('\n'));
-      setFixationExercise(data.fixationExercise);
-      setSteps(data.timeScript.map(withKey));
-      setCitations(data.citations);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : GENERATE_ERROR);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function changeStatus() {
-    setBusy('status');
-    setError(null);
-    setNotice(null);
-    try {
-      await setLessonStatus(lesson.id, published ? LESSON_STATUS.DRAFT : LESSON_STATUS.PUBLISHED);
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : STATUS_ERROR);
-    } finally {
-      setBusy(null);
-    }
   }
 
   async function submit(e: React.FormEvent) {
@@ -179,7 +161,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
               type="button"
               variant="outline"
               size="sm"
-              disabled={busy !== null || (!published && publishLock !== null)}
+              disabled={busy || (!published && publishLock !== null)}
               onClick={changeStatus}
             >
               {published ? 'Despublicar' : 'Publicar'}
@@ -201,9 +183,9 @@ export function LessonEditor({ lesson, onSaved }: Props) {
             onSelectionChange={(ids) => setChapterIds(ids)}
           />
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={generate} disabled={busy !== null || generateLock !== undefined} className="gap-2">
+            <Button type="button" onClick={generate} disabled={busy || generateLock !== undefined} className="gap-2">
               {generateLock !== undefined ? <Lock className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-              {busy === 'generate' ? 'Gerando...' : 'Gerar aula com IA'}
+              {generating ? 'Gerando...' : 'Gerar aula com IA'}
             </Button>
             {generateLock !== undefined && (
               <span className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
