@@ -4,13 +4,14 @@ import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import { BookOpen } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useTeacherPlans } from '@/components/assessments/use-assessments';
 import { useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
 import { useLessons, type LessonItem } from '@/components/teaching/use-lessons';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
 import { planToComboboxItem } from '@/components/teaching/plan-combobox-item';
 import { LessonEditor } from './LessonEditor';
-import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
+import { INSTITUTION_TIMEZONE, LESSON_STATUS } from '@/lib/constants/teaching';
 
 // classDate é o instante de início da aula; exibido no fuso da instituição.
 const formatDate = (iso: string) =>
@@ -42,8 +43,7 @@ export function LessonsPage() {
           <BookOpen className="h-6 w-6 text-brand-teal" /> Planos de aula
         </h1>
         <p className="text-sm text-slate-500">
-          Edite o roteiro de cada encontro e anexe um vídeo do YouTube ou um arquivo de mídia. A agenda da turma é
-          atualizada automaticamente.
+          Edite o roteiro de cada encontro, gere o conteúdo a partir dos capítulos e publique a aula para a turma.
         </p>
       </header>
 
@@ -125,6 +125,9 @@ export function LessonsPage() {
                     #{l.classNumber} · {l.topicTitle}
                   </span>
                   <span className="block text-xs text-slate-500">{formatDate(l.classDate)}</span>
+                  <Badge variant={l.status === LESSON_STATUS.PUBLISHED ? 'default' : 'secondary'} className="mt-1">
+                    {l.status === LESSON_STATUS.PUBLISHED ? 'Publicada' : 'Rascunho'}
+                  </Badge>
                 </button>
               ))}
             </CardContent>

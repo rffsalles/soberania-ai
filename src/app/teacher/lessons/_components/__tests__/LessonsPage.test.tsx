@@ -39,8 +39,12 @@ vi.mock('@/components/assessments/use-assessments', () => ({
 vi.mock('@/components/teaching/use-schedules', () => ({
   useSchedules: (id: string | null) => useSchedules(id),
 }));
+const LESSONS = [
+  { id: 'les-1', classNumber: 1, topicTitle: 'Introdução', classDate: '2026-02-01T19:00:00.000Z', status: 'DRAFT' },
+  { id: 'les-2', classNumber: 2, topicTitle: 'Modelo relacional', classDate: '2026-02-08T19:00:00.000Z', status: 'PUBLISHED' },
+];
 vi.mock('@/components/teaching/use-lessons', () => ({
-  useLessons: () => ({ lessons: [], isLoading: false, error: null, reload: vi.fn() }),
+  useLessons: () => ({ lessons: LESSONS, isLoading: false, error: null, reload: vi.fn() }),
 }));
 vi.mock('../LessonEditor', () => ({ LessonEditor: () => null }));
 
@@ -74,6 +78,13 @@ describe('LessonsPage', () => {
     expect(screen.getByText('ADS · Turma A · 2026.1')).toBeTruthy();
     expect(screen.getByText('60h (40T/20P)')).toBeTruthy();
     expect(screen.getByText('80h')).toBeTruthy();
+  });
+
+  it('cada aula mostra badge Rascunho ou Publicada', () => {
+    search = 'planId=plan-2&scheduleId=sch-9';
+    render(<LessonsPage />);
+    expect(screen.getByText('Rascunho')).toBeTruthy();
+    expect(screen.getByText('Publicada')).toBeTruthy();
   });
 
   it('trocar o plano limpa o cronograma', () => {
