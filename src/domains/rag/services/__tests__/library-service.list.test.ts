@@ -35,6 +35,7 @@ vi.mock('../material-repository', () => ({
       _count: { chunks: 5 },
     },
   ]),
+  findMaterial: vi.fn(),
   materialStats: vi.fn(async () => ({ totalMaterials: 2, totalChunks: 7, ocrCount: 0, totalBytes: 1234 })),
 }));
 vi.mock('../category-repository', () => ({
