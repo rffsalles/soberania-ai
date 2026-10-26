@@ -1,9 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { ListOrdered } from 'lucide-react';
+import { ListOrdered, Trash2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
@@ -25,6 +26,11 @@ export function PlanUnitsCard({ planId, units, onChange }: PlanUnitsCardProps) {
 
   const update = (index: number, patch: Partial<PlanUnit>) =>
     onChange(units.map((u, i) => (i === index ? { ...u, ...patch } : u)));
+
+  const addUnit = () =>
+    onChange([...units, { unitNumber: units.length + 1, title: '', topics: [], chapterIds: [] }]);
+  const removeUnit = (index: number) =>
+    onChange(units.filter((_, i) => i !== index).map((u, i) => ({ ...u, unitNumber: i + 1 })));
 
   return (
     <Card className="glass rounded-xl border border-slate-200 dark:border-slate-800 shadow-soft-sm">
@@ -57,11 +63,21 @@ export function PlanUnitsCard({ planId, units, onChange }: PlanUnitsCardProps) {
                   <Input
                     aria-label={`Título da unidade ${unit.unitNumber}`}
                     value={unit.title}
+                    maxLength={200}
                     onChange={(e) => update(index, { title: e.target.value })}
                   />
                   <Badge variant="outline" className="text-[11px] shrink-0 text-brand-teal border-brand-teal/30">
                     {formatChapterShortList(orders)}
                   </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Remover unidade ${unit.unitNumber}`}
+                    onClick={() => removeUnit(index)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
                 <Textarea
                   aria-label={`Tópicos da unidade ${unit.unitNumber}`}
@@ -73,6 +89,9 @@ export function PlanUnitsCard({ planId, units, onChange }: PlanUnitsCardProps) {
             );
           })
         )}
+        <Button type="button" variant="outline" size="sm" onClick={addUnit}>
+          Adicionar unidade
+        </Button>
       </CardContent>
     </Card>
   );

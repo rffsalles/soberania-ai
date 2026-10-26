@@ -12,7 +12,7 @@ const books: PlanChapterBook[] = [
   },
 ];
 
-function schedule(withChapters = true, teacherId = 't1') {
+function schedule(withChapters = true, teacherId = 't1', chapterOf: (n: number) => string[] = (n) => [`ch${n}`]) {
   return {
     id: 'sch1',
     teachingPlan: {
@@ -22,7 +22,7 @@ function schedule(withChapters = true, teacherId = 't1') {
     lessonPlans: [1, 2, 3, 4, 5].map((n) => ({
       id: `l${n}`, classNumber: n, classDate: new Date(Date.UTC(2026, 2, 1 + n, 15)), status: 'DRAFT',
       topicTitle: `Aula ${n}`,
-      chapters: withChapters && n <= 4 ? [{ chapterId: `ch${n}` }] : [],
+      chapters: withChapters && n <= 4 ? chapterOf(n).map((chapterId) => ({ chapterId })) : [],
     })),
   };
 }
@@ -59,6 +59,18 @@ describe('plan-units-service', () => {
     expect(await generateUnitsFromDistribution('sch1', teacher, deps)).toEqual(units);
     expect(saveUnits).toHaveBeenCalledWith('p1', units);
     expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.2, maxTokens: 1500 });
+  });
+
+  it('só 2 grupos de aulas (aulas-ponte): 2 unidades válidas são gravadas', async () => {
+    const bridged = schedule(true, 't1', (n) => [['ch1'], ['ch1', 'ch2'], ['ch3'], ['ch3', 'ch4']][n - 1]);
+    const two = [
+      { unitNumber: 1, title: 'U1', topics: ['a'], chapterIds: ['ch1', 'ch2'] },
+      { unitNumber: 2, title: 'U2', topics: ['b'], chapterIds: ['ch3', 'ch4'] },
+    ];
+    const { deps, saveUnits, streamChat } = makeDeps({ sch: bridged, text: JSON.stringify({ units: two }) });
+    expect(await generateUnitsFromDistribution('sch1', teacher, deps)).toEqual(two);
+    expect(saveUnits).toHaveBeenCalledWith('p1', two);
+    expect(streamChat.mock.calls[0][0][0].content).toContain('Crie de 2 a 6 unidades');
   });
 
   it('sem aulas com capítulos → 422', async () => {

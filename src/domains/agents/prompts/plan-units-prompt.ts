@@ -5,17 +5,20 @@ import type { PlanChapterBook } from '@/domains/teaching/services/plan-chapters-
 export const PLAN_UNITS_MIN = 3;
 export const PLAN_UNITS_MAX = 6;
 
-export const PLAN_UNITS_SYSTEM_PROMPT = `
+export const buildPlanUnitsSystemPrompt = (minUnits: number) => `
 Você é a Tutora Lucy auxiliando o Professor Responsável a organizar o plano de ensino em unidades, a partir da distribuição dos capítulos pelas aulas.
 Regras:
-- Crie de ${PLAN_UNITS_MIN} a ${PLAN_UNITS_MAX} unidades, com "unitNumber" sequencial a partir de 1.
+- Crie de ${minUnits} a ${PLAN_UNITS_MAX} unidades, com "unitNumber" sequencial a partir de 1.
 - Use somente os ids de capítulo fornecidos; não invente capítulos.
+- Inclua em chapterIds todos os capítulos de cada aula; nenhum capítulo distribuído pode ficar fora das unidades.
 - Cada aula deve ficar inteira em uma única unidade: todos os capítulos de uma aula pertencem à mesma unidade, e uma aula nunca é dividida entre unidades.
 - Cada unidade tem um "title" curto e uma lista de "topics" (tópicos curtos, não vazios).
 - Mantenha a ordem das aulas: as unidades seguem a sequência do cronograma.
 Responda APENAS com um objeto JSON no formato:
 {"units":[{"unitNumber":1,"title":"Título da unidade","topics":["Tópico"],"chapterIds":["id"]}]}
 `;
+
+export const PLAN_UNITS_SYSTEM_PROMPT = buildPlanUnitsSystemPrompt(PLAN_UNITS_MIN);
 
 export type PlanUnitItem = { unitNumber: number; title: string; topics: string[]; chapterIds: string[] };
 
@@ -25,6 +28,7 @@ export type PlanUnitsPromptInput = {
   objectives: string;
   lessons: { classNumber: number; topicTitle: string; chapterIds: string[] }[];
   books: PlanChapterBook[];
+  minUnits?: number;
 };
 
 export function buildPlanUnitsMessages(input: PlanUnitsPromptInput): AIMessage[] {
@@ -51,7 +55,7 @@ export function buildPlanUnitsMessages(input: PlanUnitsPromptInput): AIMessage[]
     '\nOrganize o plano em unidades.',
   ].join('\n');
   return [
-    { role: 'system', content: PLAN_UNITS_SYSTEM_PROMPT.trim() },
+    { role: 'system', content: buildPlanUnitsSystemPrompt(input.minUnits ?? PLAN_UNITS_MIN).trim() },
     { role: 'user', content },
   ];
 }
@@ -82,13 +86,34 @@ export function parsePlanUnits(raw: string): PlanUnitItem[] | null {
   }
 }
 
-/** 3 a 6 unidades numeradas em sequência, com tópicos, só capítulos do plano e cada aula inteira numa única unidade. */
+/** Grupos de aulas ligadas por capítulo em comum (componentes conexos); aulas sem capítulos são ignoradas. */
+export function countLessonGroups(lessons: { chapterIds: string[] }[]): number {
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    parent.set(x, r);
+    return r;
+  };
+  for (const l of lessons) {
+    for (const id of l.chapterIds) if (!parent.has(id)) parent.set(id, id);
+    for (let i = 1; i < l.chapterIds.length; i++) {
+      parent.set(find(l.chapterIds[i]), find(l.chapterIds[0]));
+    }
+  }
+  const roots = new Set<string>();
+  for (const l of lessons) if (l.chapterIds.length > 0) roots.add(find(l.chapterIds[0]));
+  return roots.size;
+}
+
+/** Entre minUnits e 6 unidades numeradas em sequência, com tópicos, só capítulos do plano e cada aula inteira numa única unidade. */
 export function isValidPlanUnits(
   units: PlanUnitItem[],
   lessons: { classNumber: number; chapterIds: string[] }[],
-  planChapterIds: Set<string>
+  planChapterIds: Set<string>,
+  minUnits: number = PLAN_UNITS_MIN
 ): boolean {
-  if (units.length < PLAN_UNITS_MIN || units.length > PLAN_UNITS_MAX) return false;
+  if (units.length < minUnits || units.length > PLAN_UNITS_MAX) return false;
   if (!units.every((u, i) => u.unitNumber === i + 1)) return false;
   if (!units.every((u) => u.topics.length > 0)) return false;
   if (!units.every((u) => u.chapterIds.every((id) => planChapterIds.has(id)))) return false;

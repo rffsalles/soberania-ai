@@ -313,4 +313,20 @@ describe('TeachingPlanNewPage', () => {
       { unitNumber: 1, title: 'Base', topics: ['Joins'], chapterIds: ['ch1'] },
     ]);
   });
+
+  it('título de unidade vazio mostra alerta e não envia o PUT', async () => {
+    nav.id = 'cplan000001';
+    const units = [{ unitNumber: 1, title: 'Fundamentos', topics: ['Joins'], chapterIds: ['ch1'] }];
+    stubFetch({
+      ...subjectsOk([offeringADS]),
+      'GET /api/v1/teacher/plans/cplan000001': savedPlan({ unitsContent: units }),
+      'PUT /api/v1/teacher/plans/cplan000001': { success: true, plan: { id: 'cplan000001' } },
+    });
+    render(<TeachingPlanNewPage />);
+    const title = await screen.findByLabelText('Título da unidade 1');
+    fireEvent.change(title, { target: { value: '   ' } });
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Informe o título da unidade 1.');
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
+  });
 });

@@ -56,6 +56,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
     setIsLoading(true);
     setError(null);
     setStatus(null);
+    setConflict(null);
     fetchMaterialChapters(material.id)
       .then((chapters) => {
         if (cancelled) return;
@@ -121,8 +122,10 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
       'Nenhum capítulo encontrado; os capítulos atuais foram mantidos.',
     );
 
-  const updateRow = (index: number, patch: Partial<Row>) =>
+  const updateRow = (index: number, patch: Partial<Row>) => {
+    setConflict(null);
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  };
 
   return (
     <AdaptiveModal
@@ -168,7 +171,10 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
                     variant="ghost"
                     size="sm"
                     aria-label={`Remover capítulo ${n}`}
-                    onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}
+                    onClick={() => {
+                      setConflict(null);
+                      setRows((prev) => prev.filter((_, i) => i !== index));
+                    }}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -183,7 +189,10 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setRows((prev) => [...prev, { title: '', startPage: '1' }])}
+            onClick={() => {
+              setConflict(null);
+              setRows((prev) => [...prev, { title: '', startPage: '1' }]);
+            }}
           >
             Adicionar capítulo
           </Button>

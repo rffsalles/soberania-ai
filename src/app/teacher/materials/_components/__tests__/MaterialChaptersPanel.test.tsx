@@ -116,6 +116,16 @@ describe('MaterialChaptersPanel', () => {
       expect(screen.queryByRole('button', { name: 'Forçar mesmo assim' })).toBeNull();
     });
 
+    it('editar uma linha após o 409 remove o botão de forçar', async () => {
+      stubConflict('ADMIN', { status: 200, body: {} });
+      renderPanel();
+      await screen.findByText('Marcadores do PDF');
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar capítulos' }));
+      await screen.findByRole('button', { name: 'Forçar mesmo assim' });
+      fireEvent.change(screen.getByLabelText('Título do capítulo 1'), { target: { value: 'Outro' } });
+      expect(screen.queryByRole('button', { name: 'Forçar mesmo assim' })).toBeNull();
+    });
+
     it('admin força e o painel repete o PUT com force=1', async () => {
       stubConflict('ADMIN', {
         status: 200,

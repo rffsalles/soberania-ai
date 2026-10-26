@@ -106,6 +106,7 @@ export default function TeachingPlanNewPage() {
   // UI Loading & feedback states
   const [isGeneratingAI, setIsGeneratingAI] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [unitsError, setUnitsError] = React.useState<string | null>(null);
   const [saveStatusMessage, setSaveStatusMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -269,6 +270,15 @@ export default function TeachingPlanNewPage() {
       return;
     }
 
+    if (unitsEdited) {
+      const emptyIndex = units.findIndex((u) => !u.title.trim());
+      if (emptyIndex !== -1) {
+        setUnitsError(`Informe o título da unidade ${units[emptyIndex].unitNumber}.`);
+        return;
+      }
+    }
+    setUnitsError(null);
+
     try {
       setIsSaving(true);
       const url = editingPlanId
@@ -395,6 +405,12 @@ export default function TeachingPlanNewPage() {
           />
         </div>
       </div>
+
+      {unitsError && (
+        <p role="alert" className="text-sm text-danger">
+          {unitsError}
+        </p>
+      )}
 
       {/* Docked Footer Bar */}
       <PlanFooterDock

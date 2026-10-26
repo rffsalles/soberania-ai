@@ -3,6 +3,8 @@ import { loggedStreamChat, type StreamChatFn } from '@/domains/telemetry/service
 import { collectStream } from '@/domains/agents/collect-stream';
 import {
   buildPlanUnitsMessages,
+  countLessonGroups,
+  PLAN_UNITS_MIN,
   isValidPlanUnits,
   parsePlanUnits,
   type PlanUnitItem,
@@ -67,6 +69,7 @@ export async function generateUnitsFromDistribution(
     .filter((l) => l.chapterIds.length > 0);
   if (lessons.length === 0) throw new DomainError(422, NO_DISTRIBUTED_CHAPTERS);
 
+  const minUnits = Math.max(1, Math.min(PLAN_UNITS_MIN, countLessonGroups(lessons)));
   const { teachingPlan } = schedule;
   const books = await deps.listPlanChapters(teachingPlan.id);
   const messages = buildPlanUnitsMessages({
@@ -75,9 +78,10 @@ export async function generateUnitsFromDistribution(
     objectives: [teachingPlan.generalObjectives, teachingPlan.specificObjectives].filter(Boolean).join('\n'),
     lessons,
     books,
+    minUnits,
   });
   const units = await askModel(messages, deps);
-  if (!units || !isValidPlanUnits(units, lessons, planChapterIds(books))) {
+  if (!units || !isValidPlanUnits(units, lessons, planChapterIds(books), minUnits)) {
     throw new DomainError(503, PLAN_UNITS_AI_UNAVAILABLE_MESSAGE);
   }
 

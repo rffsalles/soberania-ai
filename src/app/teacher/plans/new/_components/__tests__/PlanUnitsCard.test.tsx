@@ -35,6 +35,31 @@ describe('PlanUnitsCard', () => {
     expect(onChange).toHaveBeenCalledWith([{ ...unit, title: 'Base' }]);
   });
 
+  it('adicionar unidade acrescenta uma vazia numerada em sequência', () => {
+    const onChange = vi.fn();
+    const unit = { unitNumber: 1, title: 'A', topics: ['x'], chapterIds: ['ch1'] };
+    render(<PlanUnitsCard planId="p1" units={[unit]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar unidade' }));
+    expect(onChange).toHaveBeenCalledWith([unit, { unitNumber: 2, title: '', topics: [], chapterIds: [] }]);
+  });
+
+  it('remover a primeira de duas renumera a restante para 1', () => {
+    const onChange = vi.fn();
+    const a = { unitNumber: 1, title: 'A', topics: ['x'], chapterIds: ['ch1'] };
+    const b = { unitNumber: 2, title: 'B', topics: ['y'], chapterIds: ['ch2'] };
+    render(<PlanUnitsCard planId="p1" units={[a, b]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Remover unidade 1' }));
+    expect(onChange).toHaveBeenCalledWith([{ ...b, unitNumber: 1 }]);
+  });
+
+  it('sem unidades mostra o botão de adicionar e o campo de título limita 200 caracteres', () => {
+    render(<PlanUnitsCard planId="p1" units={[{ unitNumber: 1, title: 'A', topics: [], chapterIds: [] }]} onChange={vi.fn()} />);
+    expect((screen.getByLabelText('Título da unidade 1') as HTMLInputElement).maxLength).toBe(200);
+    cleanup();
+    render(<PlanUnitsCard planId="p1" units={[]} onChange={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Adicionar unidade' })).toBeTruthy();
+  });
+
   it('sem unidades mostra o texto de orientação', () => {
     render(<PlanUnitsCard planId="p1" units={[]} onChange={vi.fn()} />);
     expect(screen.getByText('Nenhuma unidade cadastrada. Distribua os capítulos no cronograma e use "Gerar unidades do plano".')).toBeTruthy();

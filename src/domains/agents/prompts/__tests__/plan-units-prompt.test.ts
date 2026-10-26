@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlanUnitsMessages, isValidPlanUnits, parsePlanUnits, type PlanUnitItem } from '../plan-units-prompt';
+import { buildPlanUnitsMessages, countLessonGroups, isValidPlanUnits, parsePlanUnits, type PlanUnitItem } from '../plan-units-prompt';
 import type { PlanChapterBook } from '@/domains/teaching/services/plan-chapters-service';
 
 const books: PlanChapterBook[] = [
@@ -69,5 +69,21 @@ describe('plan-units-prompt', () => {
     expect(user).toContain('Banco de Dados');
     expect(user).toContain('Aula 2 · Joins · capítulos: ch1, ch2');
     expect(user).toContain('id=ch3');
+  });
+
+  it('countLessonGroups junta aulas-ponte e ignora aulas sem capítulos', () => {
+    expect(countLessonGroups([{ chapterIds: ['c2', 'c3'] }, { chapterIds: ['c3', 'c4'] }, { chapterIds: ['c5'] }, { chapterIds: [] }])).toBe(2);
+    expect(countLessonGroups([])).toBe(0);
+  });
+
+  it('minUnits reduz o mínimo aceito e o prompt declara a faixa e a regra dos capítulos', () => {
+    const two = [u(1, ['ch1', 'ch2']), u(2, ['ch3', 'ch4'])];
+    expect(isValidPlanUnits(two, lessons, planIds)).toBe(false);
+    expect(isValidPlanUnits(two, lessons, planIds, 2)).toBe(true);
+    const input = { subjectName: 'BD', syllabus: 'E', objectives: 'O', lessons: [], books: [], minUnits: 2 };
+    const system = buildPlanUnitsMessages(input)[0].content;
+    expect(system).toContain('Crie de 2 a 6 unidades');
+    expect(system).toContain('Inclua em chapterIds todos os capítulos de cada aula; nenhum capítulo distribuído pode ficar fora das unidades.');
+    expect(buildPlanUnitsMessages({ ...input, minUnits: undefined })[0].content).toContain('Crie de 3 a 6 unidades');
   });
 });
