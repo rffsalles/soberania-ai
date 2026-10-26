@@ -7,6 +7,7 @@ import { requestJson } from '@/components/assessments/use-assessments';
 export type ScheduleLesson = {
   id: string;
   classNumber: number;
+  topicTitle: string;
   status: 'DRAFT' | 'PUBLISHED';
   chapters: { chapterId: string; chapter: { order: number } }[];
 };

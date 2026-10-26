@@ -9,14 +9,14 @@ import { ROUTES } from '@/lib/constants/routes';
 import { useTeacherPlans } from '@/components/assessments/use-assessments';
 import { distributeChapters, syncSchedule, useScheduleLessons, useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
 import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
-import { NO_PLAN_CHAPTERS, NO_SYNCED_LESSONS } from '@/lib/constants/teaching';
+import { LESSON_STATUS, NO_PLAN_CHAPTERS, NO_SYNCED_LESSONS } from '@/lib/constants/teaching';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
 import { planToComboboxItem } from '@/components/teaching/plan-combobox-item';
 import { MeetingsTable } from './MeetingsTable';
 import { ScheduleForm } from './ScheduleForm';
 
 const DISTRIBUTE_ERROR = 'Não foi possível distribuir os capítulos. Tente novamente.';
-const DISTRIBUTE_CONFIRM = 'Algumas aulas já têm capítulos. Substituir a distribuição das aulas em rascunho?';
+const DISTRIBUTE_CONFIRM = 'Algumas aulas em rascunho já têm capítulos ou título personalizado. Substituir?';
 
 const SYNC_ERROR = 'Não foi possível sincronizar o calendário. Tente novamente.';
 
@@ -61,7 +61,10 @@ export function SchedulesPage() {
 
   async function distribute() {
     if (!scheduleId || lockReason) return;
-    if (lessons.some((l) => l.chapters.length > 0) && !window.confirm(DISTRIBUTE_CONFIRM)) return;
+    const hasCustomized = lessons.some(
+      (l) => l.status === LESSON_STATUS.DRAFT && (l.chapters.length > 0 || l.topicTitle.trim() !== `Aula ${l.classNumber}`),
+    );
+    if (hasCustomized && !window.confirm(DISTRIBUTE_CONFIRM)) return;
     setDistributing(true);
     setSyncError(null);
     setNotice(null);

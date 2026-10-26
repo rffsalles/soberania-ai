@@ -128,7 +128,7 @@ describe('SchedulesPage distribuição de capítulos', () => {
   });
 
   it('distribuir fica bloqueado quando nenhum livro do plano tem capítulos', () => {
-    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [] }];
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [] }];
     lessonsState.books = [{ ...BOOKS[0], chapters: [] }];
     openSchedule();
     expect((screen.getByRole('button', { name: DISTRIBUTE }) as HTMLButtonElement).disabled).toBe(true);
@@ -137,17 +137,39 @@ describe('SchedulesPage distribuição de capítulos', () => {
 
   it('com aulas já mapeadas pede confirmação; cancelar não chama a API', () => {
     lessonsState.books = BOOKS;
-    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3 } }] }];
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3 } }] }];
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     openSchedule();
     fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
-    expect(confirm).toHaveBeenCalledWith('Algumas aulas já têm capítulos. Substituir a distribuição das aulas em rascunho?');
+    expect(confirm).toHaveBeenCalledWith('Algumas aulas em rascunho já têm capítulos ou título personalizado. Substituir?');
     expect(lessonsState.distributeChapters).not.toHaveBeenCalled();
+  });
+
+  it('aula em rascunho sem capítulos com título personalizado pede confirmação; cancelar não chama a API', () => {
+    lessonsState.books = BOOKS;
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Modelagem ER', status: 'DRAFT', chapters: [] }];
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
+    expect(confirm).toHaveBeenCalledWith('Algumas aulas em rascunho já têm capítulos ou título personalizado. Substituir?');
+    expect(lessonsState.distributeChapters).not.toHaveBeenCalled();
+  });
+
+  it('aula publicada com título personalizado não pede confirmação', async () => {
+    lessonsState.books = BOOKS;
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Modelagem ER', status: 'PUBLISHED', chapters: [] }];
+    lessonsState.distributeChapters.mockResolvedValue({ updated: 0, skippedPublished: 1 });
+    const confirm = vi.spyOn(window, 'confirm');
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
+    await screen.findByRole('status');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(lessonsState.distributeChapters).toHaveBeenCalledWith('sch-9');
   });
 
   it('sem capítulos nas aulas não pede confirmação e sucesso mostra atualizadas e puladas', async () => {
     lessonsState.books = BOOKS;
-    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [] }];
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [] }];
     lessonsState.distributeChapters.mockResolvedValue({ updated: 4, skippedPublished: 2 });
     const confirm = vi.spyOn(window, 'confirm');
     openSchedule();
@@ -161,7 +183,7 @@ describe('SchedulesPage distribuição de capítulos', () => {
 
   it('erro 503 mostra a mensagem do servidor em alerta', async () => {
     lessonsState.books = BOOKS;
-    lessonsState.lessons = [{ id: 'l1', classNumber: 1, status: 'DRAFT', chapters: [] }];
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [] }];
     lessonsState.distributeChapters.mockRejectedValue(new Error('IA indisponível'));
     openSchedule();
     fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
