@@ -124,3 +124,23 @@ export function findLessonForGeneration(id: string): Promise<GenerationLesson | 
     select: { id: true, classNumber: true, topicTitle: true, ...generationInclude },
   });
 }
+
+export async function findLessonTutorScope(lessonPlanId: string): Promise<{
+  chapters: { id: string; order: number; title: string; material: { title: string } }[];
+  planMaterialIds: string[];
+} | null> {
+  const lesson = await db.lessonPlan.findUnique({
+    where: { id: lessonPlanId },
+    select: {
+      chapters: {
+        select: { chapter: { select: { id: true, order: true, title: true, material: { select: { title: true } } } } },
+      },
+      courseSchedule: { select: { teachingPlan: { select: { references: { select: { materialId: true } } } } } },
+    },
+  });
+  if (!lesson) return null;
+  return {
+    chapters: lesson.chapters.map((c) => c.chapter).sort((a, b) => a.order - b.order),
+    planMaterialIds: lesson.courseSchedule.teachingPlan.references.map((r) => r.materialId),
+  };
+}

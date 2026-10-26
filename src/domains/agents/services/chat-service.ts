@@ -11,7 +11,8 @@ import type { InferenceLogInput } from '@/domains/telemetry/services/inference-l
 import { aiProvider, type AICompletionOptions, type AIProviderType, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
 import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
 import { isSyntheticChapter } from '@/domains/rag/constants';
-import { startTutorPipeline } from '../tutor-pipeline';
+import { findLessonTutorScope } from '@/domains/teaching/services/lesson-plan-repository';
+import { startTutorPipeline, type TutorScope } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
 
 export const MAX_HISTORY_MESSAGES = 10;
@@ -52,13 +53,28 @@ export type ChatDeps = {
   provider: AIProviderType;
   search?(query: RAGSearchQuery): Promise<RAGSearchResult>;
   now?: () => Date;
+  /** Escopo de busca do tutor para aulas com plano (capítulos > materiais do plano > acervo inteiro). */
+  findTutorScope?(lessonPlanId: string): Promise<TutorScope | undefined>;
 };
+
+export function toTutorScope(raw: Awaited<ReturnType<typeof findLessonTutorScope>>): TutorScope | undefined {
+  if (!raw) return undefined;
+  if (raw.chapters.length > 0) {
+    return {
+      allowedChapterIds: raw.chapters.map((c) => c.id),
+      chapterLabels: raw.chapters.map((c) => `Cap. ${c.order}: ${c.title} (${c.material.title})`),
+    };
+  }
+  if (raw.planMaterialIds.length > 0) return { allowedMaterialIds: raw.planMaterialIds };
+  return undefined;
+}
 
 const defaultDeps: ChatDeps = {
   getAgenda: (id, user) => getAgendaForUser(id, user),
   createInteraction,
   createInferenceLog,
   findLastInteraction,
+  findTutorScope: async (id) => toTutorScope(await findLessonTutorScope(id)),
   streamChat: (messages, options) => aiProvider.streamChat(messages, options),
   get provider() {
     return aiProvider.getProviderConfig().provider;
@@ -152,8 +168,10 @@ async function runChat(
   // Lida antes de gravar o turno atual: é a interação imediatamente anterior a esta resposta.
   const previous = await deps.findLastInteraction(agenda.id, user.id);
 
+  const scope = agenda.lessonPlanId && deps.findTutorScope ? await deps.findTutorScope(agenda.lessonPlanId) : undefined;
+
   const start = await startTutorPipeline(
-    { message: input.message, agendaType: agenda.type, history },
+    { message: input.message, agendaType: agenda.type, history, scope },
     { search: deps.search, streamChat: deps.streamChat }
   );
 

@@ -14,10 +14,17 @@ import { EXAM_PROCTOR_SYSTEM_PROMPT, checkExamGuardrail } from './prompts/exam-g
 
 export type PipelineHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
+export type TutorScope = {
+  allowedChapterIds?: string[];
+  allowedMaterialIds?: string[];
+  chapterLabels?: string[];
+};
+
 export type TutorPipelineRequest = {
   message: string;
   agendaType: AgendaType;
   history?: PipelineHistoryMessage[];
+  scope?: TutorScope;
 };
 
 export type TutorPipelineDeps = {
@@ -59,7 +66,7 @@ export async function startTutorPipeline(
   request: TutorPipelineRequest,
   deps: TutorPipelineDeps = {}
 ): Promise<TutorPipelineStart> {
-  const { message, agendaType, history = [] } = request;
+  const { message, agendaType, history = [], scope } = request;
 
   if (agendaType === 'EXAM') {
     // O history vem do cliente: todo turno do aluno passa pelo guardrail, não só a mensagem atual.
@@ -70,11 +77,17 @@ export async function startTutorPipeline(
     }
   }
 
-  const rag = await (deps.search ?? executeHybridSearch)({ query: message, topK: 2 });
+  const rag = await (deps.search ?? executeHybridSearch)({
+    query: message,
+    topK: 2,
+    ...(scope?.allowedChapterIds ? { allowedChapterIds: scope.allowedChapterIds } : {}),
+    ...(scope?.allowedMaterialIds ? { allowedMaterialIds: scope.allowedMaterialIds } : {}),
+  });
   const ragContext = rag.chunks
     .map((c) => `[FONTE: ${formatCitation(c)}]\n${c.content}`)
     .join('\n\n');
-  const systemPrompt = `${getSystemPromptForAgenda(agendaType)}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
+  const scopeLine = scope?.chapterLabels?.length ? `\n\nEsta aula cobre: ${scope.chapterLabels.join('; ')}.` : '';
+  const systemPrompt = `${getSystemPromptForAgenda(agendaType)}${scopeLine}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
 
   const streamChat = deps.streamChat ?? ((m, o) => aiProvider.streamChat(m, o));
   const stream = streamChat(

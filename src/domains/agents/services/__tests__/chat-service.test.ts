@@ -4,7 +4,7 @@ import { DomainError } from '@/lib/api/domain-error';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import type { AIMessage, InferenceTelemetry, StreamChunk } from '@/lib/ai-provider';
 import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
-import { chatWithTutor, startChat, type ChatDeps } from '../chat-service';
+import { chatWithTutor, startChat, toTutorScope, type ChatDeps } from '../chat-service';
 
 const NOW = new Date('2026-10-20T12:00:00.000Z');
 const user = { id: 'stu1', role: Role.STUDENT, classId: 'c1' };
@@ -314,5 +314,34 @@ describe('chatWithTutor', () => {
       expect(f.createInteraction).toHaveBeenCalledWith(expect.objectContaining({ wasCorrect: null }));
       expect(result.wasCorrect).toBeNull();
     });
+  });
+});
+
+describe('escopo do tutor', () => {
+  it('toTutorScope: capítulos > materiais do plano > nada', () => {
+    expect(
+      toTutorScope({
+        chapters: [{ id: 'ch3', order: 3, title: 'Modelo ER', material: { title: 'Sistemas de Banco de Dados' } }],
+        planMaterialIds: ['m1'],
+      })
+    ).toEqual({ allowedChapterIds: ['ch3'], chapterLabels: ['Cap. 3: Modelo ER (Sistemas de Banco de Dados)'] });
+    expect(toTutorScope({ chapters: [], planMaterialIds: ['m1', 'm2'] })).toEqual({ allowedMaterialIds: ['m1', 'm2'] });
+    expect(toTutorScope({ chapters: [], planMaterialIds: [] })).toBeUndefined();
+    expect(toTutorScope(null)).toBeUndefined();
+  });
+
+  it('chat de agenda sem lessonPlanId não consulta o escopo', async () => {
+    const f = makeDeps();
+    const findTutorScope = vi.fn(async () => undefined);
+    await chatWithTutor(user, { agendaId: 'ag1', message: 'oi' }, { ...f.deps, findTutorScope });
+    expect(findTutorScope).not.toHaveBeenCalled();
+  });
+
+  it('chat de agenda com lessonPlanId restringe a busca ao escopo', async () => {
+    const f = makeDeps({ agenda: agenda({ lessonPlanId: 'lp1' } as Partial<AgendaDTO>) });
+    const findTutorScope = vi.fn(async () => ({ allowedChapterIds: ['ch3'] }));
+    await chatWithTutor(user, { agendaId: 'ag1', message: 'oi' }, { ...f.deps, findTutorScope });
+    expect(findTutorScope).toHaveBeenCalledWith('lp1');
+    expect(f.search).toHaveBeenCalledWith({ query: 'oi', topK: 2, allowedChapterIds: ['ch3'] });
   });
 });

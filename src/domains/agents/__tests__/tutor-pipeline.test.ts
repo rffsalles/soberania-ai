@@ -42,3 +42,36 @@ describe('startTutorPipeline (contexto RAG)', () => {
     expect(prompt).not.toContain('pág. 2');
   });
 });
+
+describe('startTutorPipeline (escopo da aula)', () => {
+  async function run(scope?: { allowedChapterIds?: string[]; allowedMaterialIds?: string[]; chapterLabels?: string[] }) {
+    const sent: AIMessage[][] = [];
+    const search = vi.fn(async () => ({ query: 'q', chunks: [], latencyMs: 1 }));
+    const streamChat = vi.fn(async function* (messages: AIMessage[]): AsyncGenerator<StreamChunk> {
+      sent.push(messages);
+      yield { token: '', isComplete: true };
+    });
+    const start = await startTutorPipeline(
+      { message: 'o que é entidade?', agendaType: 'CLASSROOM', scope },
+      { search, streamChat }
+    );
+    if (start.kind !== 'stream') throw new Error('esperava stream');
+    for await (const _ of start.stream) { /* consome */ }
+    return { search, prompt: sent[0][0].content };
+  }
+
+  it('com escopo de capítulos filtra a busca e cita os capítulos no prompt', async () => {
+    const { search, prompt } = await run({
+      allowedChapterIds: ['ch3'],
+      chapterLabels: ['Cap. 3: Modelo ER (Sistemas de Banco de Dados)'],
+    });
+    expect(search).toHaveBeenCalledWith({ query: 'o que é entidade?', topK: 2, allowedChapterIds: ['ch3'] });
+    expect(prompt).toContain('Esta aula cobre: Cap. 3: Modelo ER (Sistemas de Banco de Dados).');
+  });
+
+  it('sem escopo busca no acervo inteiro como hoje', async () => {
+    const { search, prompt } = await run(undefined);
+    expect(search).toHaveBeenCalledWith({ query: 'o que é entidade?', topK: 2 });
+    expect(prompt).not.toContain('Esta aula cobre');
+  });
+});
