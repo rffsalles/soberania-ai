@@ -117,7 +117,7 @@ describe('extractAndSaveChapters', () => {
     );
   });
 
-  it('PDF sem outline usa a IA nas 12 primeiras páginas e grava AI', async () => {
+  it('PDF sem outline usa a IA nas 15 primeiras páginas e grava AI', async () => {
     const r = await extractAndSaveChapters(
       'm1',
       { buffer, pages, totalPages: 20 },
@@ -125,10 +125,23 @@ describe('extractAndSaveChapters', () => {
     );
     expect(r.source).toBe('AI');
     const prompt = streamChat.mock.calls[0][0].map((m: { content: string }) => m.content).join('\n');
-    expect(prompt).toContain('Página física 12');
-    expect(prompt).not.toContain('Página física 13');
+    expect(prompt).toContain('Página física 15');
+    expect(prompt).not.toContain('Página física 16');
     expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.1, maxTokens: 1200 });
     expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'AI', [], expect.any(Array), undefined);
+  });
+
+  it('páginas impressas da IA são realinhadas ao topo das páginas físicas', async () => {
+    const shifted = pages.map((p) =>
+      p.pageNumber === 5 ? { ...p, text: 'Fundamentos de Redes\nTexto' } : p.pageNumber === 11 ? { ...p, text: 'Protocolos de Camada\nTexto' } : p,
+    );
+    const r = await extractAndSaveChapters(
+      'm1',
+      { buffer, pages: shifted, totalPages: 20 },
+      depsWith({ ai: aiJson([{ title: 'Fundamentos de Redes', startPage: 3 }, { title: 'Protocolos de Camada', startPage: 9 }]) }),
+    );
+    expect(r.source).toBe('AI');
+    expect(replaceChapters.mock.calls[0][1].map((c: { startPage: number }) => c.startPage)).toEqual([5, 11]);
   });
 
   it.each([

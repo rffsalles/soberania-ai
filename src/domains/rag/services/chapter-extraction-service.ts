@@ -7,6 +7,7 @@ import { storageService } from '@/domains/storage/storage-service';
 import type { PdfNavigation, RawDocumentPage } from '@/domains/rag/types';
 import { CHAPTER_TOC_PAGES } from '@/domains/rag/constants';
 import {
+  alignDraftsToText,
   buildChunkAssignments,
   headingsToDrafts,
   isValidChapterSequence,
@@ -115,7 +116,8 @@ export async function extractChapterDrafts(
     return { source: 'HEADINGS', drafts: fromHeadings };
   }
 
-  const fromAi = await askModel(input, nav, deps);
+  const rawAi = await askModel(input, nav, deps);
+  const fromAi = rawAi && alignDraftsToText(rawAi, input.pages);
   if (fromAi && isValidChapterSequence(fromAi, input.totalPages, 2)) {
     return { source: 'AI', drafts: fromAi };
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  alignDraftsToText,
   buildChunkAssignments,
   isValidChapterSequence,
   headingsToDrafts,
@@ -204,4 +205,47 @@ describe('headingsToDrafts', () => {
 
   it('um único acerto devolve null', () =>
     expect(headingsToDrafts([page(5, 'Unidade 1 – A'), page(9, 'Texto')])).toBeNull());
+});
+
+describe('alignDraftsToText', () => {
+  const page = (pageNumber: number, text: string) => ({ pageNumber, text });
+  const pages = [
+    ...Array.from({ length: 60 }, (_, i) => page(i + 1, `Texto qualquer ${i + 1}`)),
+  ];
+  pages[16] = page(17, 'Unidade 1 – Conjuntos Numéricos\nTexto');
+  pages[29] = page(30, 'Unidade 2 – Funções e Gráficos\nTexto');
+  pages[44] = page(45, 'Unidade 3 – Geometria Plana\nTexto');
+
+  it('realinha páginas impressas (+2) para a página física cujo topo tem o título', () => {
+    const drafts = [
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
+      { title: 'Unidade 2 – Funções e Gráficos', startPage: 28 },
+      { title: 'Unidade 3 – Geometria Plana', startPage: 43 },
+    ];
+    expect(alignDraftsToText(drafts, pages).map((d) => d.startPage)).toEqual([17, 30, 45]);
+    expect(drafts.map((d) => d.startPage)).toEqual([15, 28, 43]);
+  });
+
+  it('draft sem título encontrado herda o deslocamento majoritário', () => {
+    const drafts = [
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
+      { title: 'Unidade 2 – Funções e Gráficos', startPage: 28 },
+      { title: 'Título que não existe no texto', startPage: 50 },
+    ];
+    expect(alignDraftsToText(drafts, pages).map((d) => d.startPage)).toEqual([17, 30, 52]);
+  });
+
+  it('sem maioria de realinhados, mantém os não encontrados como estão', () => {
+    const drafts = [
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
+      { title: 'Nada a ver aqui', startPage: 28 },
+      { title: 'Outro título ausente', startPage: 40 },
+    ];
+    expect(alignDraftsToText(drafts, pages).map((d) => d.startPage)).toEqual([17, 28, 40]);
+  });
+
+  it('ignora acentos e pontuação ao comparar', () => {
+    const r = alignDraftsToText([{ title: 'UNIDADE 2: FUNCOES e graficos', startPage: 29 }], pages);
+    expect(r[0].startPage).toBe(30);
+  });
 });
