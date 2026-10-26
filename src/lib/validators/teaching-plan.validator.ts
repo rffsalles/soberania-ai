@@ -5,11 +5,20 @@ export const planReferenceSchema = z.object({
   kind: z.enum(['BASIC', 'COMPLEMENTARY']),
 });
 
+export const planUnitSchema = z.object({
+  unitNumber: z.number().int().min(1),
+  title: z.string().trim().min(1).max(200),
+  topics: z.array(z.string().trim().min(1)),
+  chapterIds: z.array(z.string()).optional(),
+});
+
+export type PlanUnit = z.infer<typeof planUnitSchema>;
+
 export const updateTeachingPlanSchema = z.object({
   syllabus: z.string().optional(),
   generalObjectives: z.string().optional(),
   specificObjectives: z.string().optional(),
-  unitsContent: z.array(z.any()).optional(),
+  unitsContent: z.array(planUnitSchema).optional(),
   methodology: z.string().optional(),
   assessmentCriteria: z.string().optional(),
   basicBibliography: z.array(z.string()).optional(),

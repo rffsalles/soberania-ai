@@ -4,6 +4,9 @@ import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PlanHeaderControls } from './PlanHeaderControls';
 import { PlanBibliographyCard } from './PlanBibliographyCard';
+import { PlanUnitsCard } from './PlanUnitsCard';
+import { z } from 'zod';
+import { planUnitSchema, type PlanUnit } from '@/lib/validators/teaching-plan.validator';
 import { PlanEditorForm, type SyllabusSource } from './PlanEditorForm';
 import { PlanNdeComplianceCard, hoursMatchWorkload } from './PlanNdeComplianceCard';
 import { PlanTelemetryCard } from './PlanTelemetryCard';
@@ -75,6 +78,8 @@ export default function TeachingPlanNewPage() {
   // Ofertas do professor (disciplina + turma + período); a oferta do plano salvo vem de plan.subject.
   const [offerings, setOfferings] = React.useState<OfferingOption[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = React.useState<string>('');
+  const [units, setUnits] = React.useState<PlanUnit[]>([]);
+  const [unitsEdited, setUnitsEdited] = React.useState(false);
   const [savedOffering, setSavedOffering] = React.useState<OfferingOption | null>(null);
 
   // References: Starts clean or loaded from DB
@@ -134,6 +139,8 @@ export default function TeachingPlanNewPage() {
           }
           if (plan.generalObjectives) setGeneralObjectives(plan.generalObjectives);
           if (plan.methodology) setMethodology(plan.methodology);
+          const parsedUnits = z.array(planUnitSchema).safeParse(plan.unitsContent);
+          setUnits(parsedUnits.success ? parsedUnits.data : []);
           const hasText = (plan.basicBibliography?.length ?? 0) + (plan.complementaryBiblio?.length ?? 0) > 0;
           if (hasText || plan.references?.length > 0) {
             if (plan.references?.length > 0) setReferencesUntrusted(true);
@@ -294,6 +301,14 @@ export default function TeachingPlanNewPage() {
           practiceHours: ndeCompliance.practiceHours ?? undefined,
           ndeComplianceStatus: ndeCompliance.ndeComplianceStatus,
           status,
+          ...(unitsEdited
+            ? {
+                unitsContent: units.map((u) => ({
+                  ...u,
+                  topics: u.topics.map((t) => t.trim()).filter(Boolean),
+                })),
+              }
+            : {}),
         }),
       });
 
@@ -355,6 +370,16 @@ export default function TeachingPlanNewPage() {
             onChangeMethodology={setMethodology}
             isAiLocked={isAiLocked}
           />
+          {editingPlanId && (
+            <PlanUnitsCard
+              planId={editingPlanId}
+              units={units}
+              onChange={(next) => {
+                setUnits(next);
+                setUnitsEdited(true);
+              }}
+            />
+          )}
         </div>
 
         {/* Right Column: NDE / Citations & LGPD */}

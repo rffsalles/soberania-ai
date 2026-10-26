@@ -8,6 +8,14 @@ describe('updateTeachingPlanSchema', () => {
   it('descarta totalHours: a carga total vem da matriz', () => {
     expect(updateTeachingPlanSchema.parse({ syllabus: 'x', totalHours: 99, theoryHours: 40 })).toEqual({ syllabus: 'x', theoryHours: 40 });
   });
+  it('unitsContent aceita unidades com chapterIds opcionais e rejeita título vazio, unitNumber 0 e tópico vazio', () => {
+    const ok = (u: unknown) => updateTeachingPlanSchema.safeParse({ unitsContent: [u] }).success;
+    expect(ok({ unitNumber: 1, title: 'Base', topics: ['Joins'], chapterIds: ['ch1'] })).toBe(true);
+    expect(ok({ unitNumber: 1, title: 'Base', topics: [] })).toBe(true);
+    expect(ok({ unitNumber: 1, title: '  ', topics: [] })).toBe(false);
+    expect(ok({ unitNumber: 0, title: 'Base', topics: [] })).toBe(false);
+    expect(ok({ unitNumber: 1, title: 'Base', topics: ['  '] })).toBe(false);
+  });
   it('rejeita null em coluna obrigatória', () => {
     expect(updateTeachingPlanSchema.safeParse({ syllabus: null }).success).toBe(false);
   });

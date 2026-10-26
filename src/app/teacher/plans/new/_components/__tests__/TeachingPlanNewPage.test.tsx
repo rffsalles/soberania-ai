@@ -39,6 +39,10 @@ vi.mock('../ReferenceSelectionModal', () => ({
   ),
 }));
 
+vi.mock('@/components/teaching/use-plan-chapters', () => ({
+  usePlanChapters: () => ({ books: [], isLoading: false, error: null, reload: () => {} }),
+}));
+
 import TeachingPlanNewPage from '../TeachingPlanNewPage';
 
 function routeFetch(handlers: Record<string, unknown>) {
@@ -280,5 +284,33 @@ describe('TeachingPlanNewPage', () => {
     const body = bodyOf('PUT', '/api/v1/teacher/plans/cplan000001');
     expect(body.complementaryBiblio).toEqual([]);
     expect(body.references).toEqual([]);
+  });
+
+  it('PUT só envia unitsContent quando o card foi editado', async () => {
+    nav.id = 'cplan000001';
+    const units = [{ unitNumber: 1, title: 'Fundamentos', topics: ['Joins'], chapterIds: ['ch1'] }];
+    const handlers = {
+      ...subjectsOk([offeringADS]),
+      'GET /api/v1/teacher/plans/cplan000001': savedPlan({ unitsContent: units }),
+      'PUT /api/v1/teacher/plans/cplan000001': { success: true, plan: { id: 'cplan000001' } },
+    };
+    stubFetch(handlers);
+    render(<TeachingPlanNewPage />);
+    await screen.findByLabelText('Título da unidade 1');
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
+    expect(bodyOf('PUT', '/api/v1/teacher/plans/cplan000001')).not.toHaveProperty('unitsContent');
+
+    cleanup();
+    nav.push.mockReset();
+    stubFetch(handlers);
+    render(<TeachingPlanNewPage />);
+    const title = await screen.findByLabelText('Título da unidade 1');
+    fireEvent.change(title, { target: { value: 'Base' } });
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
+    expect(bodyOf('PUT', '/api/v1/teacher/plans/cplan000001').unitsContent).toEqual([
+      { unitNumber: 1, title: 'Base', topics: ['Joins'], chapterIds: ['ch1'] },
+    ]);
   });
 });
