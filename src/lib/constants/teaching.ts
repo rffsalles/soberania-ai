@@ -86,3 +86,7 @@ export const LESSON_AI_UNAVAILABLE_MESSAGE =
   'IA indisponível no momento. Tente novamente mais tarde ou escreva a aula manualmente.';
 export const DISTRIBUTION_AI_UNAVAILABLE_MESSAGE =
   'IA indisponível no momento. Tente novamente mais tarde ou atribua os capítulos manualmente em cada aula.';
+
+export const NO_DISTRIBUTED_CHAPTERS = 'Distribua os capítulos antes de gerar as unidades.';
+export const PLAN_UNITS_AI_UNAVAILABLE_MESSAGE =
+  'IA indisponível no momento. Tente novamente mais tarde ou cadastre as unidades manualmente no plano.';
