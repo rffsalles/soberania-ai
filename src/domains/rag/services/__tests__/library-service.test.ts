@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import * as fileParser from '../../file-parser';
 import { DomainError } from '@/lib/api/domain-error';
 import { MATERIAL_STATUS } from '@/lib/constants/library';
 import { EmbeddingUnavailableError } from '@/lib/embeddings';
@@ -9,6 +10,11 @@ import {
   type LibraryDeps,
 } from '../library-service';
 
+vi.mock('../../file-parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../file-parser')>();
+  return { ...actual, parseDocumentFile: vi.fn(actual.parseDocumentFile) };
+});
+
 function makeDeps(over: Partial<LibraryDeps> = {}) {
   const created: Record<string, unknown>[] = [];
   const chunks: { materialId: string; count: number }[] = [];
@@ -16,6 +22,7 @@ function makeDeps(over: Partial<LibraryDeps> = {}) {
   const embedded: { id: string; embedding: number[] }[][] = [];
   const categories: string[] = ['Existente'];
   const stored: string[] = [];
+  const calls: string[] = [];
   const deps: LibraryDeps = {
     storage: {
       uploadFile: async (_buf, name) => {
@@ -36,6 +43,7 @@ function makeDeps(over: Partial<LibraryDeps> = {}) {
     },
     chunks: {
       createChunks: async (materialId, list) => {
+        calls.push('createChunks');
         chunks.push({ materialId, count: list.length });
         return list.map((c, i) => ({ id: `ch${i}`, content: c.content }));
       },
@@ -54,9 +62,14 @@ function makeDeps(over: Partial<LibraryDeps> = {}) {
       },
     },
     embed: vi.fn(async (texts: string[]) => texts.map(() => [0.5])),
+    chapters: {
+      extractAndSave: vi.fn(async () => {
+        calls.push('extractAndSave');
+      }),
+    },
     ...over,
   };
-  return { deps, created, chunks, categories, stored, statuses, embedded };
+  return { calls, deps, created, chunks, categories, stored, statuses, embedded };
 }
 
 const text = 'Sistemas distribuidos exigem tolerancia a falhas. '.repeat(30);
@@ -133,6 +146,53 @@ describe('uploadAndIngest', () => {
     const err = await uploadAndIngest(file, { ...meta, author: ' ' }, deps).catch((e) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect(err.status).toBe(400);
+  });
+});
+
+describe('uploadAndIngest com PDF', () => {
+  const pdfFile = { buffer: Buffer.from('%PDF-1.4 conteudo'), name: 'livro.pdf' };
+  const pages = [{ pageNumber: 1, text }];
+  const mockParse = () =>
+    vi.mocked(fileParser.parseDocumentFile).mockResolvedValueOnce({
+      pages,
+      totalPages: 7,
+      isOcrApplied: false,
+    } as never);
+
+  it('PDF chama a extração de capítulos depois de gravar os chunks', async () => {
+    mockParse();
+    const { deps, calls } = makeDeps();
+    await uploadAndIngest(pdfFile, meta, deps);
+
+    expect(deps.chapters.extractAndSave).toHaveBeenCalledTimes(1);
+    expect(deps.chapters.extractAndSave).toHaveBeenCalledWith('m1', {
+      buffer: pdfFile.buffer,
+      pages,
+      totalPages: 7,
+    });
+    expect(calls.indexOf('createChunks')).toBeLessThan(calls.indexOf('extractAndSave'));
+  });
+
+  it('falha na extração de capítulos não derruba o upload', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockParse();
+    const { deps } = makeDeps({
+      chapters: { extractAndSave: vi.fn(async () => { throw new Error('boom'); }) },
+    });
+    const result = await uploadAndIngest(pdfFile, meta, deps);
+
+    expect(result.material.status).toBe(MATERIAL_STATUS.INDEXED);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[LibraryService] Falha ao extrair capítulos'),
+      expect.anything()
+    );
+    warn.mockRestore();
+  });
+
+  it('texto colado (.txt) não chama a extração', async () => {
+    const { deps } = makeDeps();
+    await ingestTextDocument({ title: 'Notas', author: 'Prof', categories: [], text }, deps);
+    expect(deps.chapters.extractAndSave).not.toHaveBeenCalled();
   });
 });
 

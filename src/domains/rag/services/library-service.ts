@@ -13,6 +13,7 @@ import type { RawDocumentPage } from '../types';
 import * as materialRepo from './material-repository';
 import * as chunkRepo from './chunk-repository';
 import * as categoryRepo from './category-repository';
+import { extractAndSaveChapters, type ExtractionInput } from './chapter-extraction-service';
 
 type MaterialRecord = Awaited<ReturnType<typeof materialRepo.createMaterial>>;
 
@@ -30,6 +31,7 @@ export interface LibraryDeps {
   };
   categories: { upsertCategoryByName(name: string): Promise<{ id: string } | null> };
   embed(texts: string[]): Promise<number[][]>;
+  chapters: { extractAndSave(materialId: string, input: ExtractionInput): Promise<unknown> };
 }
 
 const defaultDeps: LibraryDeps = {
@@ -38,6 +40,7 @@ const defaultDeps: LibraryDeps = {
   chunks: chunkRepo,
   categories: categoryRepo,
   embed: (texts) => embedTexts(texts),
+  chapters: { extractAndSave: extractAndSaveChapters },
 };
 
 export interface UploadMeta {
@@ -167,6 +170,18 @@ export async function uploadAndIngest(
   } catch (err) {
     await deps.materials.updateMaterialStatus(material.id, MATERIAL_STATUS.ERROR).catch(() => undefined);
     throw err;
+  }
+
+  if (validation.mimeType === 'application/pdf') {
+    try {
+      await deps.chapters.extractAndSave(material.id, {
+        buffer: file.buffer,
+        pages: parsed.pages,
+        totalPages: parsed.totalPages,
+      });
+    } catch (err) {
+      console.warn(`[LibraryService] Falha ao extrair capítulos do material ${material.id}:`, err);
+    }
   }
 
   return {
