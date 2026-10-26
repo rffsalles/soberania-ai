@@ -43,3 +43,26 @@ export function findScheduleForSync(id: string) {
     },
   });
 }
+
+export function findScheduleForDistribution(id: string) {
+  return db.courseSchedule.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      teachingPlan: {
+        select: {
+          id: true,
+          teacherId: true,
+          syllabus: true,
+          generalObjectives: true,
+          specificObjectives: true,
+          subject: { select: { discipline: { select: { name: true } } } },
+        },
+      },
+      lessonPlans: {
+        orderBy: { classNumber: 'asc' },
+        select: { id: true, classNumber: true, classDate: true, status: true },
+      },
+    },
+  });
+}

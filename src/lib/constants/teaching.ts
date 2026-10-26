@@ -75,3 +75,7 @@ export const ASSESSMENT_STATUS = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' } as c
 export const SCHEDULE_MAX_SPAN_DAYS = 366;
 export const SCHEDULE_MAX_MEETINGS = 400;
 export const SCHEDULE_MAX_HOLIDAYS = 60;
+
+/** Mensagens da distribuição de capítulos pelas aulas (compartilhadas com a UI). */
+export const NO_SYNCED_LESSONS = 'Sincronize o calendário antes de distribuir os capítulos.';
+export const NO_PLAN_CHAPTERS = 'Nenhum livro do plano tem capítulos cadastrados.';

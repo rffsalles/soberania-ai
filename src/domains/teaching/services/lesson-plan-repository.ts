@@ -38,3 +38,16 @@ export function findLessonPlayerData(id: string) {
     select: { topicTitle: true, dailyObjective: true, timeScript: true, mediaType: true, mediaUrl: true },
   });
 }
+
+/** Substitui os capítulos e o título de tema das aulas informadas, tudo ou nada. */
+export async function applyChapterDistribution(
+  rows: { lessonPlanId: string; topicTitle: string; chapterIds: string[] }[]
+): Promise<void> {
+  await db.$transaction([
+    db.lessonPlanChapter.deleteMany({ where: { lessonPlanId: { in: rows.map((r) => r.lessonPlanId) } } }),
+    db.lessonPlanChapter.createMany({
+      data: rows.flatMap((r) => r.chapterIds.map((chapterId) => ({ lessonPlanId: r.lessonPlanId, chapterId }))),
+    }),
+    ...rows.map((r) => db.lessonPlan.update({ where: { id: r.lessonPlanId }, data: { topicTitle: r.topicTitle } })),
+  ]);
+}
