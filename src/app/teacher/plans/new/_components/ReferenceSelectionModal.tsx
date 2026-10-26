@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ReferenceUploadTab } from './ReferenceUploadTab';
 import { ReferenceCategoryTab } from './ReferenceCategoryTab';
-import type { DocumentReference, CategoryOption } from '../types';
+import type { DocumentReference, CategoryOption, ReferenceKindValue } from '../types';
 
 interface ReferenceSelectionModalProps {
   open: boolean;
@@ -34,6 +34,7 @@ export function ReferenceSelectionModal({
   alreadySelectedIds,
   onAddReferences,
 }: ReferenceSelectionModalProps) {
+  const [kind, setKind] = React.useState<ReferenceKindValue>('BASIC');
   const [activeTab, setActiveTab] = React.useState<ModalTab>('category');
   const [categories, setCategories] = React.useState<CategoryOption[]>([]);
   const [documents, setDocuments] = React.useState<DocumentReference[]>([]);
@@ -120,7 +121,7 @@ export function ReferenceSelectionModal({
   // Submit selected existing docs
   const handleConfirmSelected = () => {
     const selectedList = documents.filter((d) => selectedDocIds.has(d.id));
-    onAddReferences(selectedList);
+    onAddReferences(selectedList.map((d) => ({ ...d, kind })));
     setSelectedDocIds(new Set());
     onOpenChange(false);
   };
@@ -133,6 +134,26 @@ export function ReferenceSelectionModal({
       description="Selecione materiais do acervo ou faça ingestão direta para fundamentar a elaboração do plano de ensino pela IA."
       className="max-w-2xl"
     >
+      {/* Tipo da bibliografia: vale para tudo que for vinculado nesta janela */}
+      <div role="tablist" aria-label="Tipo de bibliografia" className="flex gap-2 mb-3">
+        {([['BASIC', 'Bibliografia básica'], ['COMPLEMENTARY', 'Bibliografia complementar']] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={kind === value}
+            onClick={() => setKind(value)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
+              kind === value
+                ? 'border-brand-teal bg-brand-teal/15 text-brand-teal font-semibold'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-800'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Mode Selector Tabs */}
       <div className="flex border-b border-slate-200 dark:border-slate-800 pb-2 mb-4 gap-2">
         <button
@@ -275,7 +296,7 @@ export function ReferenceSelectionModal({
             );
           }}
           onSuccess={(newRef) => {
-            onAddReferences([newRef]);
+            onAddReferences([{ ...newRef, kind }]);
             onOpenChange(false);
           }}
           onCancel={() => onOpenChange(false)}

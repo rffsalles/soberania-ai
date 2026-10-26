@@ -10,6 +10,8 @@ export interface OfferingOption {
   };
 }
 
+export type ReferenceKindValue = 'BASIC' | 'COMPLEMENTARY';
+
 export interface DocumentReference {
   id: string;
   title: string;
@@ -18,6 +20,8 @@ export interface DocumentReference {
   totalChunks?: number;
   sampleExcerpt?: string;
   isCustomUpload?: boolean;
+  /** Ausente = BASIC. */
+  kind?: ReferenceKindValue;
 }
 
 export interface CategoryOption {

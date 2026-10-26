@@ -31,10 +31,11 @@ vi.mock('@/components/ui/advanced-combobox', () => ({
 vi.mock('@/components/layout/provider-badge', () => ({ ProviderBadge: () => null }));
 vi.mock('@/components/layout/use-appliance-status', () => ({ useApplianceStatus: () => null }));
 
+const modal = vi.hoisted(() => ({ refs: null as unknown[] | null }));
 const REF = { id: 'cdoc0000001', title: 'Sistemas de Banco de Dados', author: 'Elmasri', category: 'Banco de Dados' };
 vi.mock('../ReferenceSelectionModal', () => ({
   ReferenceSelectionModal: ({ onAddReferences }: { onAddReferences: (refs: unknown[]) => void }) => (
-    <button type="button" onClick={() => onAddReferences([REF])}>Adicionar referência (mock)</button>
+    <button type="button" onClick={() => onAddReferences(modal.refs ?? [REF])}>Adicionar referência (mock)</button>
   ),
 }));
 
@@ -58,6 +59,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   nav.id = null;
+  modal.refs = null;
   nav.push.mockReset();
 });
 
@@ -181,5 +183,65 @@ describe('TeachingPlanNewPage', () => {
     expect(body).not.toHaveProperty('academicPeriodId');
     expect(body).not.toHaveProperty('totalHours');
     expect(body).toMatchObject({ theoryHours: 50, practiceHours: 30 });
+  });
+
+  const REF2 = { id: 'cdoc0000002', title: 'Engenharia de Software', author: 'Sommerville', category: 'Engenharia' };
+  const libraryOk = { 'GET /api/v1/library/documents': { success: true, documents: [REF, REF2] } };
+  const savedPlan = (extra: Record<string, unknown>) => ({
+    success: true,
+    plan: {
+      id: 'cplan000001', subjectId: 'csubject0001', subject: offeringADS, syllabus: '', generalObjectives: '',
+      methodology: '', basicBibliography: [], complementaryBiblio: [], theoryHours: 50, practiceHours: 30,
+      ndeComplianceStatus: DEFAULT_NDE_COMPLIANCE_STATUS, status: 'DRAFT', ...extra,
+    },
+  });
+
+  it('salvar envia references com materialId e kind, e separa básica de complementar', async () => {
+    modal.refs = [REF, { ...REF2, kind: 'COMPLEMENTARY' }];
+    stubFetch({ ...subjectsOk([offeringADS]), 'POST /api/v1/teacher/plans': { success: true, plan: { id: 'cplan000009' } } });
+    render(<TeachingPlanNewPage />);
+    await screen.findByText(`${LABEL_ADS} | 3º Semestre · ADS`);
+    pick('csubject0001');
+    setHours('60', '20');
+    fireEvent.click(screen.getByText('Adicionar referência (mock)'));
+    fireEvent.click(screen.getByText('Salvar Rascunho'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/teacher/plans'));
+    const body = bodyOf('POST', '/api/v1/teacher/plans');
+    expect(body.basicBibliography).toEqual(['Sistemas de Banco de Dados (Elmasri) [Banco de Dados]']);
+    expect(body.complementaryBiblio).toEqual(['Engenharia de Software (Sommerville) [Engenharia]']);
+    expect(body.references).toEqual([
+      { materialId: 'cdoc0000001', kind: 'BASIC' },
+      { materialId: 'cdoc0000002', kind: 'COMPLEMENTARY' },
+    ]);
+  });
+
+  it('plano com references reabre pelos ids, sem casar por título', async () => {
+    nav.id = 'cplan000001';
+    stubFetch({
+      ...subjectsOk([offeringADS]), ...libraryOk,
+      'GET /api/v1/teacher/plans/cplan000001': savedPlan({
+        basicBibliography: ['Título antigo qualquer (Fulano) [Outra]'],
+        references: [{ materialId: 'cdoc0000001', kind: 'BASIC' }, { materialId: 'cdocsumiu001', kind: 'BASIC' }],
+      }),
+    });
+    render(<TeachingPlanNewPage />);
+    await screen.findByText('Sistemas de Banco de Dados');
+    expect(screen.queryByText('Título antigo qualquer')).toBeNull();
+    expect(screen.getByText('1 material(is) no RAG')).toBeTruthy();
+  });
+
+  it('plano antigo sem references cai no casamento por título', async () => {
+    nav.id = 'cplan000001';
+    stubFetch({
+      ...subjectsOk([offeringADS]), ...libraryOk,
+      'GET /api/v1/teacher/plans/cplan000001': savedPlan({
+        basicBibliography: ['Sistemas de Banco de Dados (Elmasri) [Banco de Dados]'],
+        complementaryBiblio: ['Engenharia de Software (Sommerville) [Engenharia]'],
+      }),
+    });
+    render(<TeachingPlanNewPage />);
+    await screen.findByText('Engenharia de Software');
+    expect(screen.getByText('Sistemas de Banco de Dados')).toBeTruthy();
+    expect(screen.getByText('Complementar')).toBeTruthy();
   });
 });

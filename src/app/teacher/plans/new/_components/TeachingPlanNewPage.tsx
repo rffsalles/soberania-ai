@@ -15,23 +15,42 @@ import type {
   OfferingOption,
   DocumentReference,
   NdeComplianceData,
+  ReferenceKindValue,
 } from '../types';
 
 /**
- * A bibliografia é salva como texto "Título (Autor) [Categoria]"; ao reabrir o plano, procura cada obra no acervo
- * pelo título para recuperar o material real (id, autor, categoria). O que não existe mais no acervo fica sem id.
+ * Reabre a bibliografia do plano. Com `plan.references` (materialId + tipo), monta as referências pelo id do acervo;
+ * material que saiu do acervo é omitido. Planos antigos, sem `references`, têm o texto "Título (Autor) [Categoria]"
+ * casado com o acervo pelo título; o que não existe mais no acervo fica sem id real.
  */
-async function restoreReferences(bibliography: string[]): Promise<DocumentReference[]> {
-  const parsed = bibliography.map((item, index) => ({
-    id: `ref-loaded-${index}`,
-    title: item.replace(/\s*\(.*?\).*/, '').trim() || item,
-    author: item.match(/\((.*?)\)/)?.[1] || '',
-    category: item.match(/\[(.*?)\]/)?.[1] || 'Geral',
-  }));
+async function restoreReferences(plan: {
+  references?: { materialId: string; kind: ReferenceKindValue }[];
+  basicBibliography: string[];
+  complementaryBiblio: string[];
+}): Promise<DocumentReference[]> {
+  const byId = Array.isArray(plan.references) && plan.references.length > 0;
+  const parseText = (items: string[], kind: ReferenceKindValue, offset: number): DocumentReference[] =>
+    items.map((item, index) => ({
+      id: `ref-loaded-${offset + index}`,
+      title: item.replace(/\s*\(.*?\).*/, '').trim() || item,
+      author: item.match(/\((.*?)\)/)?.[1] || '',
+      category: item.match(/\[(.*?)\]/)?.[1] || 'Geral',
+      kind,
+    }));
+  const basic = plan.basicBibliography ?? [];
+  const parsed = byId
+    ? []
+    : [...parseText(basic, 'BASIC', 0), ...parseText(plan.complementaryBiblio ?? [], 'COMPLEMENTARY', basic.length)];
   try {
     const res = await fetch(`${API_ROUTES.LIBRARY}/documents`);
     const data = await res.json();
     const library: DocumentReference[] = data.success && Array.isArray(data.documents) ? data.documents : [];
+    if (byId) {
+      return plan.references!.flatMap(({ materialId, kind }) => {
+        const doc = library.find((d) => d.id === materialId);
+        return doc ? [{ ...doc, kind }] : [];
+      });
+    }
     return parsed.map((ref) => {
       const match = library.find((doc) => doc.title.trim().toLowerCase() === ref.title.toLowerCase());
       return match ? { ...ref, id: match.id, author: match.author, category: match.category } : ref;
@@ -107,8 +126,13 @@ export default function TeachingPlanNewPage() {
           }
           if (plan.generalObjectives) setGeneralObjectives(plan.generalObjectives);
           if (plan.methodology) setMethodology(plan.methodology);
-          if (Array.isArray(plan.basicBibliography) && plan.basicBibliography.length > 0) {
-            void restoreReferences(plan.basicBibliography).then(setReferences);
+          const hasText = (plan.basicBibliography?.length ?? 0) + (plan.complementaryBiblio?.length ?? 0) > 0;
+          if (hasText || plan.references?.length > 0) {
+            void restoreReferences({
+              references: plan.references,
+              basicBibliography: plan.basicBibliography ?? [],
+              complementaryBiblio: plan.complementaryBiblio ?? [],
+            }).then(setReferences);
           }
           setNdeCompliance({
             theoryHours: plan.theoryHours ?? null,
@@ -233,6 +257,15 @@ export default function TeachingPlanNewPage() {
         : API_ROUTES.TEACHER_PLANS;
       const method = editingPlanId ? 'PUT' : 'POST';
 
+      const textOf = (kind: ReferenceKindValue) =>
+        references
+          .filter((r) => (r.kind ?? 'BASIC') === kind)
+          .map((r) => `${r.title} (${r.author}) [${r.category}]`);
+      const complementary = references.filter((r) => r.kind === 'COMPLEMENTARY');
+      const linkedReferences = references
+        .filter((r) => !r.id.startsWith('ref-loaded-'))
+        .map((r) => ({ materialId: r.id, kind: r.kind ?? 'BASIC' }));
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -241,7 +274,10 @@ export default function TeachingPlanNewPage() {
           syllabus,
           generalObjectives,
           methodology,
-          basicBibliography: references.map((r) => `${r.title} (${r.author}) [${r.category}]`),
+          basicBibliography: textOf('BASIC'),
+          // Plano novo sem complementar não envia as chaves; na edição, [] limpa o que havia.
+          ...(editingPlanId || complementary.length > 0 ? { complementaryBiblio: textOf('COMPLEMENTARY') } : {}),
+          ...(editingPlanId || linkedReferences.length > 0 ? { references: linkedReferences } : {}),
           theoryHours: ndeCompliance.theoryHours ?? undefined,
           practiceHours: ndeCompliance.practiceHours ?? undefined,
           ndeComplianceStatus: ndeCompliance.ndeComplianceStatus,

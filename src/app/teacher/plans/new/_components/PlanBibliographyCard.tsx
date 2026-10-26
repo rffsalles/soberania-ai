@@ -75,6 +75,11 @@ export function PlanBibliographyCard({
                     <Badge variant="outline" className="text-[10px] py-0 px-1 border-brand-teal/30 text-brand-teal">
                       {ref.category}
                     </Badge>
+                    {ref.kind === 'COMPLEMENTARY' && (
+                      <Badge variant="outline" className="text-[10px] py-0 px-1 border-brand-orange/40 text-brand-orange">
+                        Complementar
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-500 truncate">
                     {ref.author} {ref.totalChunks ? `· ${ref.totalChunks} chunks` : ''}
