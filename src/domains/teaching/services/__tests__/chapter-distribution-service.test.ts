@@ -1,8 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
 import { distributeChapters, type ChapterDistributionDeps } from '../chapter-distribution-service';
-import { AI_UNAVAILABLE_MESSAGE } from '../plan-generation-service';
-import { NO_PLAN_CHAPTERS, NO_SYNCED_LESSONS } from '@/lib/constants/teaching';
+import { DISTRIBUTION_AI_UNAVAILABLE_MESSAGE, NO_PLAN_CHAPTERS, NO_SYNCED_LESSONS } from '@/lib/constants/teaching';
 import type { PlanChapterBook } from '../plan-chapters-service';
 
 const teacher = { id: 't1', role: Role.TEACHER };
@@ -60,7 +59,13 @@ describe('chapter-distribution-service', () => {
       { lessonPlanId: 'l1', topicTitle: 'Introdução', chapterIds: ['ch1'] },
       { lessonPlanId: 'l3', topicTitle: 'Modelos II', chapterIds: ['ch2'] },
     ]);
-    expect(streamChat.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 3000 });
+    expect(streamChat.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 400 + 90 * 3 });
+  });
+
+  it('o orçamento de tokens escala com o número de aulas (40 aulas → 4000)', async () => {
+    const { deps, streamChat } = makeDeps({ sch: schedule(Array(40).fill('DRAFT')), text: '{}' });
+    await expect(distributeChapters('sch1', teacher, deps)).rejects.toMatchObject({ status: 503 });
+    expect(streamChat.mock.calls[0][1]).toMatchObject({ maxTokens: 4000 });
   });
 
   it('chapterIds repetidos na mesma aula são deduplicados antes de gravar', async () => {
@@ -82,7 +87,7 @@ describe('chapter-distribution-service', () => {
   it('aula faltando na resposta → 503 e nada gravado', async () => {
     const text = JSON.stringify({ lessons: [{ classNumber: 1, topicTitle: 'A', chapterIds: ['ch1'] }] });
     const { deps, apply } = makeDeps({ text });
-    await expect(distributeChapters('sch1', teacher, deps)).rejects.toMatchObject({ status: 503, message: AI_UNAVAILABLE_MESSAGE });
+    await expect(distributeChapters('sch1', teacher, deps)).rejects.toMatchObject({ status: 503, message: DISTRIBUTION_AI_UNAVAILABLE_MESSAGE });
     expect(apply).not.toHaveBeenCalled();
   });
 
@@ -95,9 +100,9 @@ describe('chapter-distribution-service', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
-  it('provider em fallback → 503 com AI_UNAVAILABLE_MESSAGE', async () => {
+  it('provider em fallback → 503 com DISTRIBUTION_AI_UNAVAILABLE_MESSAGE', async () => {
     const { deps, apply } = makeDeps({ text: validText, fallback: true });
-    await expect(distributeChapters('sch1', teacher, deps)).rejects.toMatchObject({ status: 503, message: AI_UNAVAILABLE_MESSAGE });
+    await expect(distributeChapters('sch1', teacher, deps)).rejects.toMatchObject({ status: 503, message: DISTRIBUTION_AI_UNAVAILABLE_MESSAGE });
     expect(apply).not.toHaveBeenCalled();
   });
 

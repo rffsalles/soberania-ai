@@ -26,6 +26,9 @@ export async function listChapterLinks(materialId: string): Promise<ChapterLinks
   return chapters.map((c) => ({ order: c.order, lessonPlanIds: c.lessonLinks.map((l) => l.lessonPlanId) }));
 }
 
+// Livros grandes (milhares de chunks, índices HNSW/GIN) estouram o timeout padrão de 5 s.
+export const REPLACE_CHAPTERS_TX_OPTIONS = { timeout: 60_000, maxWait: 10_000 } as const;
+
 /**
  * Uma $transaction: apaga os capítulos do material, cria `rows`, recria `relinks` (order → id novo)
  * e aplica `assignments` nos chunks (chapterId e rótulo `chapter`) por faixa de página.
@@ -40,13 +43,11 @@ export function replaceChapters(
   return db.$transaction(async (tx) => {
     await tx.materialChapter.deleteMany({ where: { materialId } });
     const idByOrder = new Map<number, string>();
-    for (const r of rows) {
-      const created = await tx.materialChapter.create({
-        data: { materialId, title: r.title, order: r.order, startPage: r.startPage, endPage: r.endPage, source },
-        select: { id: true },
-      });
-      idByOrder.set(r.order, created.id);
-    }
+    const created = await tx.materialChapter.createManyAndReturn({
+      data: rows.map((r) => ({ materialId, title: r.title, order: r.order, startPage: r.startPage, endPage: r.endPage, source })),
+      select: { id: true, order: true },
+    });
+    for (const c of created) idByOrder.set(c.order, c.id);
     const links = relinks.flatMap((l) => {
       const chapterId = idByOrder.get(l.order);
       return chapterId ? [{ lessonPlanId: l.lessonPlanId, chapterId }] : [];
@@ -57,8 +58,10 @@ export function replaceChapters(
       await tx.$executeRaw`
         UPDATE material_chunks
         SET "chapterId" = ${chapterId}, chapter = COALESCE(${a.title}, 'Página ' || "pageNumber")
-        WHERE "materialId" = ${materialId} AND "pageNumber" BETWEEN ${a.fromPage} AND ${a.toPage}`;
+        WHERE "materialId" = ${materialId} AND "pageNumber" BETWEEN ${a.fromPage} AND ${a.toPage}
+          AND ("chapterId" IS DISTINCT FROM ${chapterId}
+            OR "chapter" IS DISTINCT FROM COALESCE(${a.title}, 'Página ' || "pageNumber"))`;
     }
     return tx.materialChapter.findMany({ where: { materialId }, orderBy: { order: 'asc' }, select: chapterSelect });
-  });
+  }, REPLACE_CHAPTERS_TX_OPTIONS);
 }

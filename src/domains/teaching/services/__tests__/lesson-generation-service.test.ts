@@ -6,8 +6,7 @@ import {
   NO_INDEXED_CHAPTER_CONTENT,
   type LessonGenerationDeps,
 } from '../lesson-generation-service';
-import { AI_UNAVAILABLE_MESSAGE } from '../plan-generation-service';
-import { NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
+import { LESSON_AI_UNAVAILABLE_MESSAGE, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
 import type { DidacticChunk } from '@/domains/rag/types';
 
 const teacher = { id: 't1', role: Role.TEACHER };
@@ -85,7 +84,7 @@ describe('generateLessonContent', () => {
   it('soma dos tempos fora da tolerância → 503', async () => {
     for (const d of [[20, 50], [20, 50, 41], [20, 50, 19]]) {
       const { deps } = makeDeps({ text: text(d) });
-      await expect(generateLessonContent('l1', teacher, deps)).rejects.toMatchObject({ status: 503, message: AI_UNAVAILABLE_MESSAGE });
+      await expect(generateLessonContent('l1', teacher, deps)).rejects.toMatchObject({ status: 503, message: LESSON_AI_UNAVAILABLE_MESSAGE });
     }
   });
 
@@ -113,7 +112,7 @@ describe('generateLessonContent', () => {
   it('fallback, exceção ou JSON inválido → 503', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     for (const o of [{ fallback: true }, { throws: true }, { text: 'lixo' }]) {
-      await expect(generateLessonContent('l1', teacher, makeDeps(o).deps)).rejects.toMatchObject({ status: 503, message: AI_UNAVAILABLE_MESSAGE });
+      await expect(generateLessonContent('l1', teacher, makeDeps(o).deps)).rejects.toMatchObject({ status: 503, message: LESSON_AI_UNAVAILABLE_MESSAGE });
     }
     warn.mockRestore();
   });
@@ -149,7 +148,7 @@ describe('refineLessonField', () => {
   it('resposta vazia, fallback ou exceção → 503', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     for (const o of [{ text: '   ' }, { fallback: true }, { throws: true }]) {
-      await expect(refineLessonField('l1', teacher, input, makeDeps({ lesson: er(), ...o }).deps)).rejects.toMatchObject({ status: 503, message: AI_UNAVAILABLE_MESSAGE });
+      await expect(refineLessonField('l1', teacher, input, makeDeps({ lesson: er(), ...o }).deps)).rejects.toMatchObject({ status: 503, message: LESSON_AI_UNAVAILABLE_MESSAGE });
     }
     warn.mockRestore();
   });

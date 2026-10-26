@@ -37,7 +37,7 @@ export function updateLessonWithContext(id: string, data: Prisma.LessonPlanUnche
 export function findLessonPlayerData(id: string) {
   return db.lessonPlan.findUnique({
     where: { id },
-    select: { topicTitle: true, dailyObjective: true, timeScript: true, mediaType: true, mediaUrl: true },
+    select: { status: true, topicTitle: true, dailyObjective: true, timeScript: true, mediaType: true, mediaUrl: true },
   });
 }
 

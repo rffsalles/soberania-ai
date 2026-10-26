@@ -7,6 +7,7 @@ import {
   type DistributionItem,
 } from '@/domains/agents/prompts/chapter-distribution-prompt';
 import {
+  DISTRIBUTION_AI_UNAVAILABLE_MESSAGE,
   INSTITUTION_TIMEZONE,
   LESSON_DEFAULT_DURATION_MINUTES,
   LESSON_STATUS,
@@ -18,7 +19,6 @@ import { findScheduleForDistribution } from './course-schedule-repository';
 import { applyChapterDistribution } from './lesson-plan-repository';
 import { listPlanChapters } from './teaching-plan-repository';
 import { planChapterIds, type PlanChapterBook } from './plan-chapters-service';
-import { AI_UNAVAILABLE_MESSAGE } from './plan-generation-service';
 import type { PlanActor } from './teaching-plan-service';
 
 export type ChapterDistributionDeps = {
@@ -37,7 +37,13 @@ const defaultDeps: ChapterDistributionDeps = {
 };
 
 const DISTRIBUTION_TEMPERATURE = 0.2;
-const DISTRIBUTION_MAX_TOKENS = 3000;
+const DISTRIBUTION_BASE_TOKENS = 400;
+const DISTRIBUTION_TOKENS_PER_LESSON = 90;
+const DISTRIBUTION_MAX_TOKENS_CAP = 8000;
+
+/** Cada aula repete ids de capítulos na resposta; o orçamento cresce com o cronograma. */
+export const distributionMaxTokens = (lessonCount: number) =>
+  Math.min(DISTRIBUTION_MAX_TOKENS_CAP, DISTRIBUTION_BASE_TOKENS + DISTRIBUTION_TOKENS_PER_LESSON * lessonCount);
 
 const dateFormat = new Intl.DateTimeFormat('en-CA', {
   timeZone: INSTITUTION_TIMEZONE,
@@ -48,6 +54,7 @@ const dateFormat = new Intl.DateTimeFormat('en-CA', {
 
 async function askModel(
   messages: ReturnType<typeof buildChapterDistributionMessages>,
+  maxTokens: number,
   deps: ChapterDistributionDeps
 ): Promise<DistributionItem[] | null> {
   try {
@@ -55,7 +62,7 @@ async function askModel(
     let fallback = false;
     for await (const chunk of deps.streamChat(messages, {
       temperature: DISTRIBUTION_TEMPERATURE,
-      maxTokens: DISTRIBUTION_MAX_TOKENS,
+      maxTokens,
     })) {
       text += chunk.token;
       if (chunk.fallback) fallback = true;
@@ -97,11 +104,11 @@ export async function distributeChapters(
     })),
     books,
   });
-  const raw = await askModel(messages, deps);
+  const raw = await askModel(messages, distributionMaxTokens(lessonPlans.length), deps);
   // A PK (lessonPlanId, chapterId) não admite repetição dentro da mesma aula.
   const items = raw?.map((i) => ({ ...i, chapterIds: Array.from(new Set(i.chapterIds)) })) ?? null;
   if (!items || !isValidDistribution(items, lessonPlans.map((l) => l.classNumber), chapterIds)) {
-    throw new DomainError(503, AI_UNAVAILABLE_MESSAGE);
+    throw new DomainError(503, DISTRIBUTION_AI_UNAVAILABLE_MESSAGE);
   }
 
   const byClass = new Map(items.map((i) => [i.classNumber, i]));

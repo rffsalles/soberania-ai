@@ -29,6 +29,7 @@ const SAVE_ERROR = 'Não foi possível salvar a aula. Tente novamente.';
 const GENERATE_ERROR = 'Não foi possível gerar a aula. Tente novamente.';
 const STATUS_ERROR = 'Não foi possível alterar a situação da aula. Tente novamente.';
 const UNSAVED_CHAPTERS = 'Salve os capítulos selecionados antes de gerar.';
+const UNSAVED_PUBLISH = 'Salve as alterações antes de publicar.';
 const CONFIRM_REPLACE = 'Gerar com IA substitui o conteúdo atual do formulário. Continuar?';
 const EMPTY_STEP: TimeScriptItem = { timeSeconds: 0, timeRange: '', activity: '', description: '', socraticQuestion: '' };
 
@@ -76,8 +77,28 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   const generateLock =
     savedChapterIds.length === 0 ? NO_LESSON_CHAPTERS : selectionKey !== savedKey ? UNSAVED_CHAPTERS : undefined;
   const refineDisabled = savedChapterIds.length === 0;
-  const publishLock = publishBlockReason(lesson);
+  const dirty = isDirty();
+  const publishLock = dirty ? UNSAVED_PUBLISH : publishBlockReason(lesson);
   const published = lesson.status === LESSON_STATUS.PUBLISHED;
+
+  // Compara o formulário com a aula salva; publicar só vale para o que está salvo.
+  function isDirty(): boolean {
+    // jsonb não preserva a ordem das chaves: compara campo a campo, não por JSON do objeto.
+    const sig = (s: TimeScriptItem) =>
+      JSON.stringify([s.timeSeconds, s.timeRange, s.activity, s.description, s.socraticQuestion ?? '']);
+    return (
+      topicTitle !== lesson.topicTitle ||
+      classDate !== toLocalDateTimeInput(new Date(lesson.classDate), INSTITUTION_TIMEZONE) ||
+      dailyObjective !== lesson.dailyObjective ||
+      methodology !== lesson.methodology ||
+      fixationExercise !== lesson.fixationExercise ||
+      resources !== lesson.resourcesNeeded.join('\n') ||
+      steps.map(sig).join('|') !== lesson.timeScript.map(sig).join('|') ||
+      media.type !== lesson.mediaType ||
+      media.url !== lesson.mediaUrl ||
+      selectionKey !== savedKey
+    );
+  }
 
   async function generate() {
     const hasContent = [dailyObjective, methodology, fixationExercise].some((v) => v.trim() !== '') || steps.length > 0;

@@ -248,6 +248,12 @@ describe('lesson-service openLessonMedia', () => {
     await expect(openLessonMedia('own', otherStudent, null, deps)).rejects.toMatchObject({ status: 403 });
   });
 
+  it('aluno não acessa mídia de aula em rascunho; professor sim', async () => {
+    const { deps } = makeDeps({ s3ObjectKey: 'media/aula.mp4', lesson: { status: 'DRAFT' } });
+    await expect(openLessonMedia('own', student, null, deps)).rejects.toMatchObject({ status: 404 });
+    await expect(openLessonMedia('own', teacher, null, deps)).resolves.toMatchObject({ status: 200 });
+  });
+
   it('answers a Range request with 206 and the requested window', async () => {
     const { deps, calls } = makeDeps({ s3ObjectKey: 'media/aula.mp4' });
     const res = await openLessonMedia('own', student, 'bytes=100-199', deps);

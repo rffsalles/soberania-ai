@@ -10,11 +10,10 @@ import {
   type GeneratedLessonText,
 } from '@/domains/agents/prompts/lesson-generation-prompt';
 import type { RefineLessonInput } from '@/lib/validators/lesson.validator';
-import { LESSON_DEFAULT_DURATION_MINUTES, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
+import { LESSON_AI_UNAVAILABLE_MESSAGE, LESSON_DEFAULT_DURATION_MINUTES, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
 import { findLessonForGeneration } from './lesson-plan-repository';
-import { AI_UNAVAILABLE_MESSAGE } from './plan-generation-service';
 import type { PlanActor } from './teaching-plan-service';
 
 export const NO_INDEXED_CHAPTER_CONTENT = 'Os capítulos selecionados não têm conteúdo indexado';
@@ -98,14 +97,14 @@ export async function generateLessonContent(
     }),
     deps
   );
-  if (!generated) throw new DomainError(503, AI_UNAVAILABLE_MESSAGE);
+  if (!generated) throw new DomainError(503, LESSON_AI_UNAVAILABLE_MESSAGE);
 
   const total = generated.steps.reduce((sum, s) => sum + s.durationMinutes, 0);
   if (total < duration * (1 - TIME_SCRIPT_TOLERANCE) || total > duration * (1 + TIME_SCRIPT_TOLERANCE)) {
-    throw new DomainError(503, AI_UNAVAILABLE_MESSAGE);
+    throw new DomainError(503, LESSON_AI_UNAVAILABLE_MESSAGE);
   }
   const timeScript = timeScriptSchema.safeParse(stepsToTimeScript(generated.steps));
-  if (!timeScript.success) throw new DomainError(503, AI_UNAVAILABLE_MESSAGE);
+  if (!timeScript.success) throw new DomainError(503, LESSON_AI_UNAVAILABLE_MESSAGE);
 
   const { steps: _steps, ...text } = generated;
   return { ...text, timeScript: timeScript.data, citations: Array.from(new Set(chunks.map(formatCitation))) };
@@ -170,6 +169,6 @@ export async function refineLessonField(
     }),
     deps
   );
-  if (!text) throw new DomainError(503, AI_UNAVAILABLE_MESSAGE);
+  if (!text) throw new DomainError(503, LESSON_AI_UNAVAILABLE_MESSAGE);
   return { text };
 }

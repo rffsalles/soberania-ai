@@ -255,6 +255,7 @@ export async function openLessonMedia(
     if (!user.classId || user.classId !== subject.classId) {
       throw new DomainError(403, 'Você não tem acesso a este recurso.');
     }
+    if (lesson.status !== LESSON_STATUS.PUBLISHED) throw new DomainError(404, 'Plano de aula não encontrado.');
   } else {
     assertOwner(user, teacherId);
   }

@@ -141,15 +141,16 @@ describe('LessonEditor', () => {
   });
 
   it('"Publicar" bloqueado mostra o que falta; aula completa publica com PUT status', async () => {
-    const { rerender } = render(<LessonEditor lesson={makeLesson()} onSaved={() => {}} />);
+    render(<LessonEditor lesson={makeLesson()} onSaved={() => {}} />);
     expect((screen.getByRole('button', { name: 'Publicar' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Defina um título diferente de "Aula N".')).toBeTruthy();
     expect(screen.getByText('Rascunho')).toBeTruthy();
 
+    cleanup();
     const fetchMock = routeFetch({ [`PUT ${BASE}/status`]: { success: true, lesson: makeLesson({ status: 'PUBLISHED' }) } });
     vi.stubGlobal('fetch', fetchMock);
     const onSaved = vi.fn();
-    rerender(
+    render(
       <LessonEditor
         lesson={makeLesson({ topicTitle: 'Modelagem', dailyObjective: 'Obj', timeScript: GENERATED.timeScript })}
         onSaved={onSaved}
@@ -161,6 +162,44 @@ describe('LessonEditor', () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const [, init] = fetchMock.mock.calls[0];
     expect(JSON.parse(init!.body as string)).toEqual({ status: 'PUBLISHED' });
+  });
+
+  it('após gerar (formulário não salvo) bloqueia "Publicar"; após salvar, publica o que foi salvo', async () => {
+    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1 } }];
+    const initial = makeLesson({ topicTitle: 'Modelagem', chapters: SAVED });
+    const fetchMock = routeFetch({
+      [`POST ${BASE}/generate`]: { success: true, data: GENERATED },
+      [`PUT ${BASE}`]: { success: true, lesson: initial },
+      [`PUT ${BASE}/status`]: { success: true, lesson: initial },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onSaved = vi.fn();
+    const { rerender } = render(<LessonEditor lesson={initial} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar aula com IA' }));
+    await waitFor(() => expect((screen.getByLabelText('Objetivo diário') as HTMLTextAreaElement).value).toBe('Objetivo gerado'));
+    const publish = () => screen.getByRole('button', { name: 'Publicar' }) as HTMLButtonElement;
+    expect(publish().disabled).toBe(true);
+    expect(screen.getByText('Salve as alterações antes de publicar.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar aula' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    rerender(
+      <LessonEditor
+        lesson={makeLesson({
+          topicTitle: 'Modelagem',
+          chapters: SAVED,
+          dailyObjective: GENERATED.dailyObjective,
+          methodology: GENERATED.methodology,
+          resourcesNeeded: GENERATED.resourcesNeeded,
+          fixationExercise: GENERATED.fixationExercise,
+          timeScript: GENERATED.timeScript,
+        })}
+        onSaved={onSaved}
+      />,
+    );
+    expect(publish().disabled).toBe(false);
+    fireEvent.click(publish());
+    await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === `${BASE}/status`)).toBe(true));
   });
 
   it('aula publicada mostra badge "Publicada" e botão "Despublicar"', () => {

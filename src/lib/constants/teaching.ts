@@ -81,3 +81,8 @@ export const NO_SYNCED_LESSONS = 'Sincronize o calendário antes de distribuir o
 export const NO_PLAN_CHAPTERS = 'Nenhum livro do plano tem capítulos cadastrados.';
 
 export const NO_LESSON_CHAPTERS = 'Selecione e salve ao menos um capítulo para gerar a aula.';
+
+export const LESSON_AI_UNAVAILABLE_MESSAGE =
+  'IA indisponível no momento. Tente novamente mais tarde ou escreva a aula manualmente.';
+export const DISTRIBUTION_AI_UNAVAILABLE_MESSAGE =
+  'IA indisponível no momento. Tente novamente mais tarde ou atribua os capítulos manualmente em cada aula.';
