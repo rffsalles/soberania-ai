@@ -13,6 +13,7 @@ import type { RefineLessonInput } from '@/lib/validators/lesson.validator';
 import { LESSON_AI_UNAVAILABLE_MESSAGE, LESSON_DEFAULT_DURATION_MINUTES, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
+import { sampleChunksByChapter } from '@/domains/rag/services/chunk-repository';
 import { findLessonForGeneration } from './lesson-plan-repository';
 import type { PlanActor } from './teaching-plan-service';
 import { collectStream } from '@/domains/agents/collect-stream';
@@ -21,9 +22,13 @@ export const NO_INDEXED_CHAPTER_CONTENT = 'Os capítulos selecionados não têm 
 /** Soma das etapas aceita dentro de duração ± 10%. */
 export const TIME_SCRIPT_TOLERANCE = 0.1;
 
+export const SAMPLE_PER_CHAPTER = 4;
+export const SAMPLE_MAX = 12;
+
 export type LessonGenerationDeps = {
   findLesson: typeof findLessonForGeneration;
   search(q: RAGSearchQuery): Promise<Pick<RAGSearchResult, 'chunks'>>;
+  sampleByChapter: typeof sampleChunksByChapter;
   streamChat: StreamChatFn;
 };
 export type GeneratedLesson = Omit<GeneratedLessonText, 'steps'> & { timeScript: TimeScriptItem[]; citations: string[] };
@@ -31,6 +36,7 @@ export type GeneratedLesson = Omit<GeneratedLessonText, 'steps'> & { timeScript:
 const defaultDeps: LessonGenerationDeps = {
   findLesson: findLessonForGeneration,
   search: (q) => executeHybridSearch(q),
+  sampleByChapter: sampleChunksByChapter,
   streamChat: loggedStreamChat,
 };
 
@@ -76,7 +82,8 @@ export async function generateLessonContent(
   );
   const byId = new Map<string, DidacticChunk>();
   for (const r of results) for (const c of r.chunks) if (!byId.has(c.id)) byId.set(c.id, c);
-  const chunks = Array.from(byId.values());
+  let chunks = Array.from(byId.values());
+  if (chunks.length === 0) chunks = await deps.sampleByChapter(allowedChapterIds, SAMPLE_PER_CHAPTER, SAMPLE_MAX);
   if (chunks.length === 0) throw new DomainError(422, NO_INDEXED_CHAPTER_CONTENT);
 
   const duration = LESSON_DEFAULT_DURATION_MINUTES;
@@ -140,11 +147,13 @@ export async function refineLessonField(
   if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
 
   const allowedChapterIds = lesson.chapters.map((c) => c.chapter.id);
-  const { chunks } = await deps.search({
+  const found = await deps.search({
     query: `${input.instruction} ${lesson.topicTitle}`,
     allowedChapterIds,
     topK: REFINE_TOP_K,
   });
+  const chunks =
+    found.chunks.length > 0 ? found.chunks : await deps.sampleByChapter(allowedChapterIds, SAMPLE_PER_CHAPTER, SAMPLE_MAX);
   if (chunks.length === 0) throw new DomainError(422, NO_INDEXED_CHAPTER_CONTENT);
 
   const text = await askRefine(

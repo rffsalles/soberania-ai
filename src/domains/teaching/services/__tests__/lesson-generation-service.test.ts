@@ -39,17 +39,19 @@ const text = (durations: number[]) =>
 
 function makeDeps(opts: {
   lesson?: ReturnType<typeof lesson> | null; chunks?: DidacticChunk[]; text?: string; fallback?: boolean; throws?: boolean;
+  sample?: DidacticChunk[];
 } = {}) {
   const search = vi.fn().mockResolvedValue({ chunks: opts.chunks ?? [chunk] });
+  const sampleByChapter = vi.fn().mockResolvedValue(opts.sample ?? []);
   const streamChat = vi.fn().mockImplementation(async function* () {
     if (opts.throws) throw new Error('boom');
     yield { token: opts.text ?? text([20, 50, 30]), fallback: opts.fallback };
   });
   const deps = {
     findLesson: vi.fn().mockResolvedValue(opts.lesson === undefined ? lesson() : opts.lesson),
-    search, streamChat,
+    search, streamChat, sampleByChapter,
   } as unknown as LessonGenerationDeps;
-  return { deps, search, streamChat };
+  return { deps, search, streamChat, sampleByChapter };
 }
 
 describe('generateLessonContent', () => {
@@ -95,6 +97,16 @@ describe('generateLessonContent', () => {
     }
   });
 
+  it('busca vazia usa a amostra por capítulo e cita a amostra; busca não vazia não amostra', async () => {
+    const empty = makeDeps({ chunks: [], sample: [{ ...chunk, id: 's1', pageNumber: 50 }] });
+    const r = await generateLessonContent('l1', teacher, empty.deps);
+    expect(r.citations).toEqual(['[Sistemas de Banco de Dados · Cap. 3, pág. 50]']);
+    expect(empty.sampleByChapter).toHaveBeenCalledWith(['ch3'], 4, 12);
+    const full = makeDeps();
+    await generateLessonContent('l1', teacher, full.deps);
+    expect(full.sampleByChapter).not.toHaveBeenCalled();
+  });
+
   it('sem chunks → 422 com a mensagem exata', async () => {
     const { deps, streamChat } = makeDeps({ chunks: [] });
     await expect(generateLessonContent('l1', teacher, deps)).rejects.toMatchObject({ status: 422, message: NO_INDEXED_CHAPTER_CONTENT });
@@ -137,6 +149,15 @@ describe('refineLessonField', () => {
     expect(r).toEqual({ text: 'Nova descrição' });
     const user = streamChat.mock.calls[0][0].find((m: { role: string }) => m.role === 'user').content as string;
     expect(user).toContain('etapa 2');
+  });
+
+  it('refino: busca vazia usa a amostra; amostra vazia → 422 sem chamar o modelo', async () => {
+    const ok = makeDeps({ lesson: er(), chunks: [], sample: [chunk], text: 'Refinado' });
+    await expect(refineLessonField('l1', teacher, input, ok.deps)).resolves.toEqual({ text: 'Refinado' });
+    expect(ok.sampleByChapter).toHaveBeenCalledWith(['ch3'], 4, 12);
+    const none = makeDeps({ lesson: er(), chunks: [], sample: [] });
+    await expect(refineLessonField('l1', teacher, input, none.deps)).rejects.toMatchObject({ status: 422, message: NO_INDEXED_CHAPTER_CONTENT });
+    expect(none.streamChat).not.toHaveBeenCalled();
   });
 
   it('sem chunks → 422; sem chamar o modelo', async () => {

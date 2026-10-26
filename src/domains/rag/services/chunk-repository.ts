@@ -55,15 +55,12 @@ export function listChunksByMaterial(materialId: string): Promise<StoredChunk[]>
   });
 }
 
-/** Primeiros `limit` trechos do material na ordem das páginas, no formato de busca (DidacticChunk). */
-export async function sampleChunksByMaterial(materialId: string, limit: number): Promise<DidacticChunk[]> {
-  const rows = await db.materialChunk.findMany({
-    where: { materialId },
-    orderBy: [{ pageNumber: 'asc' }, { createdAt: 'asc' }],
-    take: limit,
-    include: { material: { select: { title: true, author: true, subject: true } } },
-  });
-  return rows.map((r) => ({
+const SAMPLE_INCLUDE = { material: { select: { title: true, author: true, subject: true } } } as const;
+
+type SampleRow = Prisma.MaterialChunkGetPayload<{ include: typeof SAMPLE_INCLUDE }>;
+
+function toDidacticChunk(r: SampleRow): DidacticChunk {
+  return {
     id: r.id,
     materialId: r.materialId,
     bookTitle: r.material.title,
@@ -73,7 +70,33 @@ export async function sampleChunksByMaterial(materialId: string, limit: number):
     pageNumber: r.pageNumber,
     content: r.content,
     category: r.material.subject ?? undefined,
-  }));
+  };
+}
+
+/** Primeiros `limit` trechos do material na ordem das páginas, no formato de busca (DidacticChunk). */
+export async function sampleChunksByMaterial(materialId: string, limit: number): Promise<DidacticChunk[]> {
+  const rows = await db.materialChunk.findMany({
+    where: { materialId },
+    orderBy: [{ pageNumber: 'asc' }, { createdAt: 'asc' }],
+    take: limit,
+    include: SAMPLE_INCLUDE,
+  });
+  return rows.map(toDidacticChunk);
+}
+
+/** Até `perChapter` primeiros trechos de cada capítulo (na ordem dada), cortados em `max` no total. */
+export async function sampleChunksByChapter(chapterIds: string[], perChapter: number, max: number): Promise<DidacticChunk[]> {
+  const out: DidacticChunk[] = [];
+  for (const chapterId of chapterIds) {
+    const rows = await db.materialChunk.findMany({
+      where: { chapterId },
+      orderBy: [{ pageNumber: 'asc' }, { createdAt: 'asc' }],
+      take: perChapter,
+      include: SAMPLE_INCLUDE,
+    });
+    out.push(...rows.map(toDidacticChunk));
+  }
+  return out.slice(0, max);
 }
 
 /** Stores embeddings in `material_chunks.embedding` (vector column, not mapped by Prisma). */
