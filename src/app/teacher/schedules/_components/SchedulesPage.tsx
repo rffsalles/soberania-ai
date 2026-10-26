@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ROUTES } from '@/lib/constants/routes';
 import { useTeacherPlans } from '@/components/assessments/use-assessments';
-import { distributeChapters, syncSchedule, useScheduleLessons, useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
+import { distributeChapters, generatePlanUnits, syncSchedule, useScheduleLessons, useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
 import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
 import { LESSON_STATUS, NO_PLAN_CHAPTERS, NO_SYNCED_LESSONS } from '@/lib/constants/teaching';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
@@ -18,13 +18,16 @@ import { ScheduleForm } from './ScheduleForm';
 const DISTRIBUTE_ERROR = 'Não foi possível distribuir os capítulos. Tente novamente.';
 const DISTRIBUTE_CONFIRM = 'Algumas aulas em rascunho já têm capítulos ou título personalizado. Substituir?';
 
+const UNITS_ERROR = 'Não foi possível gerar as unidades. Tente novamente.';
+const UNITS_CONFIRM = 'O plano já tem unidades. Substituir pelas geradas?';
+
 const SYNC_ERROR = 'Não foi possível sincronizar o calendário. Tente novamente.';
 
 const formatPeriod = (s: ScheduleItem) =>
   `${new Date(s.startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(s.endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`;
 
 export function SchedulesPage() {
-  const { plans, isLoading: plansLoading, error: plansError } = useTeacherPlans();
+  const { plans, isLoading: plansLoading, error: plansError, reload: reloadPlans } = useTeacherPlans();
   const [planId, setPlanId] = React.useState<string | null>(null);
   const [scheduleId, setScheduleId] = React.useState<string | null>(null);
   const [creating, setCreating] = React.useState(false);
@@ -34,6 +37,7 @@ export function SchedulesPage() {
   const { schedules, isLoading, error, reload } = useSchedules(planId);
   const { lessons, reload: reloadLessons } = useScheduleLessons(scheduleId);
   const [distributing, setDistributing] = React.useState(false);
+  const [generatingUnits, setGeneratingUnits] = React.useState(false);
   const schedulePlanId = schedules.find((s) => s.id === scheduleId)?.teachingPlanId ?? null;
   const { books } = usePlanChapters(schedulePlanId);
 
@@ -76,6 +80,27 @@ export function SchedulesPage() {
       setSyncError(err instanceof Error ? err.message : DISTRIBUTE_ERROR);
     } finally {
       setDistributing(false);
+    }
+  }
+
+  const hasMappedLessons = lessons.some((l) => l.chapters.length > 0);
+
+  async function generateUnits() {
+    if (!scheduleId || !hasMappedLessons) return;
+    const planUnits = plans.find((p) => p.id === schedulePlanId)?.unitsContent;
+    const planHasUnits = Array.isArray(planUnits) && planUnits.length > 0;
+    if (planHasUnits && !window.confirm(UNITS_CONFIRM)) return;
+    setGeneratingUnits(true);
+    setSyncError(null);
+    setNotice(null);
+    try {
+      const units = await generatePlanUnits(scheduleId);
+      setNotice(`${units.length} unidades geradas no plano.`);
+      reloadPlans();
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : UNITS_ERROR);
+    } finally {
+      setGeneratingUnits(false);
     }
   }
 
@@ -187,6 +212,10 @@ export function SchedulesPage() {
                     </span>
                   )}
                 </span>
+                <Button variant="outline" size="sm" onClick={generateUnits} disabled={generatingUnits || !hasMappedLessons} className="gap-2">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {generatingUnits ? 'Gerando unidades...' : 'Gerar unidades do plano'}
+                </Button>
                 <Button asChild size="sm" className="gap-2 bg-brand-teal text-white hover:bg-brand-teal-dark">
                   <Link href={`${ROUTES.TEACHER_LESSONS}?planId=${encodeURIComponent(schedule.teachingPlanId)}&scheduleId=${encodeURIComponent(schedule.id)}`}>
                     Ir para planos de aula <ArrowRight className="h-4 w-4" />

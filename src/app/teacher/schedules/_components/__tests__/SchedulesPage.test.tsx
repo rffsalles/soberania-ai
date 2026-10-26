@@ -38,14 +38,15 @@ const plans = [
 ];
 
 vi.mock('@/components/assessments/use-assessments', () => ({
-  useTeacherPlans: () => ({ plans, isLoading: false, error: null }),
+  useTeacherPlans: () => ({ plans, isLoading: false, error: null, reload: lessonsState.reloadPlans }),
 }));
-const lessonsState = vi.hoisted(() => ({ lessons: [] as unknown[], reloadLessons: vi.fn(), distributeChapters: vi.fn(), books: [] as unknown[] }));
+const lessonsState = vi.hoisted(() => ({ lessons: [] as unknown[], reloadLessons: vi.fn(), distributeChapters: vi.fn(), generatePlanUnits: vi.fn(), reloadPlans: vi.fn(), books: [] as unknown[] }));
 vi.mock('@/components/teaching/use-schedules', () => ({
   useSchedules: (id: string | null) => useSchedules(id),
   useScheduleLessons: () => ({ lessons: lessonsState.lessons, reload: lessonsState.reloadLessons }),
   syncSchedule: vi.fn(),
   distributeChapters: (id: string) => lessonsState.distributeChapters(id),
+  generatePlanUnits: (id: string) => lessonsState.generatePlanUnits(id),
 }));
 vi.mock('@/components/teaching/use-plan-chapters', () => ({
   usePlanChapters: () => ({ books: lessonsState.books, isLoading: false, error: null, reload: vi.fn() }),
@@ -62,6 +63,9 @@ afterEach(() => {
   lessonsState.books = [];
   lessonsState.reloadLessons.mockClear();
   lessonsState.distributeChapters.mockReset();
+  lessonsState.generatePlanUnits.mockReset();
+  lessonsState.reloadPlans.mockClear();
+  plans[1].unitsContent = [];
 });
 
 function open() {
@@ -189,5 +193,39 @@ describe('SchedulesPage distribuição de capítulos', () => {
     fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe('IA indisponível');
+  });
+});
+
+const GENERATE = /Gerar unidades do plano/;
+const WITH_CHAPTERS = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3 } }] }];
+
+describe('SchedulesPage unidades do plano', () => {
+  it('gerar unidades fica desabilitado sem aulas com capítulos', () => {
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [] }];
+    openSchedule();
+    expect((screen.getByRole('button', { name: GENERATE }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('plano sem unidades gera sem confirmar e mostra quantas unidades', async () => {
+    lessonsState.lessons = WITH_CHAPTERS;
+    lessonsState.generatePlanUnits.mockResolvedValue([1, 2, 3, 4].map((n) => ({ unitNumber: n, title: `U${n}`, topics: [], chapterIds: [] })));
+    const confirm = vi.spyOn(window, 'confirm');
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: GENERATE }));
+    const status = await screen.findByRole('status');
+    expect(status.textContent).toBe('4 unidades geradas no plano.');
+    expect(lessonsState.generatePlanUnits).toHaveBeenCalledWith('sch-9');
+    expect(lessonsState.reloadPlans).toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('plano com unidades pede confirmação; cancelar não chama a API', () => {
+    lessonsState.lessons = WITH_CHAPTERS;
+    plans[1].unitsContent = [{ unitNumber: 1, title: 'U1', topics: ['t'] }] as never;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: GENERATE }));
+    expect(confirm).toHaveBeenCalledWith('O plano já tem unidades. Substituir pelas geradas?');
+    expect(lessonsState.generatePlanUnits).not.toHaveBeenCalled();
   });
 });

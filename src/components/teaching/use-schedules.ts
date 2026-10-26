@@ -88,3 +88,10 @@ export async function distributeChapters(scheduleId: string): Promise<Distributi
   const body = await requestJson<{ result: DistributionResult }>(`${API_ROUTES.TEACHER_SCHEDULES}/${scheduleId}/distribute-chapters`, 'POST');
   return body.result;
 }
+
+export type GeneratedUnit = { unitNumber: number; title: string; topics: string[]; chapterIds: string[] };
+
+export async function generatePlanUnits(scheduleId: string): Promise<GeneratedUnit[]> {
+  const body = await requestJson<{ units: GeneratedUnit[] }>(`${API_ROUTES.TEACHER_SCHEDULES}/${scheduleId}/generate-units`, 'POST');
+  return body.units;
+}
