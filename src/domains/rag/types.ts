@@ -83,3 +83,14 @@ export interface ParsedDocumentResult {
   info?: { title?: string; author?: string };
 }
 
+
+/** Item de 1º nível do outline (bookmarks) do PDF; pageNumber é a página física 1-based. */
+export interface OutlineEntry {
+  title: string;
+  pageNumber: number | null;
+}
+
+export interface PdfNavigation {
+  outline: OutlineEntry[];
+  pageLabels: string[] | null;
+}

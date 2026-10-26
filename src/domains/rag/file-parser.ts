@@ -1,7 +1,7 @@
 import path from 'path';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
-import type { RawDocumentPage, ParsedDocumentResult, ParseDocumentOptions } from './types';
+import type { RawDocumentPage, ParsedDocumentResult, ParseDocumentOptions, OutlineEntry, PdfNavigation } from './types';
 import { ocrService } from './ocr-service';
 
 export interface FileValidationResult {
@@ -133,6 +133,58 @@ async function readPdfInfo(parser: PDFParse): Promise<ParsedDocumentResult['info
     return { title: title || undefined, author: author || undefined };
   } catch {
     return undefined;
+  }
+}
+
+interface PdfDocLike {
+  getOutline(): Promise<Array<{ title?: string; dest?: unknown }> | null>;
+  getDestination(name: string): Promise<unknown[] | null>;
+  getPageIndex(ref: { num: number; gen: number }): Promise<number>;
+  getPageLabels(): Promise<string[] | null>;
+}
+
+async function resolveOutlineDest(doc: PdfDocLike, rawDest: unknown): Promise<number | null> {
+  try {
+    const dest = typeof rawDest === 'string' ? await doc.getDestination(rawDest) : rawDest;
+    if (!Array.isArray(dest) || dest.length === 0) return null;
+    const target = dest[0];
+    if (typeof target === 'number') return target + 1;
+    if (target && typeof target === 'object' && typeof (target as { num?: unknown }).num === 'number') {
+      return (await doc.getPageIndex(target as { num: number; gen: number })) + 1;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Lê o outline (1º nível) e os rótulos de página do PDF, resolvendo cada bookmark para a página física. */
+export async function readPdfNavigation(buffer: Buffer): Promise<PdfNavigation> {
+  const PDFParseConstructor = (typeof PDFParse === 'function' ? PDFParse : (PDFParse as { PDFParse?: new (opts: { data: Buffer }) => PDFParse })?.PDFParse) || PDFParse;
+  const parser = new PDFParseConstructor({ data: buffer });
+  try {
+    // `load` é privado em tempo de compilação, mas devolve o documento pdf.js em runtime.
+    const doc = await (parser as unknown as { load(): Promise<PdfDocLike> }).load();
+    const rawOutline = await doc.getOutline();
+    const outline: OutlineEntry[] = [];
+    for (const item of Array.isArray(rawOutline) ? rawOutline : []) {
+      outline.push({
+        title: typeof item?.title === 'string' ? item.title.trim() : '',
+        pageNumber: await resolveOutlineDest(doc, item?.dest),
+      });
+    }
+    let pageLabels: string[] | null = null;
+    try {
+      const labels = await doc.getPageLabels();
+      pageLabels = Array.isArray(labels) ? labels : null;
+    } catch {
+      pageLabels = null;
+    }
+    return { outline, pageLabels };
+  } catch {
+    return { outline: [], pageLabels: null };
+  } finally {
+    await parser.destroy().catch(() => undefined);
   }
 }
 
