@@ -34,6 +34,8 @@ export function SchedulesPage() {
   const [syncing, setSyncing] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [syncError, setSyncError] = React.useState<string | null>(null);
+  const [distributeError, setDistributeError] = React.useState<string | null>(null);
+  const [unitsError, setUnitsError] = React.useState<string | null>(null);
   const { schedules, isLoading, error, reload } = useSchedules(planId);
   const { lessons, reload: reloadLessons } = useScheduleLessons(scheduleId);
   const [distributing, setDistributing] = React.useState(false);
@@ -70,14 +72,14 @@ export function SchedulesPage() {
     );
     if (hasCustomized && !window.confirm(DISTRIBUTE_CONFIRM)) return;
     setDistributing(true);
-    setSyncError(null);
+    setDistributeError(null);
     setNotice(null);
     try {
       const { updated, skippedPublished } = await distributeChapters(scheduleId);
       setNotice(`Capítulos distribuídos em ${updated} aulas; ${skippedPublished} aulas publicadas não foram alteradas.`);
       reloadLessons();
     } catch (err) {
-      setSyncError(err instanceof Error ? err.message : DISTRIBUTE_ERROR);
+      setDistributeError(err instanceof Error ? err.message : DISTRIBUTE_ERROR);
     } finally {
       setDistributing(false);
     }
@@ -91,14 +93,14 @@ export function SchedulesPage() {
     const planHasUnits = Array.isArray(planUnits) && planUnits.length > 0;
     if (planHasUnits && !window.confirm(UNITS_CONFIRM)) return;
     setGeneratingUnits(true);
-    setSyncError(null);
+    setUnitsError(null);
     setNotice(null);
     try {
       const units = await generatePlanUnits(scheduleId);
       setNotice(`${units.length} unidades geradas no plano.`);
       reloadPlans();
     } catch (err) {
-      setSyncError(err instanceof Error ? err.message : UNITS_ERROR);
+      setUnitsError(err instanceof Error ? err.message : UNITS_ERROR);
     } finally {
       setGeneratingUnits(false);
     }
@@ -205,6 +207,11 @@ export function SchedulesPage() {
                     {lockReason ? <Lock className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
                     {distributing ? 'Distribuindo...' : 'Distribuir capítulos com IA'}
                   </Button>
+                  {distributeError && (
+                    <p role="alert" className="max-w-xs text-xs font-normal text-red-600">
+                      {distributeError}
+                    </p>
+                  )}
                   {lockReason && (
                     <span className="flex max-w-xs items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                       <Lock className="h-3 w-3 shrink-0" />
@@ -212,10 +219,17 @@ export function SchedulesPage() {
                     </span>
                   )}
                 </span>
-                <Button variant="outline" size="sm" onClick={generateUnits} disabled={generatingUnits || !hasMappedLessons} className="gap-2">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {generatingUnits ? 'Gerando unidades...' : 'Gerar unidades do plano'}
-                </Button>
+                <span className="flex flex-col items-start gap-1">
+                  <Button variant="outline" size="sm" onClick={generateUnits} disabled={generatingUnits || !hasMappedLessons} className="gap-2">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {generatingUnits ? 'Gerando unidades...' : 'Gerar unidades do plano'}
+                  </Button>
+                  {unitsError && (
+                    <p role="alert" className="max-w-xs text-xs font-normal text-red-600">
+                      {unitsError}
+                    </p>
+                  )}
+                </span>
                 <Button asChild size="sm" className="gap-2 bg-brand-teal text-white hover:bg-brand-teal-dark">
                   <Link href={`${ROUTES.TEACHER_LESSONS}?planId=${encodeURIComponent(schedule.teachingPlanId)}&scheduleId=${encodeURIComponent(schedule.id)}`}>
                     Ir para planos de aula <ArrowRight className="h-4 w-4" />

@@ -53,6 +53,7 @@ vi.mock('@/components/teaching/use-plan-chapters', () => ({
 }));
 vi.mock('../ScheduleForm', () => ({ ScheduleForm: () => null }));
 
+import { syncSchedule } from '@/components/teaching/use-schedules';
 import { SchedulesPage } from '../SchedulesPage';
 
 afterEach(() => {
@@ -227,5 +228,36 @@ describe('SchedulesPage unidades do plano', () => {
     fireEvent.click(screen.getByRole('button', { name: GENERATE }));
     expect(confirm).toHaveBeenCalledWith('O plano já tem unidades. Substituir pelas geradas?');
     expect(lessonsState.generatePlanUnits).not.toHaveBeenCalled();
+  });
+});
+
+describe('SchedulesPage alertas independentes', () => {
+  it('erro de distribuir e erro de gerar unidades aparecem em alertas separados', async () => {
+    lessonsState.books = BOOKS;
+    lessonsState.lessons = WITH_CHAPTERS;
+    lessonsState.distributeChapters.mockRejectedValue(new Error('IA indisponível'));
+    lessonsState.generatePlanUnits.mockRejectedValue(new Error('Falha ao gerar unidades'));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
+    await screen.findByText('IA indisponível');
+    fireEvent.click(screen.getByRole('button', { name: GENERATE }));
+    await screen.findByText('Falha ao gerar unidades');
+    const alerts = screen.getAllByRole('alert').map((a) => a.textContent);
+    expect(alerts).toEqual(['IA indisponível', 'Falha ao gerar unidades']);
+  });
+
+  it('erro de distribuir não vira erro de sincronização nem some ao sincronizar com sucesso', async () => {
+    lessonsState.books = BOOKS;
+    lessonsState.lessons = WITH_CHAPTERS;
+    lessonsState.distributeChapters.mockRejectedValue(new Error('IA indisponível'));
+    vi.mocked(syncSchedule).mockResolvedValue({ created: 1, existing: 0 } as never);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    openSchedule();
+    fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
+    await screen.findByText('IA indisponível');
+    fireEvent.click(screen.getByRole('button', { name: /Sincronizar calendário/ }));
+    await screen.findByRole('status');
+    expect(screen.getAllByRole('alert').map((a) => a.textContent)).toEqual(['IA indisponível']);
   });
 });
