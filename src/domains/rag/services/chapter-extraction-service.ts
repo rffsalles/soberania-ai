@@ -111,7 +111,12 @@ export async function extractChapterDrafts(
     return { source: 'OUTLINE', drafts: fromOutline };
   }
 
-  const fromHeadings = headingsToDrafts(input.pages);
+  let fromHeadings: ChapterDraft[] | null = null;
+  try {
+    fromHeadings = headingsToDrafts(input.pages);
+  } catch (err) {
+    console.warn('[chapters] falha ao detectar títulos no texto', err);
+  }
   if (fromHeadings && isValidChapterSequence(fromHeadings, input.totalPages, 2)) {
     return { source: 'HEADINGS', drafts: fromHeadings };
   }

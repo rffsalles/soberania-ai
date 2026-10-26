@@ -49,8 +49,8 @@ const HEADING_SCAN_LINES = 3;
 const HEADING_PATTERN = /^(Unidade|Cap[íi]tulo|Cap\.|Parte|M[óo]dulo)\s+(\d+)\b(.*)$/i;
 const TOC_PAGE_MIN_LINES = 3;
 const HEADING_TITLE_LOOKAHEAD = 3;
-/** Linha de sumário: líder de pontos/reticências ou número de página após espaçamento largo. */
-const TOC_LINE_PATTERN = /(\.{3,}|…|\.\s\.\s\.)|(\s{2,}|\t)\d+\s*$/;
+/** Linha de sumário: líder de pontos/reticências seguido do número de página no fim. */
+const TOC_LINE_PATTERN = /(\.{3,}|…)\s*\d+\s*$/;
 
 /**
  * Detecta cabeçalhos "Unidade N", "Capítulo N"... no topo das páginas. Exige numeração sequencial
@@ -74,7 +74,7 @@ export function headingsToDrafts(pages: { pageNumber: number; text: string }[]):
       if (num === drafts.length + 1 && page.pageNumber > lastPage) {
         drafts.push({ title: line, startPage: page.pageNumber });
         lastPage = page.pageNumber;
-      } else if (num === drafts.length) {
+      } else if (num > 0 && num === drafts.length) {
         // Página divisória só com "UNIDADE N": adota o título completo da página seguinte.
         const last = drafts[drafts.length - 1];
         const bare = /^\S+\s+\d+$/.test(last.title);
@@ -149,7 +149,13 @@ export function alignDraftsToText(
   }
   const inherit = majority !== null && best / drafts.length >= ALIGN_MIN_MAJORITY ? majority : 0;
 
-  return drafts.map((d, i) => ({ ...d, startPage: d.startPage + (offsets[i] ?? inherit) }));
+  const result: ChapterDraft[] = [];
+  drafts.forEach((d, i) => {
+    const startPage = d.startPage + (offsets[i] ?? inherit);
+    if (offsets[i] === null && (startPage < 1 || startPage > pages.length)) return;
+    result.push({ ...d, startPage });
+  });
+  return result;
 }
 
 export function isValidChapterSequence(drafts: ChapterDraft[], totalPages: number, minCount: number): boolean {

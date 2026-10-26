@@ -213,6 +213,45 @@ describe('headingsToDrafts', () => {
     ]);
   });
 
+  it('"Módulo 0" no topo antes das unidades não lança e não conta como acerto', () => {
+    expect(
+      headingsToDrafts([
+        page(3, 'Módulo 0\nApresentação'),
+        page(4, 'Capítulo 0'),
+        page(15, 'Unidade 1 – A'),
+        page(43, 'Unidade 2 – B'),
+      ]),
+    ).toEqual([
+      { title: 'Unidade 1 – A', startPage: 15 },
+      { title: 'Unidade 2 – B', startPage: 43 },
+    ]);
+  });
+
+  it('linhas de reticências sem número de página no fim não tornam a página um sumário', () => {
+    expect(
+      headingsToDrafts([
+        page(5, 'Unidade 1 – A\n1, 2, 3, ...\n4, 5, 6, ...\n7, 8, 9, ...'),
+        page(9, 'Unidade 2 – B'),
+      ]),
+    ).toEqual([
+      { title: 'Unidade 1 – A', startPage: 5 },
+      { title: 'Unidade 2 – B', startPage: 9 },
+    ]);
+  });
+
+  it('página de sumário com líderes de pontos e número é ignorada', () => {
+    expect(
+      headingsToDrafts([
+        page(2, 'Unidade 1 – Conjuntos ........ 15\nB ....... 20\nC ....... 30'),
+        page(15, 'Unidade 1 – Conjuntos'),
+        page(30, 'Unidade 2 – Outro'),
+      ]),
+    ).toEqual([
+      { title: 'Unidade 1 – Conjuntos', startPage: 15 },
+      { title: 'Unidade 2 – Outro', startPage: 30 },
+    ]);
+  });
+
   it('só olha as 3 primeiras linhas não vazias', () => {
     expect(headingsToDrafts([page(1, 'a\nb\nc\nUnidade 1 – X'), page(2, 'Unidade 2 – Y')])).toBeNull();
   });
@@ -262,6 +301,24 @@ describe('alignDraftsToText', () => {
       { title: 'Outro título ausente', startPage: 40 },
     ];
     expect(alignDraftsToText(drafts, pages).map((d) => d.startPage)).toEqual([17, 28, 40]);
+  });
+
+  it('deslocamento herdado fora de [1, total] descarta só esse rascunho', () => {
+    const book = Array.from({ length: 300 }, (_, i) => page(i + 1, `Texto ${i + 1}`));
+    book[16] = page(17, 'Unidade 1 – Conjuntos Numéricos');
+    book[29] = page(30, 'Unidade 2 – Funções e Gráficos');
+    const r = alignDraftsToText(
+      [
+        { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
+        { title: 'Unidade 2 – Funções e Gráficos', startPage: 28 },
+        { title: 'Título ausente do texto', startPage: 299 },
+      ],
+      book,
+    );
+    expect(r).toEqual([
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 17 },
+      { title: 'Unidade 2 – Funções e Gráficos', startPage: 30 },
+    ]);
   });
 
   it('ignora acentos e pontuação ao comparar', () => {

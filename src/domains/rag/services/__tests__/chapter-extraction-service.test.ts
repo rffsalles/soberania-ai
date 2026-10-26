@@ -117,6 +117,28 @@ describe('extractAndSaveChapters', () => {
     );
   });
 
+  it('exceção na heurística de títulos cai para a IA sem lançar', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let reads = 0;
+    const bad = [
+      {
+        pageNumber: 1,
+        get text(): string {
+          if (reads++ === 0) throw new Error('boom');
+          return '';
+        },
+      },
+      ...pages.slice(1),
+    ] as unknown as RawDocumentPage[];
+    const r = await extractAndSaveChapters(
+      'm1',
+      { buffer, pages: bad, totalPages: 20 },
+      depsWith({ ai: aiJson([{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }]) }),
+    );
+    warn.mockRestore();
+    expect(r.source).toBe('AI');
+  });
+
   it('PDF sem outline usa a IA nas 15 primeiras páginas e grava AI', async () => {
     const r = await extractAndSaveChapters(
       'm1',
