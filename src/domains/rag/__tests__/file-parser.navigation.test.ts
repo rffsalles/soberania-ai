@@ -38,12 +38,13 @@ describe('readPdfNavigation', () => {
 
     expect(await readPdfNavigation(Buffer.from('%PDF'))).toEqual({
       outline: [
-        { title: 'Cap. 1 Introdução', pageNumber: 12 },
-        { title: 'Cap. 2 Modelo ER', pageNumber: 25 },
+        { title: 'Cap. 1 Introdução', pageNumber: 12, depth: 0 },
+        { title: '1.1', pageNumber: 12, depth: 1 },
+        { title: 'Cap. 2 Modelo ER', pageNumber: 25, depth: 0 },
       ],
       pageLabels: ['i', 'ii', '1'],
     });
-    expect(doc.getDestination).toHaveBeenCalledTimes(1);
+    expect(doc.getDestination).toHaveBeenCalledTimes(2);
     expect(doc.getDestination).toHaveBeenCalledWith('c1');
     expect(destroy).toHaveBeenCalled();
   });
@@ -51,7 +52,7 @@ describe('readPdfNavigation', () => {
   it('aceita destino explícito com índice numérico de página', async () => {
     doc.getOutline.mockResolvedValue([{ title: 'Cap. 3', dest: [4, { name: 'Fit' }], items: [] }]);
     const result = await readPdfNavigation(Buffer.from('%PDF'));
-    expect(result.outline).toEqual([{ title: 'Cap. 3', pageNumber: 5 }]);
+    expect(result.outline).toEqual([{ title: 'Cap. 3', pageNumber: 5, depth: 0 }]);
   });
 
   it('destino irresolúvel vira pageNumber null', async () => {
@@ -64,8 +65,30 @@ describe('readPdfNavigation', () => {
 
     const result = await readPdfNavigation(Buffer.from('%PDF'));
     expect(result.outline).toEqual([
-      { title: 'Cap. 1', pageNumber: null },
-      { title: 'Cap. 2', pageNumber: 2 },
+      { title: 'Cap. 1', pageNumber: null, depth: 0 },
+      { title: 'Cap. 2', pageNumber: 2, depth: 0 },
+    ]);
+  });
+
+  it('devolve todos os níveis em pré-ordem com a profundidade', async () => {
+    doc.getOutline.mockResolvedValue([
+      {
+        title: 'Livro',
+        dest: [0, { name: 'Fit' }],
+        items: [
+          { title: 'A', dest: [1, { name: 'Fit' }], items: [{ title: 'A1', dest: [2, { name: 'Fit' }], items: [] }] },
+          { title: 'B', dest: [3, { name: 'Fit' }], items: [] },
+        ],
+      },
+      { title: 'Fim', dest: [9, { name: 'Fit' }], items: [] },
+    ]);
+    const result = await readPdfNavigation(Buffer.from('%PDF'));
+    expect(result.outline.map((e) => [e.title, e.depth])).toEqual([
+      ['Livro', 0],
+      ['A', 1],
+      ['A1', 2],
+      ['B', 1],
+      ['Fim', 0],
     ]);
   });
 

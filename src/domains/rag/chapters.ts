@@ -6,18 +6,43 @@ export type ChapterRow = { title: string; order: number; startPage: number; endP
 export type ChunkAssignment = { order: number | null; title: string | null; fromPage: number; toPage: number };
 export type ChapterLinks = { order: number; lessonPlanIds: string[] };
 
-/** Converte o outline do PDF em rascunhos; null quando sobram menos que o mínimo. */
-export function outlineToDrafts(entries: OutlineEntry[]): ChapterDraft[] | null {
+const GENERIC_OUTLINE_PATTERNS = [
+  /^p[áa]gina( em branco)?(\s*\d+)?$/i,
+  /^blank page/i,
+  /^untitled$/i,
+  /^sem t[íi]tulo$/i,
+  /^sin t[íi]tulo$/i,
+  /\.pdf$/i,
+];
+
+/** Títulos de bookmark sem informação (páginas em branco, nome de arquivo, "sem título"). */
+export function isGenericOutlineTitle(title: string): boolean {
+  const t = title.trim();
+  return t === '' || GENERIC_OUTLINE_PATTERNS.some((re) => re.test(t));
+}
+
+const MIN_NESTED_OUTLINE_CHAPTERS = 3;
+
+function draftsAtDepth(entries: OutlineEntry[], depth: number): ChapterDraft[] {
   const drafts: ChapterDraft[] = [];
   let last = 0;
   for (const entry of entries) {
+    if (entry.depth !== depth) continue;
     const title = entry.title.trim();
-    if (!title || entry.pageNumber === null) continue;
+    if (entry.pageNumber === null || isGenericOutlineTitle(title)) continue;
     if (entry.pageNumber <= last) continue;
     drafts.push({ title, startPage: entry.pageNumber });
     last = entry.pageNumber;
   }
-  return drafts.length >= MIN_EXTRACTED_CHAPTERS ? drafts : null;
+  return drafts;
+}
+
+/** Converte o outline do PDF em rascunhos (nível 0; cai para o nível 1 quando a raiz é só o título do livro). */
+export function outlineToDrafts(entries: OutlineEntry[]): ChapterDraft[] | null {
+  const root = draftsAtDepth(entries, 0);
+  if (root.length >= MIN_EXTRACTED_CHAPTERS) return root;
+  const nested = draftsAtDepth(entries, 1);
+  return nested.length >= MIN_NESTED_OUTLINE_CHAPTERS ? nested : null;
 }
 
 export function isValidChapterSequence(drafts: ChapterDraft[], totalPages: number, minCount: number): boolean {

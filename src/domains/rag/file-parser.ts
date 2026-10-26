@@ -158,7 +158,7 @@ async function resolveOutlineDest(doc: PdfDocLike, rawDest: unknown): Promise<nu
   }
 }
 
-/** Lê o outline (1º nível) e os rótulos de página do PDF, resolvendo cada bookmark para a página física. */
+/** Lê o outline (todos os níveis, em pré-ordem) e os rótulos de página do PDF, resolvendo cada bookmark para a página física. */
 export async function readPdfNavigation(buffer: Buffer): Promise<PdfNavigation> {
   const PDFParseConstructor = (typeof PDFParse === 'function' ? PDFParse : (PDFParse as { PDFParse?: new (opts: { data: Buffer }) => PDFParse })?.PDFParse) || PDFParse;
   const parser = new PDFParseConstructor({ data: buffer });
@@ -167,12 +167,17 @@ export async function readPdfNavigation(buffer: Buffer): Promise<PdfNavigation> 
     const doc = await (parser as unknown as { load(): Promise<PdfDocLike> }).load();
     const rawOutline = await doc.getOutline();
     const outline: OutlineEntry[] = [];
-    for (const item of Array.isArray(rawOutline) ? rawOutline : []) {
-      outline.push({
-        title: typeof item?.title === 'string' ? item.title.trim() : '',
-        pageNumber: await resolveOutlineDest(doc, item?.dest),
-      });
-    }
+    const walk = async (items: unknown, depth: number): Promise<void> => {
+      for (const item of Array.isArray(items) ? items : []) {
+        outline.push({
+          title: typeof item?.title === 'string' ? item.title.trim() : '',
+          pageNumber: await resolveOutlineDest(doc, item?.dest),
+          depth,
+        });
+        await walk(item?.items, depth + 1);
+      }
+    };
+    await walk(rawOutline, 0);
     let pageLabels: string[] | null = null;
     try {
       const labels = await doc.getPageLabels();

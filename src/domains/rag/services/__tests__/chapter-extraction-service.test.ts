@@ -71,7 +71,7 @@ describe('extractAndSaveChapters', () => {
     const r = await extractAndSaveChapters(
       'm1',
       { buffer, pages, totalPages: 300 },
-      depsWith({ outline: [{ title: 'Cap. 1', pageNumber: 12 }, { title: 'Cap. 2', pageNumber: 25 }] }),
+      depsWith({ outline: [{ title: 'Cap. 1', pageNumber: 12, depth: 0 }, { title: 'Cap. 2', pageNumber: 25, depth: 0 }] }),
     );
     expect(r.source).toBe('OUTLINE');
     expect(streamChat).not.toHaveBeenCalled();
@@ -124,12 +124,12 @@ describe('extractAndSaveChapters', () => {
       { order: 1, lessonPlanIds: ['l1'] },
       { order: 2, lessonPlanIds: ['l1', 'l2'] },
     ]);
-    const two = [{ title: 'A', pageNumber: 2 }, { title: 'B', pageNumber: 5 }];
+    const two = [{ title: 'A', pageNumber: 2, depth: 0 }, { title: 'B', pageNumber: 5, depth: 0 }];
     const same = await extractAndSaveChapters('m1', { buffer, pages, totalPages: 20 }, depsWith({ outline: two }));
     expect(same.lostLessonLinks).toBe(0);
     expect(replaceChapters.mock.calls[0][3]).toHaveLength(3);
 
-    const three = [...two, { title: 'C', pageNumber: 8 }];
+    const three = [...two, { title: 'C', pageNumber: 8, depth: 0 }];
     const diff = await extractAndSaveChapters('m1', { buffer, pages, totalPages: 20 }, depsWith({ outline: three }));
     expect(diff.lostLessonLinks).toBe(2);
     expect(replaceChapters.mock.calls[1][3]).toEqual([]);
@@ -240,7 +240,7 @@ describe('guarda de vínculos', () => {
   it('reextração com contagem diferente e vínculo alheio → 409', async () => {
     vi.mocked(parseDocumentFile).mockResolvedValue({ pages } as never);
     listChapterLinkDetails.mockResolvedValue([foreign]);
-    const outline = [{ title: 'A', pageNumber: 2 }, { title: 'B', pageNumber: 5 }, { title: 'C', pageNumber: 8 }];
+    const outline = [{ title: 'A', pageNumber: 2, depth: 0 }, { title: 'B', pageNumber: 5, depth: 0 }, { title: 'C', pageNumber: 8, depth: 0 }];
     await expect(reextractMaterialChapters('m1', { user: teacher }, depsWith({ outline }))).rejects.toMatchObject({ status: 409 });
     expect(listChapterLinkDetails).toHaveBeenCalledWith('m1', { fake: 'tx' });
   });

@@ -85,10 +85,11 @@ export interface ParsedDocumentResult {
 }
 
 
-/** Item de 1º nível do outline (bookmarks) do PDF; pageNumber é a página física 1-based. */
+/** Item do outline (bookmarks) do PDF; pageNumber é a página física 1-based e depth o nível (0 = raiz). */
 export interface OutlineEntry {
   title: string;
   pageNumber: number | null;
+  depth: number;
 }
 
 export interface PdfNavigation {

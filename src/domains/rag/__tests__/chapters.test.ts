@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildChunkAssignments,
   isValidChapterSequence,
+  isGenericOutlineTitle,
   outlineToDrafts,
   relinkByOrder,
   toChapterRows,
@@ -11,9 +12,9 @@ describe('outlineToDrafts', () => {
   it('outline com 2 entradas de 1º nível com página vira rascunho', () =>
     expect(
       outlineToDrafts([
-        { title: 'Cap. 1', pageNumber: 12 },
-        { title: 'Cap. 2', pageNumber: 25 },
-        { title: 'Sem destino', pageNumber: null },
+        { title: 'Cap. 1', pageNumber: 12, depth: 0 },
+        { title: 'Cap. 2', pageNumber: 25, depth: 0 },
+        { title: 'Sem destino', pageNumber: null, depth: 0 },
       ]),
     ).toEqual([
       { title: 'Cap. 1', startPage: 12 },
@@ -22,22 +23,80 @@ describe('outlineToDrafts', () => {
   it('outline com 1 entrada válida devolve null', () =>
     expect(
       outlineToDrafts([
-        { title: 'Cap. 1', pageNumber: 12 },
-        { title: 'Sem destino', pageNumber: null },
+        { title: 'Cap. 1', pageNumber: 12, depth: 0 },
+        { title: 'Sem destino', pageNumber: null, depth: 0 },
       ]),
     ).toBeNull());
   it('descarta título vazio e páginas não estritamente crescentes', () =>
     expect(
       outlineToDrafts([
-        { title: 'A', pageNumber: 5 },
-        { title: '  ', pageNumber: 8 },
-        { title: 'Volta', pageNumber: 3 },
-        { title: 'Repete', pageNumber: 5 },
-        { title: 'B', pageNumber: 9 },
+        { title: 'A', pageNumber: 5, depth: 0 },
+        { title: '  ', pageNumber: 8, depth: 0 },
+        { title: 'Volta', pageNumber: 3, depth: 0 },
+        { title: 'Repete', pageNumber: 5, depth: 0 },
+        { title: 'B', pageNumber: 9, depth: 0 },
       ]),
     ).toEqual([
       { title: 'A', startPage: 5 },
       { title: 'B', startPage: 9 },
+    ]));
+});
+
+describe('isGenericOutlineTitle', () => {
+  it.each(['Página em branco', 'página 1', 'Pagina 174', 'Página', 'Blank page', 'Blank page 2', 'Untitled', 'Sem título', 'Sin titulo', 'Capa_X.pdf', '  ', ''])(
+    'considera "%s" genérico',
+    (t) => expect(isGenericOutlineTitle(t)).toBe(true),
+  );
+  it.each(['Unidade 1 – Conjuntos', 'Capítulo 2', 'Página inicial do livro'])('"%s" não é genérico', (t) =>
+    expect(isGenericOutlineTitle(t)).toBe(false),
+  );
+});
+
+describe('outlineToDrafts (níveis e qualidade)', () => {
+  it('outline lixo do PDF de matemática devolve null', () =>
+    expect(
+      outlineToDrafts([
+        { title: 'Capa_Matematica_Basica_Vol1.pdf', pageNumber: null, depth: 0 },
+        { title: 'Página em branco', pageNumber: 2, depth: 0 },
+        { title: 'Capa_Matematica_Basica_Vol1.pdf', pageNumber: null, depth: 0 },
+        { title: 'Página em branco', pageNumber: 173, depth: 0 },
+        { title: 'Página 1', pageNumber: 1, depth: 1 },
+        { title: 'Página 1', pageNumber: 174, depth: 1 },
+      ]),
+    ).toBeNull());
+  it('raiz com o nome do livro e 4 capítulos no nível 1 usa o nível 1', () =>
+    expect(
+      outlineToDrafts([
+        { title: 'Livro', pageNumber: 1, depth: 0 },
+        { title: 'C1', pageNumber: 3, depth: 1 },
+        { title: 'C2', pageNumber: 20, depth: 1 },
+        { title: 'C3', pageNumber: 40, depth: 1 },
+        { title: 'C4', pageNumber: 60, depth: 1 },
+      ]),
+    ).toEqual([
+      { title: 'C1', startPage: 3 },
+      { title: 'C2', startPage: 20 },
+      { title: 'C3', startPage: 40 },
+      { title: 'C4', startPage: 60 },
+    ]));
+  it('nível 1 com menos de 3 válidos é rejeitado', () =>
+    expect(
+      outlineToDrafts([
+        { title: 'Livro', pageNumber: 1, depth: 0 },
+        { title: 'C1', pageNumber: 3, depth: 1 },
+        { title: 'C2', pageNumber: 20, depth: 1 },
+      ]),
+    ).toBeNull());
+  it('descarta títulos genéricos', () =>
+    expect(
+      outlineToDrafts([
+        { title: 'Página em branco', pageNumber: 2, depth: 0 },
+        { title: 'Cap. 1', pageNumber: 5, depth: 0 },
+        { title: 'Cap. 2', pageNumber: 9, depth: 0 },
+      ]),
+    ).toEqual([
+      { title: 'Cap. 1', startPage: 5 },
+      { title: 'Cap. 2', startPage: 9 },
     ]));
 });
 
