@@ -84,19 +84,26 @@ export async function sampleChunksByMaterial(materialId: string, limit: number):
   return rows.map(toDidacticChunk);
 }
 
-/** Até `perChapter` primeiros trechos de cada capítulo (na ordem dada), cortados em `max` no total. */
+/** Até `perChapter` primeiros trechos de cada capítulo (na ordem dada), intercalados (round-robin) e cortados em `max` no total. */
 export async function sampleChunksByChapter(chapterIds: string[], perChapter: number, max: number): Promise<DidacticChunk[]> {
+  const perChapterRows = await Promise.all(
+    chapterIds.map(async (chapterId) => {
+      const rows = await db.materialChunk.findMany({
+        where: { chapterId },
+        orderBy: [{ pageNumber: 'asc' }, { createdAt: 'asc' }],
+        take: perChapter,
+        include: SAMPLE_INCLUDE,
+      });
+      return rows.map(toDidacticChunk);
+    })
+  );
   const out: DidacticChunk[] = [];
-  for (const chapterId of chapterIds) {
-    const rows = await db.materialChunk.findMany({
-      where: { chapterId },
-      orderBy: [{ pageNumber: 'asc' }, { createdAt: 'asc' }],
-      take: perChapter,
-      include: SAMPLE_INCLUDE,
-    });
-    out.push(...rows.map(toDidacticChunk));
+  for (let i = 0; i < perChapter && out.length < max; i++) {
+    for (const chunks of perChapterRows) {
+      if (i < chunks.length && out.length < max) out.push(chunks[i]);
+    }
   }
-  return out.slice(0, max);
+  return out;
 }
 
 /** Stores embeddings in `material_chunks.embedding` (vector column, not mapped by Prisma). */

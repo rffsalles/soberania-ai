@@ -21,10 +21,25 @@ describe('sampleChunksByChapter', () => {
       expect(findMany.mock.calls[i][0]).toMatchObject({ where: { chapterId: id }, take: 2 });
     });
     expect(r).toHaveLength(5);
-    expect(r.map((c) => c.id)).toEqual(['c1-1', 'c1-2', 'c2-1', 'c2-2', 'c3-1']);
+    expect(r.map((c) => c.id)).toEqual(['c1-1', 'c2-1', 'c3-1', 'c1-2', 'c2-2']);
     expect(r[0]).toEqual({
       id: 'c1-1', materialId: 'm1', bookTitle: 'Livro', author: 'Autor', chapter: 'Cap. 1',
       section: undefined, pageNumber: 1, content: 'Texto.', category: undefined,
     });
+  });
+
+  it('corta em round-robin entre capítulos preservando a ordem', async () => {
+    findMany.mockReset();
+    findMany.mockImplementation(async (a: { where: { chapterId: string } }) =>
+      [1, 2, 3, 4].map((n) => ({
+        id: `${a.where.chapterId}-${n}`, materialId: 'm1', chapter: a.where.chapterId, section: null, pageNumber: n,
+        content: 'Texto.', material: { title: 'Livro', author: 'Autor', subject: null },
+      }))
+    );
+    const r = await sampleChunksByChapter(['ch1', 'ch2', 'ch3', 'ch4'], 4, 12);
+    expect(r).toHaveLength(12);
+    expect(r.map((c) => c.id)).toEqual([
+      'ch1-1', 'ch2-1', 'ch3-1', 'ch4-1', 'ch1-2', 'ch2-2', 'ch3-2', 'ch4-2', 'ch1-3', 'ch2-3', 'ch3-3', 'ch4-3',
+    ]);
   });
 });
