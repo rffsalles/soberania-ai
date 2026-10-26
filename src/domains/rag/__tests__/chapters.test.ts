@@ -193,6 +193,26 @@ describe('headingsToDrafts', () => {
     ]);
   });
 
+  it('ignora páginas de sumário (líderes de pontos) mesmo com "Unidade N" no topo', () => {
+    const toc = (n: number, unit: number) =>
+      page(n, `Unidade ${unit} – Tema ${unit}\nIntrodução......... 67\nRazão........... 69\nOutro............ 70`);
+    expect(
+      headingsToDrafts([
+        toc(9, 1),
+        toc(10, 3),
+        page(15, '13Módulo 0\nApresentação\nUNIDADE 1\nObjetivos'),
+        page(16, 'texto'),
+        page(17, '15Módulo 0\nUnidade 1 – Conjuntos Numéricos\nCONJUNTOS'),
+        page(19, '17Módulo 0\nUnidade 1 – Conjuntos Numéricos\ntexto'),
+        page(43, '41Módulo 0\nApresentação\nUNIDADE 2\nObjetivos'),
+        page(45, '43Módulo 0\nUnidade 2 – Produtos Notáveis\nPRODUTOS'),
+      ]),
+    ).toEqual([
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
+      { title: 'Unidade 2 – Produtos Notáveis', startPage: 43 },
+    ]);
+  });
+
   it('só olha as 3 primeiras linhas não vazias', () => {
     expect(headingsToDrafts([page(1, 'a\nb\nc\nUnidade 1 – X'), page(2, 'Unidade 2 – Y')])).toBeNull();
   });

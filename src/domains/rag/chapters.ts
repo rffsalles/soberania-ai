@@ -47,6 +47,8 @@ export function outlineToDrafts(entries: OutlineEntry[]): ChapterDraft[] | null 
 
 const HEADING_SCAN_LINES = 3;
 const HEADING_PATTERN = /^(Unidade|Cap[íi]tulo|Cap\.|Parte|M[óo]dulo)\s+(\d+)\b(.*)$/i;
+const TOC_PAGE_MIN_LINES = 3;
+const HEADING_TITLE_LOOKAHEAD = 3;
 /** Linha de sumário: líder de pontos/reticências ou número de página após espaçamento largo. */
 const TOC_LINE_PATTERN = /(\.{3,}|…|\.\s\.\s\.)|(\s{2,}|\t)\d+\s*$/;
 
@@ -58,12 +60,12 @@ export function headingsToDrafts(pages: { pageNumber: number; text: string }[]):
   const drafts: ChapterDraft[] = [];
   let lastPage = 0;
   for (const page of pages) {
-    const lines = page.text
+    const allLines = page.text
       .split(/\r?\n/)
       .map((l) => l.trim())
-      .filter(Boolean)
-      .slice(0, HEADING_SCAN_LINES);
-    for (const raw of lines) {
+      .filter(Boolean);
+    if (allLines.filter((l) => TOC_LINE_PATTERN.test(l)).length >= TOC_PAGE_MIN_LINES) continue;
+    for (const raw of allLines.slice(0, HEADING_SCAN_LINES)) {
       if (TOC_LINE_PATTERN.test(raw)) continue;
       const line = raw.replace(/\s+/g, ' ');
       const m = HEADING_PATTERN.exec(line);
@@ -72,6 +74,13 @@ export function headingsToDrafts(pages: { pageNumber: number; text: string }[]):
       if (num === drafts.length + 1 && page.pageNumber > lastPage) {
         drafts.push({ title: line, startPage: page.pageNumber });
         lastPage = page.pageNumber;
+      } else if (num === drafts.length) {
+        // Página divisória só com "UNIDADE N": adota o título completo da página seguinte.
+        const last = drafts[drafts.length - 1];
+        const bare = /^\S+\s+\d+$/.test(last.title);
+        if (bare && line.length > last.title.length && page.pageNumber - last.startPage <= HEADING_TITLE_LOOKAHEAD) {
+          last.title = line;
+        }
       } else if (num > drafts.length + 1) {
         return null;
       }
