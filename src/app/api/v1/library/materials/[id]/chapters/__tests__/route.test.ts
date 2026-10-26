@@ -27,10 +27,14 @@ const props = { params: Promise.resolve({ id: 'm1' }) };
 const put = (body: unknown) =>
   new Request('http://x/api/v1/library/materials/m1/chapters', { method: 'PUT', body: JSON.stringify(body) });
 
+const teacher = { id: 't1', role: Role.TEACHER, classId: null };
+const LINKS_CONFLICT_MESSAGE = 'Alterar o número de capítulos desfaz vínculos de aulas de outros professores.';
+const conflictItem = { disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana' };
+
 describe('rotas de capítulos do material', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireUser.mockResolvedValue({ id: 't1', role: Role.TEACHER, classId: null });
+    mocks.requireUser.mockResolvedValue(teacher);
   });
 
   it('PUT com startPage não inteiro devolve 400 e não chama o service', async () => {
@@ -47,7 +51,10 @@ describe('rotas de capítulos do material', () => {
     mocks.replaceManualChapters.mockResolvedValue({ source: 'MANUAL', chapters: [{ id: 'c1' }], lostLessonLinks: 2 });
     const res = await PUT(put({ chapters: [{ title: ' Cap 1 ', startPage: 3 }] }), props);
     expect(res.status).toBe(200);
-    expect(mocks.replaceManualChapters).toHaveBeenCalledWith('m1', [{ title: 'Cap 1', startPage: 3 }]);
+    expect(mocks.replaceManualChapters).toHaveBeenCalledWith('m1', [{ title: 'Cap 1', startPage: 3 }], {
+      user: teacher,
+      force: false,
+    });
     expect(await res.json()).toEqual({ success: true, source: 'MANUAL', chapters: [{ id: 'c1' }], lostLessonLinks: 2 });
   });
 
@@ -65,7 +72,7 @@ describe('rotas de capítulos do material', () => {
     expect(await g.json()).toEqual({ success: true, chapters: [{ id: 'c1' }] });
     mocks.reextractMaterialChapters.mockResolvedValue({ source: 'OUTLINE', chapters: [{ id: 'c1' }], lostLessonLinks: 0 });
     const res = await POST(new Request('http://x', { method: 'POST' }), props);
-    expect(mocks.reextractMaterialChapters).toHaveBeenCalledWith('m1');
+    expect(mocks.reextractMaterialChapters).toHaveBeenCalledWith('m1', { user: teacher, force: false });
     expect(await res.json()).toEqual({ success: true, source: 'OUTLINE', chapters: [{ id: 'c1' }], lostLessonLinks: 0 });
   });
 
@@ -76,5 +83,28 @@ describe('rotas de capítulos do material', () => {
     expect(mocks.replaceManualChapters).not.toHaveBeenCalled();
     const r2 = await POST(new Request('http://x', { method: 'POST' }), props);
     expect(r2.status).toBe(403);
+  });
+
+  it('PUT e POST com ?force=1 repassam force: true', async () => {
+    mocks.replaceManualChapters.mockResolvedValue({ source: 'MANUAL', chapters: [], lostLessonLinks: 0 });
+    mocks.reextractMaterialChapters.mockResolvedValue({ source: 'OUTLINE', chapters: [], lostLessonLinks: 0 });
+    const url = 'http://x/api/v1/library/materials/m1/chapters?force=1';
+    await PUT(
+      new Request(url, { method: 'PUT', body: JSON.stringify({ chapters: [{ title: 'Cap 1', startPage: 3 }] }) }),
+      props,
+    );
+    expect(mocks.replaceManualChapters).toHaveBeenCalledWith('m1', [{ title: 'Cap 1', startPage: 3 }], {
+      user: teacher,
+      force: true,
+    });
+    await POST(new Request(`${url}`, { method: 'POST' }), props);
+    expect(mocks.reextractMaterialChapters).toHaveBeenCalledWith('m1', { user: teacher, force: true });
+  });
+
+  it('409 do service devolve details no corpo', async () => {
+    mocks.replaceManualChapters.mockRejectedValue(new DomainError(409, LINKS_CONFLICT_MESSAGE, [conflictItem]));
+    const res = await PUT(put({ chapters: [{ title: 'A', startPage: 1 }] }), props);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ success: false, error: LINKS_CONFLICT_MESSAGE, details: [conflictItem] });
   });
 });

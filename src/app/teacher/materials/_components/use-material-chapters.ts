@@ -32,13 +32,24 @@ export async function fetchMaterialChapters(id: string): Promise<ChapterDTO[]> {
   return body.chapters;
 }
 
+export type LinkConflict = {
+  disciplina: string;
+  turma: string;
+  classNumber: number;
+  topicTitle: string;
+  professor: string;
+};
+
+const withForce = (url: string, force?: boolean) => (force ? `${url}?force=1` : url);
+
 export function saveMaterialChapters(
   id: string,
   chapters: { title: string; startPage: number }[],
+  force?: boolean,
 ): Promise<ChapterSaveResult> {
-  return requestJson<ChapterSaveResult>(chaptersUrl(id), 'PUT', { chapters });
+  return requestJson<ChapterSaveResult>(withForce(chaptersUrl(id), force), 'PUT', { chapters });
 }
 
-export function extractMaterialChapters(id: string): Promise<ChapterSaveResult> {
-  return requestJson<ChapterSaveResult>(`${chaptersUrl(id)}/extract`, 'POST');
+export function extractMaterialChapters(id: string, force?: boolean): Promise<ChapterSaveResult> {
+  return requestJson<ChapterSaveResult>(withForce(`${chaptersUrl(id)}/extract`, force), 'POST');
 }

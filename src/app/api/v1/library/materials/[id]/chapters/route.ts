@@ -18,8 +18,9 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
 
 export async function PUT(req: Request, props: { params: Promise<{ id: string }> }) {
   try {
-    await requireUser(req, [Role.TEACHER, Role.ADMIN]);
+    const user = await requireUser(req, [Role.TEACHER, Role.ADMIN]);
     const { id } = await props.params;
+    const force = new URL(req.url).searchParams.get('force') === '1';
     const body = await req.json().catch(() => null);
     const parsed = materialChaptersSchema.safeParse(body);
     if (!parsed.success) {
@@ -28,7 +29,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
         { status: 400 },
       );
     }
-    const result = await replaceManualChapters(id, parsed.data.chapters);
+    const result = await replaceManualChapters(id, parsed.data.chapters, { user, force });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return apiError(error);

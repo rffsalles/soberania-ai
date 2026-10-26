@@ -6,6 +6,8 @@ import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { RequestError } from '@/components/assessments/use-assessments';
+import { useCurrentUser } from '@/components/layout/use-current-user';
 import {
   CHAPTER_SOURCE_LABEL,
   extractMaterialChapters,
@@ -13,6 +15,7 @@ import {
   saveMaterialChapters,
   type ChapterDTO,
   type ChapterSaveResult,
+  type LinkConflict,
 } from './use-material-chapters';
 
 export { CHAPTER_SOURCE_LABEL };
@@ -32,6 +35,11 @@ function toRows(chapters: ChapterDTO[]): Row[] {
   return chapters.map((c) => ({ title: c.title, startPage: String(c.startPage) }));
 }
 
+interface Conflict {
+  items: LinkConflict[];
+  retry: () => void;
+}
+
 export function MaterialChaptersPanel({ material, open, onOpenChange }: MaterialChaptersPanelProps) {
   const [rows, setRows] = React.useState<Row[]>([]);
   const [source, setSource] = React.useState<ChapterDTO['source'] | null>(null);
@@ -39,6 +47,8 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
   const [isBusy, setIsBusy] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [conflict, setConflict] = React.useState<Conflict | null>(null);
+  const { user } = useCurrentUser();
 
   React.useEffect(() => {
     if (!open) return;
@@ -68,12 +78,13 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
     setSource(result.chapters[0]?.source ?? null);
   };
 
-  const run = async (action: () => Promise<ChapterSaveResult>, emptyMessage?: string) => {
+  const run = async (action: (force?: boolean) => Promise<ChapterSaveResult>, emptyMessage?: string, force?: boolean) => {
     setIsBusy(true);
     setError(null);
+    setConflict(null);
     setStatus(null);
     try {
-      const result = await action();
+      const result = await action(force);
       if (emptyMessage && result.source === null) {
         setStatus(emptyMessage);
         return;
@@ -83,6 +94,12 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
         setStatus(`${result.lostLessonLinks} aula(s) perderam o vínculo com os capítulos deste livro.`);
       }
     } catch (err: unknown) {
+      if (err instanceof RequestError && err.status === 409 && Array.isArray(err.details)) {
+        setConflict({
+          items: err.details as LinkConflict[],
+          retry: () => void run(action, emptyMessage, true),
+        });
+      }
       setError(err instanceof Error ? err.message : 'Falha ao processar capítulos.');
     } finally {
       setIsBusy(false);
@@ -90,16 +107,17 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
   };
 
   const handleSave = () =>
-    run(() =>
+    run((force) =>
       saveMaterialChapters(
         material.id,
         rows.map((r) => ({ title: r.title.trim(), startPage: Number(r.startPage) })),
+        force,
       ),
     );
 
   const handleExtract = () =>
     run(
-      () => extractMaterialChapters(material.id),
+      (force) => extractMaterialChapters(material.id, force),
       'Nenhum capítulo encontrado; os capítulos atuais foram mantidos.',
     );
 
@@ -179,7 +197,22 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
             {status}
           </p>
         )}
-        {error && (
+        {error && conflict && (
+          <div role="alert" className="space-y-2 text-sm text-danger">
+            <p>{error}</p>
+            <ul className="list-disc pl-5">
+              {conflict.items.map((c, i) => (
+                <li key={i}>{`${c.disciplina} · ${c.turma} · Aula ${c.classNumber}: ${c.topicTitle} (${c.professor})`}</li>
+              ))}
+            </ul>
+            {user?.role === 'ADMIN' && (
+              <Button type="button" variant="outline" size="sm" onClick={conflict.retry} disabled={isBusy}>
+                Forçar mesmo assim
+              </Button>
+            )}
+          </div>
+        )}
+        {error && !conflict && (
           <p role="alert" className="text-sm text-danger">
             {error}
           </p>

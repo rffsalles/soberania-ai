@@ -72,7 +72,8 @@ export const HTTP_CONFLICT = 409;
 export class RequestError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly details?: unknown
   ) {
     super(message);
   }
@@ -88,7 +89,7 @@ export async function requestJson<T>(url: string, method: 'GET' | 'POST' | 'PUT'
   });
   const body = await res.json().catch(() => null);
   if (!res.ok || !body?.success) {
-    throw new RequestError(typeof body?.error === 'string' ? body.error : GENERIC_ERROR, res.status);
+    throw new RequestError(typeof body?.error === 'string' ? body.error : GENERIC_ERROR, res.status, body?.details);
   }
   return body as T;
 }

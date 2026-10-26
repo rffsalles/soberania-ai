@@ -82,4 +82,59 @@ describe('MaterialChaptersPanel', () => {
       '3 aula(s) perderam o vínculo com os capítulos deste livro.',
     );
   });
+
+  describe('conflito de vínculos (409)', () => {
+    const CONFLICT_MSG = 'Alterar o número de capítulos desfaz vínculos de aulas de outros professores.';
+    const conflict = {
+      success: false,
+      error: CONFLICT_MSG,
+      details: [{ disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana' }],
+    };
+
+    function stubConflict(role: string, forced: { status: number; body: unknown }) {
+      fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+        const key = `${init?.method ?? 'GET'} ${url}`;
+        const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+        if (key === `GET ${BASE}`) return json(200, { success: true, chapters: [chapter] });
+        if (key === 'GET /api/v1/auth/me') return json(200, { user: { id: 'u1', role } });
+        if (key === `PUT ${BASE}`) return json(409, conflict);
+        if (key === `PUT ${BASE}?force=1`) return json(forced.status, forced.body);
+        throw new Error(`fetch inesperado: ${key}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+    }
+
+    it('409 mostra as aulas afetadas e o professor não vê o botão de forçar', async () => {
+      stubConflict('TEACHER', { status: 200, body: {} });
+      renderPanel();
+      await screen.findByText('Marcadores do PDF');
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar capítulos' }));
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toContain('BD · A · Aula 4: Joins (Ana)');
+      expect(alert.textContent).toContain(CONFLICT_MSG);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/me'));
+      expect(screen.queryByRole('button', { name: 'Forçar mesmo assim' })).toBeNull();
+    });
+
+    it('admin força e o painel repete o PUT com force=1', async () => {
+      stubConflict('ADMIN', {
+        status: 200,
+        body: { success: true, source: 'MANUAL', chapters: [chapter], lostLessonLinks: 0 },
+      });
+      renderPanel();
+      await screen.findByText('Marcadores do PDF');
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar capítulos' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Forçar mesmo assim' }));
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          `${BASE}?force=1`,
+          expect.objectContaining({
+            method: 'PUT',
+            body: JSON.stringify({ chapters: [{ title: 'Intro', startPage: 1 }] }),
+          }),
+        ),
+      );
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    });
+  });
 });
