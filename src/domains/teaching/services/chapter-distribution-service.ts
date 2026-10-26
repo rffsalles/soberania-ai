@@ -97,7 +97,9 @@ export async function distributeChapters(
     })),
     books,
   });
-  const items = await askModel(messages, deps);
+  const raw = await askModel(messages, deps);
+  // A PK (lessonPlanId, chapterId) não admite repetição dentro da mesma aula.
+  const items = raw?.map((i) => ({ ...i, chapterIds: Array.from(new Set(i.chapterIds)) })) ?? null;
   if (!items || !isValidDistribution(items, lessonPlans.map((l) => l.classNumber), chapterIds)) {
     throw new DomainError(503, AI_UNAVAILABLE_MESSAGE);
   }

@@ -51,11 +51,13 @@ export function buildChapterDistributionMessages(input: ChapterDistributionPromp
   ];
 }
 
+const TOPIC_TITLE_MAX_LENGTH = 120;
+
 const distributionSchema = z.object({
   lessons: z.array(
     z.object({
       classNumber: z.number().int(),
-      topicTitle: z.string().trim().min(1),
+      topicTitle: z.string().trim().min(1).transform((t) => t.slice(0, TOPIC_TITLE_MAX_LENGTH).trim()),
       chapterIds: z.array(z.string()),
     })
   ),

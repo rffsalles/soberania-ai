@@ -63,6 +63,22 @@ describe('chapter-distribution-service', () => {
     expect(streamChat.mock.calls[0][1]).toMatchObject({ temperature: 0.2, maxTokens: 3000 });
   });
 
+  it('chapterIds repetidos na mesma aula são deduplicados antes de gravar', async () => {
+    const text = JSON.stringify({
+      lessons: [
+        { classNumber: 1, topicTitle: 'A', chapterIds: ['ch1', 'ch1'] },
+        { classNumber: 2, topicTitle: 'B', chapterIds: ['ch2'] },
+        { classNumber: 3, topicTitle: 'C', chapterIds: ['ch2', 'ch2', 'ch1'] },
+      ],
+    });
+    const { deps, apply } = makeDeps({ text });
+    await distributeChapters('sch1', teacher, deps);
+    expect(apply).toHaveBeenCalledWith([
+      { lessonPlanId: 'l1', topicTitle: 'A', chapterIds: ['ch1'] },
+      { lessonPlanId: 'l3', topicTitle: 'C', chapterIds: ['ch2', 'ch1'] },
+    ]);
+  });
+
   it('aula faltando na resposta → 503 e nada gravado', async () => {
     const text = JSON.stringify({ lessons: [{ classNumber: 1, topicTitle: 'A', chapterIds: ['ch1'] }] });
     const { deps, apply } = makeDeps({ text });
