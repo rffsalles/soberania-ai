@@ -16,3 +16,10 @@ export function isSyntheticChapter(chapter: string): boolean {
 export const DEFAULT_TOP_K = 3;
 export const RAG_MIN_TOP_K = 1;
 export const RAG_MAX_TOP_K = 50;
+
+/** Páginas iniciais do PDF enviadas à IA para localizar o sumário. */
+export const CHAPTER_TOC_PAGES = 12;
+/** Máximo de caracteres por página no prompt do sumário. */
+export const CHAPTER_TOC_PAGE_CHARS = 1200;
+/** Mínimo de capítulos para considerar uma extração válida. */
+export const MIN_EXTRACTED_CHAPTERS = 2;
