@@ -20,6 +20,7 @@ import { applyChapterDistribution } from './lesson-plan-repository';
 import { listPlanChapters } from './teaching-plan-repository';
 import { planChapterIds, type PlanChapterBook } from './plan-chapters-service';
 import type { PlanActor } from './teaching-plan-service';
+import { collectStream } from '@/domains/agents/collect-stream';
 
 export type ChapterDistributionDeps = {
   findSchedule: typeof findScheduleForDistribution;
@@ -58,15 +59,10 @@ async function askModel(
   deps: ChapterDistributionDeps
 ): Promise<DistributionItem[] | null> {
   try {
-    let text = '';
-    let fallback = false;
-    for await (const chunk of deps.streamChat(messages, {
+    const { text, fallback } = await collectStream(deps.streamChat, messages, {
       temperature: DISTRIBUTION_TEMPERATURE,
       maxTokens,
-    })) {
-      text += chunk.token;
-      if (chunk.fallback) fallback = true;
-    }
+    });
     return fallback ? null : parseChapterDistribution(text);
   } catch (err) {
     console.warn('[chapter-distribution] falha ao distribuir capítulos com a IA', err);

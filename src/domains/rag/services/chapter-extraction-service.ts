@@ -24,6 +24,7 @@ import {
   replaceChapters,
   type ChapterDTO,
 } from '@/domains/rag/services/chapter-repository';
+import { collectStream } from '@/domains/agents/collect-stream';
 
 export const CHAPTERS_PDF_ONLY = 'A extração de capítulos está disponível apenas para PDF.';
 
@@ -73,15 +74,10 @@ async function askModel(
       text: p.text,
     }));
     const messages = buildChapterExtractionMessages({ pages: tocPages, totalPages: input.totalPages });
-    let text = '';
-    let fallback = false;
-    for await (const chunk of deps.streamChat(messages, {
+    const { text, fallback } = await collectStream(deps.streamChat, messages, {
       temperature: EXTRACTION_TEMPERATURE,
       maxTokens: EXTRACTION_MAX_TOKENS,
-    })) {
-      text += chunk.token;
-      if (chunk.fallback) fallback = true;
-    }
+    });
     return fallback ? null : parseChapterExtraction(text);
   } catch (err) {
     console.warn('[chapters] falha ao extrair capítulos com a IA', err);

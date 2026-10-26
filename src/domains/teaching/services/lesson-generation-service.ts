@@ -15,6 +15,7 @@ import { assertOwner } from '../ownership';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
 import { findLessonForGeneration } from './lesson-plan-repository';
 import type { PlanActor } from './teaching-plan-service';
+import { collectStream } from '@/domains/agents/collect-stream';
 
 export const NO_INDEXED_CHAPTER_CONTENT = 'Os capítulos selecionados não têm conteúdo indexado';
 /** Soma das etapas aceita dentro de duração ± 10%. */
@@ -42,15 +43,10 @@ async function askModel(
   deps: LessonGenerationDeps
 ): Promise<GeneratedLessonText | null> {
   try {
-    let text = '';
-    let fallback = false;
-    for await (const chunk of deps.streamChat(messages, {
+    const { text, fallback } = await collectStream(deps.streamChat, messages, {
       temperature: GENERATION_TEMPERATURE,
       maxTokens: GENERATION_MAX_TOKENS,
-    })) {
-      text += chunk.token;
-      if (chunk.fallback) fallback = true;
-    }
+    });
     return fallback ? null : parseLessonGeneration(text);
   } catch (err) {
     console.warn('[lesson-generation] falha ao gerar a aula com a IA', err);
@@ -119,15 +115,10 @@ async function askRefine(
   deps: LessonGenerationDeps
 ): Promise<string | null> {
   try {
-    let text = '';
-    let fallback = false;
-    for await (const chunk of deps.streamChat(messages, {
+    const { text, fallback } = await collectStream(deps.streamChat, messages, {
       temperature: REFINE_TEMPERATURE,
       maxTokens: REFINE_MAX_TOKENS,
-    })) {
-      text += chunk.token;
-      if (chunk.fallback) fallback = true;
-    }
+    });
     return fallback ? null : text.trim() || null;
   } catch (err) {
     console.warn('[lesson-generation] falha ao refinar o campo com a IA', err);

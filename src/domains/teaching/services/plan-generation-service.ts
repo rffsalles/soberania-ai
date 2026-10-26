@@ -9,6 +9,7 @@ import {
   parseTeachingPlanText,
   type TeachingPlanText,
 } from '@/domains/agents/prompts/teaching-plan-prompt';
+import { collectStream } from '@/domains/agents/collect-stream';
 
 export type PlanGenerationReference = {
   /** Id do material no acervo; quando presente restringe a busca RAG a ele. */
@@ -117,15 +118,10 @@ async function retrieveChunks(input: GeneratePlanInput, deps: PlanGenerationDeps
 
 async function askModel(messages: AIMessage[], deps: PlanGenerationDeps): Promise<TeachingPlanText | null> {
   try {
-    let text = '';
-    let fallback = false;
-    for await (const chunk of deps.streamChat(messages, {
+    const { text, fallback } = await collectStream(deps.streamChat, messages, {
       temperature: PLAN_TEMPERATURE,
       maxTokens: PLAN_MAX_TOKENS,
-    })) {
-      text += chunk.token;
-      if (chunk.fallback) fallback = true;
-    }
+    });
     return fallback ? null : parseTeachingPlanText(text);
   } catch (err) {
     console.warn('[teaching-plan] falha ao gerar sugestão com a IA', err);
