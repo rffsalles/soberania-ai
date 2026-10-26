@@ -10,6 +10,7 @@ export interface DidacticMaterialItem {
   mimeType?: string | null;
   isOcrApplied: boolean;
   totalChunks: number;
+  totalPages: number;
   createdAt: string;
   updatedAt: string;
 }

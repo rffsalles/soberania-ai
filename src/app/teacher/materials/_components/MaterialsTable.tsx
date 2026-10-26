@@ -12,6 +12,7 @@ import {
   Sparkles,
   CheckCircle2,
   AlertTriangle,
+  ListTree,
 } from 'lucide-react';
 import {
   Table,
@@ -24,6 +25,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
+import { MaterialChaptersPanel } from './MaterialChaptersPanel';
 import {
   formatDate,
   formatFileSize,
@@ -40,6 +42,8 @@ export function MaterialsTable({
   onDeleteSuccess,
 }: MaterialsTableProps) {
   const [materialToDelete, setMaterialToDelete] =
+    React.useState<DidacticMaterialItem | null>(null);
+  const [chaptersMaterial, setChaptersMaterial] =
     React.useState<DidacticMaterialItem | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
@@ -232,6 +236,19 @@ export function MaterialsTable({
                         </Button>
                       )}
 
+                      {item.mimeType === 'application/pdf' && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setChaptersMaterial(item)}
+                          title="Capítulos"
+                          className="h-8 w-8 p-0 cursor-pointer text-text-muted"
+                        >
+                          <ListTree className="h-4 w-4" />
+                        </Button>
+                      )}
+
                       <Button
                         type="button"
                         variant="ghost"
@@ -299,6 +316,16 @@ export function MaterialsTable({
           </div>
         </div>
       </AdaptiveModal>
+
+      {chaptersMaterial && (
+        <MaterialChaptersPanel
+          material={chaptersMaterial}
+          open
+          onOpenChange={(open) => {
+            if (!open) setChaptersMaterial(null);
+          }}
+        />
+      )}
     </>
   );
 }
