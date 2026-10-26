@@ -22,6 +22,7 @@ Permitir que cada aula (`LessonPlan`) seja amarrada aos capítulos dos livros da
 - Escala do mapeamento: distribuição dos capítulos pelo cronograma inteiro, ajuste por aula com multi-combobox, geração do conteúdo de cada aula depois.
 - Visão do aluno: status `DRAFT`/`PUBLISHED` na aula; agenda só após publicar.
 - Abordagem: modelo relacional com FKs (não Json).
+- Plano de implementação: `docs/superpowers/plans/2026-10-26-aulas-capitulos-ia.md` (22 tasks).
 
 ## Seção 1: modelo de dados e migrations (todas aditivas)
 
@@ -39,7 +40,7 @@ Invariantes:
 
 ## Seção 2: extração de capítulos na biblioteca
 
-Serviço `chapter-extraction-service` em `src/domains/rag/services/`, chamado por `uploadAndIngest` (`library-service.ts`) após `parseDocumentFile` e antes de gravar os chunks, e pela rota de reprocessamento.
+Serviço `chapter-extraction-service` em `src/domains/rag/services/`, chamado por `uploadAndIngest` (`library-service.ts`) após `createChunks` e `indexEmbeddings` (o material só tem id depois do parse), aplicando `chapterId` aos chunks por UPDATE em faixa de páginas, e pela rota de reprocessamento. A extração e a edição manual valem só para PDF; DOCX/TXT/MD não têm páginas reais. Se a cascata não encontrar capítulos num reprocessamento, os capítulos atuais são mantidos.
 
 Cascata, para na primeira que der resultado:
 
@@ -86,7 +87,7 @@ Testes: service com mock de IA (resposta válida, aula faltando, capítulo inexi
 
 Backend, `lesson-generation-service` em `src/domains/teaching/services/`, padrão dos geradores existentes (deps injetáveis, `loggedStreamChat`, prompt em `src/domains/agents/prompts/`, JSON extraído e validado com zod):
 
-- `POST /api/v1/teacher/lessons/[id]/generate`. Recupera chunks com `executeHybridSearch` filtrado por `chapterIds` (novo filtro em `chunkFilters` do `chunk-repository`), três consultas: título da aula, objetivo do plano, "exemplos e exercícios de {título}". Contexto: disciplina, ementa, número da aula sobre o total, duração em minutos, capítulos com livro e páginas, chunks com citação. Saída JSON: `dailyObjective`, `methodology`, `resourcesNeeded`, `fixationExercise`, `timeScript` no formato de `timeScriptSchema`, soma dos tempos igual à duração com tolerância de 10%. Devolve `citations` no formato dos outros geradores. Não grava: o cliente preenche o formulário e o professor salva.
+- `POST /api/v1/teacher/lessons/[id]/generate`. Recupera chunks com `executeHybridSearch` filtrado por `chapterIds` (novo filtro em `chunkFilters` do `chunk-repository`), três consultas: título da aula, objetivo do plano, "exemplos e exercícios de {título}". Contexto: disciplina, ementa, número da aula sobre o total, duração em minutos, capítulos com livro e páginas, chunks com citação. Saída JSON: `dailyObjective`, `methodology`, `resourcesNeeded`, `fixationExercise`, `steps` com `durationMinutes` por etapa (o `timeSeconds` do `timeScript` é o início da etapa, não a duração), convertidos pelo service em `timeScript` com início acumulado e `timeRange`; soma dos `durationMinutes` igual à duração da aula (`LESSON_DEFAULT_DURATION_MINUTES`, 100) com tolerância de 10%. Devolve `citations` no formato dos outros geradores. Não grava: o cliente preenche o formulário e o professor salva.
 - `POST /api/v1/teacher/lessons/[id]/refine` com `{field, stepIndex?, instruction, current}`. Contexto reduzido, dois chunks, devolve só o texto do campo. Temperatura 0.4.
 - Sem chunks: 422 "Os capítulos selecionados não têm conteúdo indexado". Sem IA real: 503.
 
