@@ -49,8 +49,8 @@ const HEADING_SCAN_LINES = 3;
 const HEADING_PATTERN = /^(Unidade|Cap[íi]tulo|Cap\.|Parte|M[óo]dulo)\s+(\d+)\b(.*)$/i;
 const TOC_PAGE_MIN_LINES = 3;
 const HEADING_TITLE_LOOKAHEAD = 3;
-/** Linha de sumário: líder de pontos/reticências seguido do número de página no fim. */
-const TOC_LINE_PATTERN = /(\.{3,}|…)\s*\d+\s*$/;
+/** Linha de sumário: líder de pontos (juntos ou separados por espaço)/reticências seguido do número de página no fim. */
+const TOC_LINE_PATTERN = /(\.{3,}|…|(?:\.\s+){2,}\.)\s*\d+\s*$/;
 
 /**
  * Detecta cabeçalhos "Unidade N", "Capítulo N"... no topo das páginas. Exige numeração sequencial

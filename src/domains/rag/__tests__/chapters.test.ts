@@ -160,6 +160,27 @@ describe('headingsToDrafts', () => {
   const body = (from: number, to: number) =>
     Array.from({ length: to - from + 1 }, (_, i) => page(from + i, `Texto corrido da página ${from + i}`));
 
+  it('linha de sumário com pontos espaçados conta como sumário', () => {
+    const toc = page(
+      9,
+      'Sumário\nUnidade 1 – Conjuntos . . . . 15\nUnidade 2 – Frações . . . . 43\nUnidade 3 – Geometria . . . 70',
+    );
+    expect(
+      headingsToDrafts([toc, page(17, 'Unidade 1 – Conjuntos\nTexto'), page(43, 'Unidade 2 – Frações\nTexto')]),
+    ).toEqual([
+      { title: 'Unidade 1 – Conjuntos', startPage: 17 },
+      { title: 'Unidade 2 – Frações', startPage: 43 },
+    ]);
+  });
+
+  it('"1, 2, 3, ..." sem número no fim não é sumário', () => {
+    const p = page(9, 'Unidade 1 – Contagem\n1, 2, 3, ...\n1, 2, 3, ...\n1, 2, 3, ...');
+    expect(headingsToDrafts([p, page(30, 'Unidade 2 – Soma\nTexto')])).toEqual([
+      { title: 'Unidade 1 – Contagem', startPage: 9 },
+      { title: 'Unidade 2 – Soma', startPage: 30 },
+    ]);
+  });
+
   it('detecta 5 unidades pelo topo das páginas', () => {
     const pages = [
       page(9, 'Sumário\nUnidade 1 – Conjuntos Numéricos ........ 15'),
