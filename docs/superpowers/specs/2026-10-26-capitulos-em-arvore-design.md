@@ -46,7 +46,7 @@ Não-objetivos (fora desta entrega):
   - Profundidade máxima: 6, contando `depth` a partir de 0 (valores 0 a 6 são válidos, 7 níveis; `depth` 7 é inválido).
   - Máximo de 500 nós por material.
 - Regra de `endPage`: `endPage = max(startPage, próximoIrmão.startPage - 1)`. O último filho herda o `endPage` do pai. A última raiz vai até `totalPages`. É a regra atual de `toChapterRows` (`src/domains/rag/chapters.ts`, linhas 196-203), estendida.
-- Irmãos que compartilham a página inicial têm faixas sobrepostas nessa página. Na atribuição de chunks (UPDATEs em pré-ordem, o último vence; seção 4), a página compartilhada fica com o último nó em pré-ordem.
+- Irmãos que compartilham a página inicial têm faixas sobrepostas nessa página. Na atribuição de chunks (segmentos disjuntos; seção 4), a página compartilhada fica com o último nó em pré-ordem.
 - Migração (somente expansão): uma migration adiciona `parentId` nullable, `depth` com default 0, a FK e o índice. As linhas existentes ficam válidas (raiz, `depth` 0) sem backfill. Rollback: dropar colunas, FK e índice. Não há etapa de contração. Os dados de materiais existentes só mudam quando o professor reextrai ou edita.
 - `LessonPlanChapter` não muda de forma. Grava os nós explicitamente escolhidos, de qualquer profundidade.
 - `MaterialChunk.chapterId` passa a apontar para o NÓ MAIS PROFUNDO cuja faixa cobre `pageNumber`. `MaterialChunk.chapter` (rótulo) recebe o título desse nó. `section` (`prisma/schema.prisma`, linha 439) continua sem uso.
@@ -75,9 +75,9 @@ export type ChapterRow = {
   - `depth` <= 6;
   - no máximo 500 nós.
   - Títulos genéricos (`isGenericOutlineTitle`, existente) são descartados antes da validação.
-- `chunkAssignmentsFromRows(rows)` substitui `buildChunkAssignments` (linha 205). Gera uma atribuição por nó, com a faixa inteira do nó (`startPage..endPage`), EM PRÉ-ORDEM. A faixa de um filho está contida na do pai e vem depois dele. Por isso, aplicar os UPDATEs nessa ordem faz o nó mais profundo prevalecer (o último UPDATE vence). Irmãos e primos só se sobrepõem quando compartilham a página inicial; nesse caso a página fica com o último deles em pré-ordem.
-  - Preserva o comportamento de `buildChunkAssignments` para páginas fora de qualquer raiz: se a primeira raiz começa depois da página 1, o resultado inclui um trecho com `order: null` (limpa `chapterId` e põe o rótulo "Página N") para as páginas `1..startPage-1`. Esse trecho é aplicado ANTES dos UPDATEs dos nós. Sem linhas, o resultado é um único trecho `order: null` cobrindo `1..totalPages`. Como as raízes são contíguas até `totalPages`, não há outro buraco.
-- `relinkByTitle(oldChapters, newRows, oldLinks)` substitui `relinkByOrder` (linhas 213-224). Casa o capítulo antigo com o novo por (título normalizado sem acentos, caixa e espaços múltiplos; `startPage`). Para os que sobrarem, casa por título normalizado único. Vínculos sem par são perdidos e contados em `lostLessonLinks`. `relinkByTitle` é calculado em `saveDrafts` ANTES de montar o `beforeWrite` (como `relinkByOrder` é hoje). A regra de conflito 409 (`LINKS_CONFLICT_MESSAGE`) dispara quando `lostLessonLinks > 0` e algum vínculo perdido pertence a aula de outro professor. Deixa de disparar pela mudança na contagem de capítulos (hoje `drafts.length !== oldLinks.length`, service linha 150). Com `force` (admin), não dispara.
+- `chunkAssignmentsFromRows(rows, totalPages)` substitui `buildChunkAssignments` (linha 205). Gera segmentos DISJUNTOS que cobrem `1..totalPages` em ordem de página. O dono de uma página é o ÚLTIMO nó em pré-ordem cuja faixa (`startPage..endPage`) a cobre; como a faixa de um filho está contida na do pai e vem depois dele, o nó mais profundo prevalece, e irmãos que compartilham a página inicial deixam essa página com o último deles em pré-ordem. Algoritmo: pinta um array `owner[1..totalPages]` iterando as linhas em pré-ordem (cada linha sobrescreve sua faixa) e comprime em runs, fundindo segmentos consecutivos com o mesmo dono. Assim cada chunk é reescrito no máximo uma vez, e um pai só recebe as páginas que não estão em nenhum filho.
+  - Preserva o comportamento de `buildChunkAssignments` para páginas fora de qualquer raiz: se a primeira raiz começa depois da página 1, as páginas `1..startPage-1` formam um segmento com `order: null` (limpa `chapterId` e põe o rótulo "Página N"). Sem linhas, o resultado é um único segmento `order: null` cobrindo `1..totalPages`. Como as raízes são contíguas até `totalPages`, não há outro buraco.
+- `relinkByTitle(oldChapters, newRows, oldLinks)` substitui `relinkByOrder` (linhas 213-224). Casa o capítulo antigo com o novo por (título normalizado sem acentos, caixa, pontuação e espaços múltiplos; `startPage`). Para os que sobrarem, casa por título normalizado único. Por fim (renomeação), um antigo restante casa com o novo livre de mesma `startPage` e mesmo `depth` quando esse par (`startPage`, `depth`) é único entre os novos livres e entre os antigos restantes. Em `saveDrafts`, `normalizeRelinks(relinks, rows)` remove o vínculo de uma aula a um nó quando um ancestral dele (via `parentOrder`) também ficou vinculado à mesma aula. Vínculos sem par são perdidos e contados em `lostLessonLinks`. `relinkByTitle` é calculado em `saveDrafts` ANTES de montar o `beforeWrite` (como `relinkByOrder` é hoje). A regra de conflito 409 (`LINKS_CONFLICT_MESSAGE`) dispara quando `lostLessonLinks > 0` e algum vínculo perdido pertence a aula de outro professor. Deixa de disparar pela mudança na contagem de capítulos (hoje `drafts.length !== oldLinks.length`, service linha 150). Com `force` (admin), não dispara.
 - `numberNodes(rows)` calcula `number: string` por nó a partir do índice entre irmãos. Raízes: "1", "2". Filhos: "2.1", "2.3.1". Não é persistido. É derivado na leitura e usado em rótulos.
 
 ## 5. Extração genérica de N níveis (`src/domains/rag/services/chapter-extraction-service.ts`)
@@ -138,7 +138,7 @@ const NUMBERED_HEADING = /^\s*(\d+(?:\.\d+)+)\s+(\S.{2,})$/;
   - Depois `depth=1`, resolvendo `parentId` pelo `parentOrder` e o id do nível anterior.
   - Assim sucessivamente até a profundidade máxima.
   - Não há nova dependência para gerar ids.
-  - Em seguida, recria `lessonPlanChapter` pelos `relinks` (order para novo id) e aplica os UPDATEs de chunks em pré-ordem (seção 4).
+  - Em seguida, recria `lessonPlanChapter` pelos `relinks` (order para novo id) e aplica um UPDATE de chunks por segmento disjunto (seção 4).
 - `listChapters` devolve em `order` crescente, com `parentId`, `depth` e `number` derivado.
 - Nova `listDescendantIds(chapterIds: string[]): Promise<string[]>` com CTE recursiva. Retorna os próprios ids mais todos os descendentes.
 
@@ -259,8 +259,8 @@ Extração e funções puras:
 - `src/domains/rag/__tests__/chapters.test.ts`
   - `toChapterRows` com 3 níveis e regra de `endPage`, incluindo o clamp `max(startPage, próximoIrmão.startPage - 1)` para irmãos na mesma página.
   - `isValidChapterTree`: filho antes do pai, irmão decrescente (inválido) e irmão na mesma página (válido), filho depois do fim do pai, `depth` 7, 501 nós, 1 raiz com `minRoots=2` (inválido) e com `minRoots=0` ou 1 (válido).
-  - `chunkAssignmentsFromRows` com o nó mais profundo vencendo, com dois irmãos na mesma página (a página fica com o segundo) e com o trecho `order: null` antes da primeira raiz (aplicado antes dos nós).
-  - `relinkByTitle`: título igual com página diferente, título duplicado, perda e conflito.
+  - `chunkAssignmentsFromRows` com segmentos disjuntos (o nó mais profundo vence), com dois irmãos na mesma página (a página fica com o segundo), com pai que tem páginas próprias antes do primeiro filho e com o segmento `order: null` antes da primeira raiz.
+  - `relinkByTitle`: título igual com página diferente, título duplicado, pontuação, renomeação na mesma página e nível, perda e conflito; `normalizeRelinks` com aula em pai e filho.
   - `outlineToTree`: nó sem página, raiz única, títulos genéricos.
   - `headingsToTree`: "2.3" sem "2", profundidade por pontos, resultado plano.
   - `alignDraftsToText` com versalete espaçado e deslocamento 2.

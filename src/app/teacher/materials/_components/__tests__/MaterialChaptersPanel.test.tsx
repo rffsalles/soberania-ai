@@ -84,7 +84,7 @@ describe('MaterialChaptersPanel', () => {
   });
 
   describe('conflito de vínculos (409)', () => {
-    const CONFLICT_MSG = 'Alterar o número de capítulos desfaz vínculos de aulas de outros professores.';
+    const CONFLICT_MSG = 'Esta alteração desfaz vínculos de aulas de outros professores.';
     const conflict = {
       success: false,
       error: CONFLICT_MSG,

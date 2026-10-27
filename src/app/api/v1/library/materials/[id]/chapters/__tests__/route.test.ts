@@ -28,7 +28,7 @@ const put = (body: unknown) =>
   new Request('http://x/api/v1/library/materials/m1/chapters', { method: 'PUT', body: JSON.stringify(body) });
 
 const teacher = { id: 't1', role: Role.TEACHER, classId: null };
-const LINKS_CONFLICT_MESSAGE = 'Alterar o número de capítulos desfaz vínculos de aulas de outros professores.';
+const LINKS_CONFLICT_MESSAGE = 'Esta alteração desfaz vínculos de aulas de outros professores.';
 const conflictItem = { disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana' };
 
 describe('rotas de capítulos do material', () => {
@@ -114,7 +114,7 @@ describe('rotas de capítulos do material', () => {
   });
 
   it('PUT propaga 400 de páginas decrescentes do service via apiError', async () => {
-    const msg = 'As páginas iniciais devem ser crescentes e estar entre 1 e 300.';
+    const msg = 'Capítulo 2: a página inicial (3) não pode ser anterior à do item anterior (9).';
     mocks.replaceManualChapters.mockRejectedValue(new DomainError(400, msg));
     const res = await PUT(put({ chapters: [{ title: 'A', startPage: 5 }, { title: 'B', startPage: 2 }] }), props);
     expect(res.status).toBe(400);

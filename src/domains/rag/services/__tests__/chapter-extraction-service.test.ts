@@ -317,6 +317,7 @@ describe('guarda de vínculos', () => {
       details: [{ disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana' }],
     });
     expect(listChapterLinkDetails).toHaveBeenCalledWith('m1', { fake: 'tx' });
+    expect(LINKS_CONFLICT_MESSAGE).toBe('Esta alteração desfaz vínculos de aulas de outros professores.');
   });
 
   it('contagem diferente sem vínculo perdido não bloqueia', async () => {

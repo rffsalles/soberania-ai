@@ -144,6 +144,9 @@ describe('toChapterRows', () => {
     ], 40).map((r) => [r.title, r.startPage, r.endPage])).toEqual([['R', 20, 29], ['a', 21, 21], ['b', 21, 29], ['S', 30, 40]]));
   it('numberNodes numera pelo índice entre irmãos', () =>
     expect(numberNodes(toChapterRows(tree3, 15))).toEqual(['1', '1.1', '1.1.1', '1.2', '2']));
+  it('numberNodes com filhos sob dois pais', () =>
+    expect(numberNodes(toChapterRows([node('A', 1, node('a', 2), node('b', 3)), node('B', 5, node('c', 6))], 9)))
+      .toEqual(['1', '1.1', '1.2', '2', '2.1']));
   it('material plano numera 1, 2, 3', () =>
     expect(numberChapters([
       { id: 'x', order: 1, parentId: null }, { id: 'y', order: 2, parentId: null }, { id: 'z', order: 3, parentId: null },

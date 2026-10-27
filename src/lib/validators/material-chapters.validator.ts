@@ -8,7 +8,7 @@ const chapterNodeSchema: z.ZodType<ChapterNode, z.ZodTypeDef, ChapterNodeInput> 
   z.object({
     title: z.string().trim().min(1).max(200),
     startPage: z.number().int().min(1),
-    children: z.array(chapterNodeSchema).default([]),
+    children: z.array(chapterNodeSchema).max(MAX_CHAPTER_NODES).default([]),
   }),
 );
 
@@ -29,7 +29,7 @@ export const materialChaptersSchema: z.ZodType<
   z.ZodTypeDef,
   { chapters: ChapterNodeInput[] }
 > = z
-  .object({ chapters: z.array(chapterNodeSchema) })
+  .object({ chapters: z.array(chapterNodeSchema).max(MAX_CHAPTER_NODES) })
   .superRefine((value, ctx) => {
     if (exceedsLimits(value.chapters)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Árvore de capítulos excede os limites.' });

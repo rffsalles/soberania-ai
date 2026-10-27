@@ -35,7 +35,7 @@ import {
 import { collectStream } from '@/domains/agents/collect-stream';
 
 export const CHAPTERS_PDF_ONLY = 'A extração de capítulos está disponível apenas para PDF.';
-export const LINKS_CONFLICT_MESSAGE = 'Alterar o número de capítulos desfaz vínculos de aulas de outros professores.';
+export const LINKS_CONFLICT_MESSAGE = 'Esta alteração desfaz vínculos de aulas de outros professores.';
 export const FORCE_ADMIN_ONLY_MESSAGE = 'Apenas administradores podem forçar a alteração dos capítulos.';
 
 export type ChapterWriteOptions = { user: { id: string; role: Role }; force?: boolean };
