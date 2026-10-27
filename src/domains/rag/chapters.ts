@@ -10,8 +10,6 @@ export type ChapterRow = {
   startPage: number;
   endPage: number;
 };
-/** @deprecated Ponte da fase 1: formato plano dos extratores atuais. A fase 2 remove. */
-export type ChapterDraft = { title: string; startPage: number };
 export type ChunkAssignment = { order: number | null; title: string | null; fromPage: number; toPage: number };
 export type ChapterLinks = { order: number; lessonPlanIds: string[] };
 
@@ -31,52 +29,6 @@ export function isGenericOutlineTitle(title: string): boolean {
 }
 
 const MIN_NESTED_OUTLINE_CHAPTERS = 3;
-
-function draftsAtDepth(entries: OutlineEntry[], depth: number): ChapterDraft[] {
-  const drafts: ChapterDraft[] = [];
-  let last = 0;
-  for (const entry of entries) {
-    if (entry.depth !== depth) continue;
-    const title = entry.title.trim();
-    if (entry.pageNumber === null || isGenericOutlineTitle(title)) continue;
-    if (entry.pageNumber <= last) continue;
-    drafts.push({ title, startPage: entry.pageNumber });
-    last = entry.pageNumber;
-  }
-  return drafts;
-}
-
-/** Filhos (nível 1) de cada raiz (nível 0), na ordem do outline; a raiz vem junto para saber se é válida. */
-function childrenByRoot(entries: OutlineEntry[]): { rootValid: boolean; children: OutlineEntry[] }[] {
-  const groups: { rootValid: boolean; children: OutlineEntry[] }[] = [];
-  for (const entry of entries) {
-    if (entry.depth === 0) {
-      const valid = entry.pageNumber !== null && !isGenericOutlineTitle(entry.title.trim());
-      groups.push({ rootValid: valid, children: [] });
-    } else if (entry.depth === 1 && groups.length > 0) {
-      groups[groups.length - 1].children.push(entry);
-    }
-  }
-  return groups;
-}
-
-/**
- * Converte o outline do PDF em rascunhos. Fica no nível 0 quando há 2+ raízes válidas; com 0 ou 1,
- * cai para o nível 1 usando só os filhos de UMA raiz (a válida única ou, sem válidas, a com mais filhos válidos).
- */
-export function outlineToDrafts(entries: OutlineEntry[]): ChapterDraft[] | null {
-  const root = draftsAtDepth(entries, 0);
-  if (root.length >= MIN_EXTRACTED_CHAPTERS) return root;
-  const groups = childrenByRoot(entries);
-  const validRoots = groups.filter((g) => g.rootValid);
-  const candidates = validRoots.length === 1 ? validRoots : groups;
-  let best: ChapterDraft[] = [];
-  for (const g of candidates) {
-    const drafts = draftsAtDepth(g.children, 1);
-    if (drafts.length > best.length) best = drafts;
-  }
-  return best.length >= MIN_NESTED_OUTLINE_CHAPTERS ? best : null;
-}
 
 type RawOutlineNode = { title: string; page: number | null; children: RawOutlineNode[] };
 
@@ -162,45 +114,7 @@ export function selectTocPages<T extends { pageNumber: number; text: string }>(
 }
 
 /**
- * Detecta cabeçalhos "Unidade N", "Capítulo N"... no topo das páginas. Exige numeração sequencial
- * a partir de 1 e páginas crescentes; ≥ 2 acertos ou null. Repetições do mesmo número ficam na 1ª ocorrência.
- */
-export function headingsToDrafts(pages: { pageNumber: number; text: string }[]): ChapterDraft[] | null {
-  const drafts: ChapterDraft[] = [];
-  let lastPage = 0;
-  for (const page of pages) {
-    if (isTocPage(page.text)) continue;
-    const allLines = page.text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    for (const raw of allLines.slice(0, HEADING_SCAN_LINES)) {
-      if (TOC_LINE_PATTERN.test(raw)) continue;
-      const line = raw.replace(/\s+/g, ' ');
-      const m = HEADING_PATTERN.exec(line);
-      if (!m) continue;
-      const num = Number(m[2]);
-      if (num === drafts.length + 1 && page.pageNumber > lastPage) {
-        drafts.push({ title: line, startPage: page.pageNumber });
-        lastPage = page.pageNumber;
-      } else if (num > 0 && num === drafts.length) {
-        // Página divisória só com "UNIDADE N": adota o título completo da página seguinte.
-        const last = drafts[drafts.length - 1];
-        const bare = /^\S+\s+\d+$/.test(last.title);
-        if (bare && line.length > last.title.length && page.pageNumber - last.startPage <= HEADING_TITLE_LOOKAHEAD) {
-          last.title = line;
-        }
-      } else if (num > drafts.length + 1) {
-        return null;
-      }
-      break;
-    }
-  }
-  return drafts.length >= MIN_EXTRACTED_CHAPTERS ? drafts : null;
-}
-
-/**
- * Árvore a partir do texto: raízes "Unidade/Capítulo N" (mesma lógica de headingsToDrafts) e, dentro de cada uma,
+ * Árvore a partir do texto: raízes "Unidade/Capítulo N" e, dentro de cada uma,
  * títulos numerados "N.M ..." como filhos (profundidade = pontos). Numerado exige pai existente, primeiro número
  * igual ao índice da raiz atual e páginas não decrescentes; repetição fica na 1ª ocorrência. < MIN_EXTRACTED_CHAPTERS raízes → null.
  */
@@ -374,11 +288,6 @@ export function alignDraftsToText(
     return result;
   };
   return rebuild(tree, true);
-}
-
-/** Ponte da fase 1: cada rascunho plano vira uma raiz sem filhos. */
-export function draftsToTree(drafts: ChapterDraft[]): ChapterNode[] {
-  return drafts.map((d) => ({ title: d.title, startPage: d.startPage, children: [] }));
 }
 
 /**

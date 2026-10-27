@@ -7,7 +7,6 @@ import {
   isTocPage,
   selectTocPages,
   outlineToTree,
-  draftsToTree,
   numberChapters,
   normalizeRelinks,
   numberNodes,
@@ -77,7 +76,7 @@ const tree3: ChapterNode[] = [
 
 describe('toChapterRows', () => {
   it('endPage deriva do próximo capítulo e o último vai até totalPages', () =>
-    expect(toChapterRows(draftsToTree([{ title: 'a', startPage: 12 }, { title: 'b', startPage: 25 }]), 300)).toEqual([
+    expect(toChapterRows([{ title: 'a', startPage: 12, children: [] }, { title: 'b', startPage: 25, children: [] }], 300)).toEqual([
       { title: 'a', order: 1, depth: 0, parentOrder: null, startPage: 12, endPage: 24 },
       { title: 'b', order: 2, depth: 0, parentOrder: null, startPage: 25, endPage: 300 },
     ]));
@@ -110,8 +109,6 @@ describe('toChapterRows', () => {
     expect(numberChapters([
       { id: 'u', order: 1, parentId: null }, { id: 'f', order: 2, parentId: 'u' }, { id: 'g', order: 3, parentId: 'u' },
     ]).map((c) => c.number)).toEqual(['1', '1.1', '1.2']));
-  it('draftsToTree põe children vazio', () =>
-    expect(draftsToTree([{ title: 'a', startPage: 2 }])).toEqual([{ title: 'a', startPage: 2, children: [] }]));
 });
 
 describe('chunkAssignmentsFromRows', () => {
