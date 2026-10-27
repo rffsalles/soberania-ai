@@ -15,6 +15,7 @@ import {
   NO_SYNCED_LESSONS,
 } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
+import { rootBooks } from '../chapter-roots';
 import { findScheduleForDistribution } from './course-schedule-repository';
 import { applyChapterDistribution } from './lesson-plan-repository';
 import { listPlanChapters } from './teaching-plan-repository';
@@ -84,7 +85,7 @@ export async function distributeChapters(
   assertOwner(user, schedule.teachingPlan.teacherId);
   if (schedule.lessonPlans.length === 0) throw new DomainError(400, NO_SYNCED_LESSONS);
 
-  const books = await deps.listPlanChapters(schedule.teachingPlan.id);
+  const books = rootBooks(await deps.listPlanChapters(schedule.teachingPlan.id));
   const chapterIds = planChapterIds(books);
   if (chapterIds.size === 0) throw new DomainError(422, NO_PLAN_CHAPTERS);
 

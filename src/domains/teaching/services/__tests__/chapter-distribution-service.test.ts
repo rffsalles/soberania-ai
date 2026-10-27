@@ -15,6 +15,22 @@ const books: PlanChapterBook[] = [
   },
 ];
 
+const ch = (id: string, order: number, title: string, startPage: number, endPage: number, parentId: string | null, depth: number, number: string) => ({
+  id, order, title, startPage, endPage, parentId, depth, number,
+});
+const book: PlanChapterBook = {
+  materialId: 'm1', title: 'Matemática Básica', author: 'Silva', kind: 'BASIC',
+  chapters: [
+    ch('u1', 1, 'Unidade 1', 15, 42, null, 0, '1'),
+    ch('u2', 2, 'Unidade 2', 43, 66, null, 0, '2'),
+    ch('s21', 3, 'Produtos notáveis', 43, 47, 'u2', 1, '2.1'),
+    ch('s22', 4, 'Frações', 48, 66, 'u2', 1, '2.2'),
+    ch('s221', 5, 'Operações com frações', 51, 57, 's22', 2, '2.2.1'),
+    ch('s222', 6, 'Frações equivalentes', 58, 66, 's22', 2, '2.2.2'),
+    ch('u3', 7, 'Unidade 3', 67, 94, null, 0, '3'),
+  ],
+};
+
 function schedule(statuses: ('DRAFT' | 'PUBLISHED')[] = ['DRAFT', 'PUBLISHED', 'DRAFT'], teacherId = 't1') {
   return {
     id: 'sch1',
@@ -52,6 +68,20 @@ const validText = JSON.stringify({
 });
 
 describe('chapter-distribution-service', () => {
+  it('prompt lista só as raízes', async () => {
+    const { deps, streamChat } = makeDeps({ books: [book], text: JSON.stringify({ lessons: [1, 2, 3].map((n) => ({ classNumber: n, topicTitle: 'T', chapterIds: ['u2'] })) }) });
+    await distributeChapters('sch1', teacher, deps);
+    const user = streamChat.mock.calls[0][0][1].content as string;
+    expect(user).toContain('id=u2 · Cap. 2: Unidade 2 (p. 43 a 66)');
+    expect(user).not.toContain('id=s21');
+  });
+
+  it('resposta com id de seção é inválida (503) e nada é gravado', async () => {
+    const { deps, apply } = makeDeps({ books: [book], text: JSON.stringify({ lessons: [1, 2, 3].map((n) => ({ classNumber: n, topicTitle: 'T', chapterIds: ['s22'] })) }) });
+    await expect(distributeChapters('sch1', teacher, deps)).rejects.toMatchObject({ status: 503 });
+    expect(apply).not.toHaveBeenCalled();
+  });
+
   it('resposta válida grava só aulas DRAFT e conta as publicadas puladas', async () => {
     const { deps, apply, streamChat } = makeDeps({ text: validText });
     expect(await distributeChapters('sch1', teacher, deps)).toEqual({ updated: 2, skippedPublished: 1 });
