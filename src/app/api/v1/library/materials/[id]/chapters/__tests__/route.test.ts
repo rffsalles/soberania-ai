@@ -58,6 +58,61 @@ describe('rotas de capítulos do material', () => {
     expect(await res.json()).toEqual({ success: true, source: 'MANUAL', chapters: [{ id: 'c1' }], lostLessonLinks: 2 });
   });
 
+  it('payload recursivo chega ao service com filhos', async () => {
+    mocks.replaceManualChapters.mockResolvedValue({ source: 'MANUAL', chapters: [], lostLessonLinks: 0 });
+    const res = await PUT(put({ chapters: [{ title: 'U1', startPage: 2, children: [{ title: 'Frações', startPage: 3 }] }] }), props);
+    expect(res.status).toBe(200);
+    expect(mocks.replaceManualChapters).toHaveBeenCalledWith(
+      'm1',
+      [{ title: 'U1', startPage: 2, children: [{ title: 'Frações', startPage: 3, children: [] }] }],
+      { user: teacher, force: false },
+    );
+  });
+
+  it('payload plano antigo vira nós sem filhos', async () => {
+    mocks.replaceManualChapters.mockResolvedValue({ source: 'MANUAL', chapters: [], lostLessonLinks: 0 });
+    const res = await PUT(put({ chapters: [{ title: 'A', startPage: 1 }, { title: 'B', startPage: 5 }] }), props);
+    expect(res.status).toBe(200);
+    expect(mocks.replaceManualChapters).toHaveBeenCalledWith(
+      'm1',
+      [{ title: 'A', startPage: 1, children: [] }, { title: 'B', startPage: 5, children: [] }],
+      { user: teacher, force: false },
+    );
+  });
+
+  it('201 raízes passam', async () => {
+    mocks.replaceManualChapters.mockResolvedValue({ source: 'MANUAL', chapters: [], lostLessonLinks: 0 });
+    const chapters = Array.from({ length: 201 }, (_, i) => ({ title: `Cap ${i + 1}`, startPage: i + 1 }));
+    const res = await PUT(put({ chapters }), props);
+    expect(res.status).toBe(200);
+    expect(mocks.replaceManualChapters).toHaveBeenCalledTimes(1);
+  });
+
+  it('501 nós dá 400 sem chamar o service', async () => {
+    const children = Array.from({ length: 500 }, (_, i) => ({ title: `F ${i}`, startPage: 2 }));
+    const res = await PUT(put({ chapters: [{ title: 'Raiz', startPage: 1, children }] }), props);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'Capítulos inválidos: informe título e página inicial de cada capítulo.',
+    });
+    expect(mocks.replaceManualChapters).not.toHaveBeenCalled();
+  });
+
+  it('8 níveis (depth 7) dá 400 e 7 níveis passa', async () => {
+    const nest = (levels: number): { title: string; startPage: number; children: unknown[] } => ({
+      title: `N${levels}`,
+      startPage: 1,
+      children: levels > 1 ? [nest(levels - 1)] : [],
+    });
+    const bad = await PUT(put({ chapters: [nest(8)] }), props);
+    expect(bad.status).toBe(400);
+    expect(mocks.replaceManualChapters).not.toHaveBeenCalled();
+    mocks.replaceManualChapters.mockResolvedValue({ source: 'MANUAL', chapters: [], lostLessonLinks: 0 });
+    const ok = await PUT(put({ chapters: [nest(7)] }), props);
+    expect(ok.status).toBe(200);
+  });
+
   it('PUT propaga 400 de páginas decrescentes do service via apiError', async () => {
     const msg = 'As páginas iniciais devem ser crescentes e estar entre 1 e 300.';
     mocks.replaceManualChapters.mockRejectedValue(new DomainError(400, msg));

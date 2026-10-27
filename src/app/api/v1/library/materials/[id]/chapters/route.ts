@@ -29,7 +29,7 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
         { status: 400 },
       );
     }
-    const result = await replaceManualChapters(id, parsed.data.chapters.map((c) => ({ ...c, children: [] })), { user, force });
+    const result = await replaceManualChapters(id, parsed.data.chapters, { user, force });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return apiError(error);
