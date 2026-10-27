@@ -6,10 +6,10 @@ const books: PlanChapterBook[] = [
   {
     materialId: 'm1', title: 'Livro A', author: 'Autor', kind: 'BASIC',
     chapters: [
-      { id: 'ch1', order: 1, title: 'Introdução', startPage: 12, endPage: 24 },
-      { id: 'ch2', order: 2, title: 'Joins', startPage: 25, endPage: null },
-      { id: 'ch3', order: 3, title: 'Índices', startPage: 30, endPage: 40 },
-      { id: 'ch4', order: 4, title: 'Transações', startPage: 41, endPage: 50 },
+      { id: 'ch1', order: 1, title: 'Introdução', startPage: 12, endPage: 24, parentId: null, depth: 0, number: '1' },
+      { id: 'ch2', order: 2, title: 'Joins', startPage: 25, endPage: null, parentId: null, depth: 0, number: '2' },
+      { id: 'ch3', order: 3, title: 'Índices', startPage: 30, endPage: 40, parentId: null, depth: 0, number: '3' },
+      { id: 'ch4', order: 4, title: 'Transações', startPage: 41, endPage: 50, parentId: null, depth: 0, number: '4' },
     ],
   },
 ];

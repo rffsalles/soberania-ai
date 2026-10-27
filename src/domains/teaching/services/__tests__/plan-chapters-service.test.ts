@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
-import { listPlanChapters, planChapterIds, type PlanChapterBook } from '../plan-chapters-service';
+import { listPlanChapters, planChapterIds, normalizeChapterSelection, type PlanChapterBook } from '../plan-chapters-service';
 
 const books: PlanChapterBook[] = [
   {
     materialId: 'm1', title: 'Livro A', author: 'Autor', kind: 'BASIC',
-    chapters: [{ id: 'c1', order: 1, title: 'Intro', startPage: 1, endPage: 10 }, { id: 'c2', order: 2, title: 'Fim', startPage: 11, endPage: null }],
+    chapters: [{ id: 'c1', order: 1, title: 'Intro', startPage: 1, endPage: 10, parentId: null, depth: 0, number: '1' }, { id: 'c2', order: 2, title: 'Fim', startPage: 11, endPage: null, parentId: null, depth: 0, number: '2' }],
   },
-  { materialId: 'm2', title: 'Livro B', author: 'Outro', kind: 'COMPLEMENTARY', chapters: [{ id: 'c3', order: 1, title: 'X', startPage: 1, endPage: 5 }] },
+  { materialId: 'm2', title: 'Livro B', author: 'Outro', kind: 'COMPLEMENTARY', chapters: [{ id: 'c3', order: 1, title: 'X', startPage: 1, endPage: 5, parentId: null, depth: 0, number: '1' }] },
 ];
 
 function deps(owner: { teacherId: string } | null) {
@@ -30,4 +30,24 @@ describe('plan-chapters-service', () => {
   it('planChapterIds reúne os ids de todos os livros', () => {
     expect(planChapterIds(books)).toEqual(new Set(['c1', 'c2', 'c3']));
   });
+
+  const tree: PlanChapterBook[] = [{ materialId: 'm1', title: 'Livro', author: 'A', kind: 'BASIC', chapters: [
+    { id: 'u1', order: 1, title: 'U1', startPage: 1, endPage: 9, parentId: null, depth: 0, number: '1' },
+    { id: 'f', order: 2, title: 'Frações', startPage: 2, endPage: 5, parentId: 'u1', depth: 1, number: '1.1' },
+    { id: 'f1', order: 3, title: 'Soma', startPage: 3, endPage: 5, parentId: 'f', depth: 2, number: '1.1.1' },
+    { id: 'u2', order: 4, title: 'U2', startPage: 10, endPage: 20, parentId: null, depth: 0, number: '2' },
+  ] }];
+  it('ancestral e descendente viram só o ancestral', () => {
+    expect(normalizeChapterSelection(['f1', 'u1', 'u2'], tree)).toEqual(['u1', 'u2']);
+    expect(normalizeChapterSelection(['f', 'f1', 'f'], tree)).toEqual(['f']);
+  });
+  it('normalização é idempotente', () => {
+    const once = normalizeChapterSelection(['f1', 'f', 'u2'], tree);
+    expect(normalizeChapterSelection(once, tree)).toEqual(once);
+  });
+  it('mantém ids desconhecidos', () => {
+    expect(normalizeChapterSelection(['x', 'u1'], tree)).toEqual(['x', 'u1']);
+  });
+  it('planChapterIds inclui nós de qualquer profundidade', () =>
+    expect(planChapterIds(tree)).toEqual(new Set(['u1', 'f', 'f1', 'u2'])));
 });

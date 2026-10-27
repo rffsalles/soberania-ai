@@ -8,7 +8,7 @@ const teacher = { id: 't1', role: Role.TEACHER };
 const books: PlanChapterBook[] = [
   {
     materialId: 'm1', title: 'Livro A', author: 'Autor', kind: 'BASIC',
-    chapters: [1, 2, 3, 4].map((n) => ({ id: `ch${n}`, order: n, title: `Cap ${n}`, startPage: n * 10, endPage: n * 10 + 9 })),
+    chapters: [1, 2, 3, 4].map((n) => ({ id: `ch${n}`, order: n, title: `Cap ${n}`, startPage: n * 10, endPage: n * 10 + 9, parentId: null, depth: 0, number: String(n) })),
   },
 ];
 
