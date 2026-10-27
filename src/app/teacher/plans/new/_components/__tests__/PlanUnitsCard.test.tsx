@@ -9,8 +9,8 @@ vi.mock('@/components/teaching/use-plan-chapters', () => ({
       {
         materialId: 'm1', title: 'Livro', author: 'Autor', kind: 'BASIC',
         chapters: [
-          { id: 'ch1', order: 1, title: 'A', startPage: 1, endPage: 10 },
-          { id: 'ch2', order: 2, title: 'B', startPage: 11, endPage: 20 },
+          { id: 'ch1', order: 1, number: '1', parentId: null, depth: 0, title: 'A', startPage: 1, endPage: 10 },
+          { id: 'ch2', order: 2, number: '2', parentId: null, depth: 0, title: 'B', startPage: 11, endPage: 20 },
         ],
       },
     ],

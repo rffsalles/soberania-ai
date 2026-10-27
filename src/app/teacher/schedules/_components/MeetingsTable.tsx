@@ -32,7 +32,7 @@ export function MeetingsTable({ schedule, lessons }: Props) {
     [schedule]
   );
   const created = new Set(lessons.map((l) => l.classNumber));
-  const chaptersByClass = new Map(lessons.map((l) => [l.classNumber, formatChapterShortList(l.chapters.map((c) => c.chapter.order))]));
+  const chaptersByClass = new Map(lessons.map((l) => [l.classNumber, formatChapterShortList(l.chapters.map((c) => c.chapter.number))]));
 
   return (
     <table className="w-full text-sm">

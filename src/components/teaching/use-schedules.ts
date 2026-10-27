@@ -9,7 +9,7 @@ export type ScheduleLesson = {
   classNumber: number;
   topicTitle: string;
   status: 'DRAFT' | 'PUBLISHED';
-  chapters: { chapterId: string; chapter: { order: number } }[];
+  chapters: { chapterId: string; chapter: { order: number; number: string } }[];
 };
 
 export type DistributionResult = { updated: number; skippedPublished: number };

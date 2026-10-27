@@ -115,7 +115,7 @@ describe('SchedulesPage seletor de plano', () => {
   });
 });
 
-const BOOKS = [{ materialId: 'm1', title: 'Livro', author: 'A', kind: 'BASIC', chapters: [{ id: 'ch3', order: 3, title: 'C3', startPage: 1, endPage: 2 }] }];
+const BOOKS = [{ materialId: 'm1', title: 'Livro', author: 'A', kind: 'BASIC', chapters: [{ id: 'ch3', order: 3, number: '3', parentId: null, depth: 0, title: 'C3', startPage: 1, endPage: 2 }] }];
 const DISTRIBUTE = /Distribuir capítulos com IA/;
 
 function openSchedule() {
@@ -142,7 +142,7 @@ describe('SchedulesPage distribuição de capítulos', () => {
 
   it('com aulas já mapeadas pede confirmação; cancelar não chama a API', () => {
     lessonsState.books = BOOKS;
-    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3 } }] }];
+    lessonsState.lessons = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3, number: '3' } }] }];
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     openSchedule();
     fireEvent.click(screen.getByRole('button', { name: DISTRIBUTE }));
@@ -198,7 +198,7 @@ describe('SchedulesPage distribuição de capítulos', () => {
 });
 
 const GENERATE = /Gerar unidades do plano/;
-const WITH_CHAPTERS = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3 } }] }];
+const WITH_CHAPTERS = [{ id: 'l1', classNumber: 1, topicTitle: 'Aula 1', status: 'DRAFT', chapters: [{ chapterId: 'ch3', chapter: { order: 3, number: '3' } }] }];
 
 describe('SchedulesPage unidades do plano', () => {
   it('gerar unidades fica desabilitado sem aulas com capítulos', () => {

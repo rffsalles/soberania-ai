@@ -19,8 +19,8 @@ interface PlanUnitsCardProps {
 
 export function PlanUnitsCard({ planId, units, onChange }: PlanUnitsCardProps) {
   const { books } = usePlanChapters(planId);
-  const orderById = React.useMemo(
-    () => new Map(books.flatMap((b) => b.chapters.map((c) => [c.id, c.order] as const))),
+  const numberById = React.useMemo(
+    () => new Map(books.flatMap((b) => b.chapters.map((c) => [c.id, c.number] as const))),
     [books],
   );
 
@@ -47,9 +47,9 @@ export function PlanUnitsCard({ planId, units, onChange }: PlanUnitsCardProps) {
           </p>
         ) : (
           units.map((unit, index) => {
-            const orders = (unit.chapterIds ?? []).flatMap((id) => {
-              const order = orderById.get(id);
-              return order === undefined ? [] : [order];
+            const numbers = (unit.chapterIds ?? []).flatMap((id) => {
+              const number = numberById.get(id);
+              return number === undefined ? [] : [number];
             });
             return (
               <div
@@ -67,7 +67,7 @@ export function PlanUnitsCard({ planId, units, onChange }: PlanUnitsCardProps) {
                     onChange={(e) => update(index, { title: e.target.value })}
                   />
                   <Badge variant="outline" className="text-[11px] shrink-0 text-brand-teal border-brand-teal/30">
-                    {formatChapterShortList(orders)}
+                    {formatChapterShortList(numbers)}
                   </Badge>
                   <Button
                     type="button"

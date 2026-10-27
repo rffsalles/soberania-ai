@@ -19,7 +19,7 @@ export type LessonItem = {
   mediaType: LessonMediaType | null;
   mediaUrl: string | null;
   status: LessonStatusValue;
-  chapters: { chapterId: string; chapter: { order: number } }[];
+  chapters: { chapterId: string; chapter: { order: number; number: string } }[];
   courseSchedule: { teachingPlanId: string };
 };
 

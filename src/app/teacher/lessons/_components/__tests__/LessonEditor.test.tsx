@@ -44,8 +44,8 @@ vi.mock('@/components/teaching/use-plan-chapters', () => ({
         author: 'Autor',
         kind: 'BASIC',
         chapters: [
-          { id: 'ch1', order: 1, title: 'Intro', startPage: 1, endPage: 10 },
-          { id: 'ch2', order: 2, title: 'Modelo', startPage: 11, endPage: 20 },
+          { id: 'ch1', order: 1, number: '1', parentId: null, depth: 0, title: 'Intro', startPage: 1, endPage: 10 },
+          { id: 'ch2', order: 2, number: '2', parentId: null, depth: 0, title: 'Modelo', startPage: 11, endPage: 20 },
         ],
       },
     ],
@@ -111,10 +111,10 @@ describe('LessonEditor', () => {
     expect(button.disabled).toBe(true);
     expect(screen.getByText('Selecione e salve ao menos um capítulo para gerar a aula.')).toBeTruthy();
 
-    rerender(<LessonEditor lesson={makeLesson({ chapters: [{ chapterId: 'ch1', chapter: { order: 1 } }] })} onSaved={() => {}} />);
+    rerender(<LessonEditor lesson={makeLesson({ chapters: [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }] })} onSaved={() => {}} />);
     expect((screen.getByRole('button', { name: 'Gerar aula com IA' }) as HTMLButtonElement).disabled).toBe(false);
 
-    fireEvent.click(screen.getByLabelText('Cap. 2: Modelo'));
+    fireEvent.click(screen.getByLabelText('2 Modelo'));
     expect((screen.getByRole('button', { name: 'Gerar aula com IA' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Salve os capítulos selecionados antes de gerar.')).toBeTruthy();
   });
@@ -125,7 +125,7 @@ describe('LessonEditor', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(
       <LessonEditor
-        lesson={makeLesson({ dailyObjective: 'Antigo', chapters: [{ chapterId: 'ch1', chapter: { order: 1 } }] })}
+        lesson={makeLesson({ dailyObjective: 'Antigo', chapters: [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }] })}
         onSaved={() => {}}
       />,
     );
@@ -165,7 +165,7 @@ describe('LessonEditor', () => {
   });
 
   it('após gerar (formulário não salvo) bloqueia "Publicar"; após salvar, publica o que foi salvo', async () => {
-    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1 } }];
+    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }];
     const initial = makeLesson({ topicTitle: 'Modelagem', chapters: SAVED });
     const fetchMock = routeFetch({
       [`POST ${BASE}/generate`]: { success: true, data: GENERATED },
@@ -226,7 +226,7 @@ describe('LessonEditor', () => {
     vi.stubGlobal('fetch', fetchMock);
     const onSaved = vi.fn();
     render(<LessonEditor lesson={makeLesson({ topicTitle: 'Modelagem' })} onSaved={onSaved} />);
-    fireEvent.click(screen.getByLabelText('Cap. 2: Modelo'));
+    fireEvent.click(screen.getByLabelText('2 Modelo'));
     fireEvent.click(screen.getByRole('button', { name: 'Salvar aula' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const [, init] = fetchMock.mock.calls[0];
@@ -239,7 +239,7 @@ describe('LessonEditor', () => {
       { timeSeconds: 0, timeRange: '00:00-10:00', activity: 'A1', description: 'Desc 1' },
       { timeSeconds: 600, timeRange: '10:00-20:00', activity: 'A2', description: 'Desc 2' },
     ];
-    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1 } }];
+    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }];
 
     function startRefine(label: string) {
       fireEvent.click(screen.getByRole('button', { name: `Refinar ${label}` }));
