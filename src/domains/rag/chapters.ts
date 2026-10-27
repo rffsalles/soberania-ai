@@ -78,6 +78,57 @@ export function outlineToDrafts(entries: OutlineEntry[]): ChapterDraft[] | null 
   return best.length >= MIN_NESTED_OUTLINE_CHAPTERS ? best : null;
 }
 
+type RawOutlineNode = { title: string; page: number | null; children: RawOutlineNode[] };
+
+/** Promove títulos genéricos e resolve páginas ausentes (herda a do primeiro descendente; sem página nem filhos, some). */
+function resolveOutlineNodes(nodes: RawOutlineNode[]): ChapterNode[] {
+  const result: ChapterNode[] = [];
+  for (const raw of nodes) {
+    const children = resolveOutlineNodes(raw.children);
+    if (isGenericOutlineTitle(raw.title)) {
+      result.push(...children);
+      continue;
+    }
+    const startPage = raw.page ?? children[0]?.startPage;
+    if (startPage === undefined) continue;
+    result.push({ title: raw.title, startPage, children });
+  }
+  return result;
+}
+
+/** Descarta (com a subárvore) os nós que violariam os invariantes de isValidChapterTree. Páginas iguais são mantidas. */
+function enforceOutlineOrder(nodes: ChapterNode[], parentPage: number, parentEnd: number, state: { maxSoFar: number }): ChapterNode[] {
+  const kept: ChapterNode[] = [];
+  let previous = parentPage;
+  nodes.forEach((node, i) => {
+    const { startPage } = node;
+    if (startPage < previous || startPage < state.maxSoFar || startPage > parentEnd) return;
+    state.maxSoFar = startPage;
+    previous = startPage;
+    const next = nodes.slice(i + 1).find((sibling) => sibling.startPage >= startPage);
+    const childrenEnd = next ? Math.min(parentEnd, next.startPage - 1) : parentEnd;
+    kept.push({ ...node, children: enforceOutlineOrder(node.children, startPage, childrenEnd, state) });
+  });
+  return kept;
+}
+
+/**
+ * Converte o outline do PDF (pré-ordem com depth) em árvore de capítulos. Nunca devolve null: lista vazia quando
+ * nada sobra. A validade é decidida por isValidChapterTree. Raiz única com 3+ filhos é descartada (os filhos viram raízes).
+ */
+export function outlineToTree(entries: OutlineEntry[]): ChapterNode[] {
+  const roots: RawOutlineNode[] = [];
+  const stack: { depth: number; node: RawOutlineNode }[] = [];
+  for (const entry of entries) {
+    const node: RawOutlineNode = { title: entry.title.trim(), page: entry.pageNumber, children: [] };
+    while (stack.length > 0 && stack[stack.length - 1].depth >= entry.depth) stack.pop();
+    (stack.length > 0 ? stack[stack.length - 1].node.children : roots).push(node);
+    stack.push({ depth: entry.depth, node });
+  }
+  const tree = enforceOutlineOrder(resolveOutlineNodes(roots), 0, Infinity, { maxSoFar: 0 });
+  return tree.length === 1 && tree[0].children.length >= MIN_NESTED_OUTLINE_CHAPTERS ? tree[0].children : tree;
+}
+
 const HEADING_SCAN_LINES = 3;
 const HEADING_PATTERN = /^(Unidade|Cap[íi]tulo|Cap\.|Parte|M[óo]dulo)\s+(\d+)\b(.*)$/i;
 const TOC_PAGE_MIN_LINES = 3;

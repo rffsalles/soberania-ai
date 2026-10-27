@@ -6,7 +6,7 @@ import {
   isGenericOutlineTitle,
   isTocPage,
   selectTocPages,
-  outlineToDrafts,
+  outlineToTree,
   draftsToTree,
   numberChapters,
   normalizeRelinks,
@@ -22,38 +22,39 @@ const node = (title: string, startPage: number, ...children: ChapterNode[]): Cha
 const chain = (levels: number): ChapterNode =>
   Array.from({ length: levels - 1 }).reduce<ChapterNode>((child, _, i) => node(`L${levels - 2 - i}`, 1, child), node(`L${levels - 1}`, 1));
 
-describe('outlineToDrafts', () => {
-  it('outline com 2 entradas de 1º nível com página vira rascunho', () =>
-    expect(
-      outlineToDrafts([
-        { title: 'Cap. 1', pageNumber: 12, depth: 0 },
-        { title: 'Cap. 2', pageNumber: 25, depth: 0 },
-        { title: 'Sem destino', pageNumber: null, depth: 0 },
-      ]),
-    ).toEqual([
-      { title: 'Cap. 1', startPage: 12 },
-      { title: 'Cap. 2', startPage: 25 },
+describe('outlineToTree', () => {
+  const e = (title: string, pageNumber: number | null, depth: number) => ({ title, pageNumber, depth });
+  const n = (title: string, startPage: number, children: ChapterNode[] = []): ChapterNode => ({ title, startPage, children });
+  it('3 níveis em pré-ordem viram árvore', () =>
+    expect(outlineToTree([e('Cap 1', 5, 0), e('1.1', 6, 1), e('1.1.1', 7, 2), e('1.2', 10, 1), e('Cap 2', 40, 0)])).toEqual([
+      n('Cap 1', 5, [n('1.1', 6, [n('1.1.1', 7)]), n('1.2', 10)]),
+      n('Cap 2', 40),
     ]));
-  it('outline com 1 entrada válida devolve null', () =>
-    expect(
-      outlineToDrafts([
-        { title: 'Cap. 1', pageNumber: 12, depth: 0 },
-        { title: 'Sem destino', pageNumber: null, depth: 0 },
-      ]),
-    ).toBeNull());
-  it('descarta título vazio e páginas não estritamente crescentes', () =>
-    expect(
-      outlineToDrafts([
-        { title: 'A', pageNumber: 5, depth: 0 },
-        { title: '  ', pageNumber: 8, depth: 0 },
-        { title: 'Volta', pageNumber: 3, depth: 0 },
-        { title: 'Repete', pageNumber: 5, depth: 0 },
-        { title: 'B', pageNumber: 9, depth: 0 },
-      ]),
-    ).toEqual([
-      { title: 'A', startPage: 5 },
-      { title: 'B', startPage: 9 },
+  it('nó sem página herda a do primeiro descendente; subárvore sem página some', () =>
+    expect(outlineToTree([e('Parte I', null, 0), e('Cap 1', 5, 1), e('Cap 2', 9, 1), e('Parte II', 20, 0), e('Vazio', null, 0), e('Sem página', null, 1)])).toEqual([
+      n('Parte I', 5, [n('Cap 1', 5), n('Cap 2', 9)]),
+      n('Parte II', 20),
     ]));
+  it('título genérico sai e os filhos sobem para o nível dele', () =>
+    expect(outlineToTree([e('Capa.pdf', 1, 0), e('C1', 3, 1), e('C2', 20, 1), e('Página em branco', 30, 0), e('C3', 40, 0), e('S3.1', 41, 1)])).toEqual([
+      n('C1', 3), n('C2', 20), n('C3', 40, [n('S3.1', 41)]),
+    ]));
+  it('raiz única com 3+ filhos: os filhos viram raízes, com seus netos', () =>
+    expect(outlineToTree([e('Livro', 1, 0), e('C1', 3, 1), e('C2', 20, 1), e('C3', 40, 1), e('S', 41, 2)])).toEqual([
+      n('C1', 3), n('C2', 20), n('C3', 40, [n('S', 41)]),
+    ]));
+  it('raiz única com 2 filhos fica como está e é inválida com minRoots 2', () => {
+    const tree = outlineToTree([e('Livro', 1, 0), e('C1', 3, 1), e('C2', 20, 1)]);
+    expect(tree).toEqual([n('Livro', 1, [n('C1', 3), n('C2', 20)])]);
+    expect(isValidChapterTree(tree, 300, 2)).toBe(false);
+  });
+  it('irmão decrescente sai com a subárvore; filho antes do pai sai; irmão na mesma página fica', () =>
+    expect(outlineToTree([e('A', 5, 0), e('A.1', 4, 1), e('A.2', 6, 1), e('A.3', 6, 1), e('Volta', 3, 0), e('V.1', 4, 1), e('B', 9, 0)])).toEqual([
+      n('A', 5, [n('A.2', 6), n('A.3', 6)]),
+      n('B', 9),
+    ]));
+  it('filho que começa depois do próximo irmão do pai sai', () =>
+    expect(outlineToTree([e('A', 5, 0), e('A.1', 20, 1), e('B', 15, 0)])).toEqual([n('A', 5), n('B', 15)]));
 });
 
 describe('isGenericOutlineTitle', () => {
@@ -64,54 +65,6 @@ describe('isGenericOutlineTitle', () => {
   it.each(['Unidade 1 – Conjuntos', 'Capítulo 2', 'Página inicial do livro'])('"%s" não é genérico', (t) =>
     expect(isGenericOutlineTitle(t)).toBe(false),
   );
-});
-
-describe('outlineToDrafts (níveis e qualidade)', () => {
-  it('outline lixo do PDF de matemática devolve null', () =>
-    expect(
-      outlineToDrafts([
-        { title: 'Capa_Matematica_Basica_Vol1.pdf', pageNumber: null, depth: 0 },
-        { title: 'Página em branco', pageNumber: 2, depth: 0 },
-        { title: 'Capa_Matematica_Basica_Vol1.pdf', pageNumber: null, depth: 0 },
-        { title: 'Página em branco', pageNumber: 173, depth: 0 },
-        { title: 'Página 1', pageNumber: 1, depth: 1 },
-        { title: 'Página 1', pageNumber: 174, depth: 1 },
-      ]),
-    ).toBeNull());
-  it('raiz com o nome do livro e 4 capítulos no nível 1 usa o nível 1', () =>
-    expect(
-      outlineToDrafts([
-        { title: 'Livro', pageNumber: 1, depth: 0 },
-        { title: 'C1', pageNumber: 3, depth: 1 },
-        { title: 'C2', pageNumber: 20, depth: 1 },
-        { title: 'C3', pageNumber: 40, depth: 1 },
-        { title: 'C4', pageNumber: 60, depth: 1 },
-      ]),
-    ).toEqual([
-      { title: 'C1', startPage: 3 },
-      { title: 'C2', startPage: 20 },
-      { title: 'C3', startPage: 40 },
-      { title: 'C4', startPage: 60 },
-    ]));
-  it('nível 1 com menos de 3 válidos é rejeitado', () =>
-    expect(
-      outlineToDrafts([
-        { title: 'Livro', pageNumber: 1, depth: 0 },
-        { title: 'C1', pageNumber: 3, depth: 1 },
-        { title: 'C2', pageNumber: 20, depth: 1 },
-      ]),
-    ).toBeNull());
-  it('descarta títulos genéricos', () =>
-    expect(
-      outlineToDrafts([
-        { title: 'Página em branco', pageNumber: 2, depth: 0 },
-        { title: 'Cap. 1', pageNumber: 5, depth: 0 },
-        { title: 'Cap. 2', pageNumber: 9, depth: 0 },
-      ]),
-    ).toEqual([
-      { title: 'Cap. 1', startPage: 5 },
-      { title: 'Cap. 2', startPage: 9 },
-    ]));
 });
 
 const tree3: ChapterNode[] = [
@@ -271,47 +224,6 @@ describe('normalizeRelinks', () => {
       { order: 1, lessonPlanId: 'l1' },
       { order: 2, lessonPlanId: 'l2' },
       { order: 4, lessonPlanId: 'l1' },
-    ]));
-});
-
-describe('outlineToDrafts (segundo nível sem promover seções)', () => {
-  const e = (title: string, pageNumber: number | null, depth: number) => ({ title, pageNumber, depth });
-  it('2 raízes válidas com seções ficam no nível 0', () =>
-    expect(
-      outlineToDrafts([
-        e('Capítulo 1', 5, 0),
-        ...[6, 10, 14, 18, 22].map((p, i) => e(`Seção 1.${i + 1}`, p, 1)),
-        e('Capítulo 2', 40, 0),
-        ...[41, 45, 50, 55].map((p, i) => e(`Seção 2.${i + 1}`, p, 1)),
-      ]),
-    ).toEqual([
-      { title: 'Capítulo 1', startPage: 5 },
-      { title: 'Capítulo 2', startPage: 40 },
-    ]));
-  it('raiz única genérica (.pdf) com 4 capítulos filhos usa os filhos', () =>
-    expect(
-      outlineToDrafts([
-        e('livro.pdf', 1, 0),
-        e('C1', 3, 1),
-        e('C2', 20, 1),
-        e('C3', 40, 1),
-        e('C4', 60, 1),
-      ]),
-    ).toHaveLength(4));
-  it('2 raízes genéricas: usa só os filhos da raiz com mais filhos válidos', () =>
-    expect(
-      outlineToDrafts([
-        e('a.pdf', 1, 0),
-        e('A1', 3, 1),
-        e('A2', 20, 1),
-        e('A3', 40, 1),
-        e('b.pdf', 50, 0),
-        e('B1', 55, 1),
-      ]),
-    ).toEqual([
-      { title: 'A1', startPage: 3 },
-      { title: 'A2', startPage: 20 },
-      { title: 'A3', startPage: 40 },
     ]));
 });
 
