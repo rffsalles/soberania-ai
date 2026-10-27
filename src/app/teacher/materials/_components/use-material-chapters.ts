@@ -1,5 +1,6 @@
 import { requestJson } from '@/components/assessments/use-assessments';
 import { API_ROUTES } from '@/lib/constants/routes';
+import type { ChapterNodeInput } from '@/components/teaching/chapter-tree-edit';
 
 export type ChapterSource = 'OUTLINE' | 'AI' | 'MANUAL' | 'HEADINGS';
 
@@ -9,6 +10,9 @@ export interface ChapterDTO {
   title: string;
   startPage: number;
   endPage: number | null;
+  parentId: string | null;
+  depth: number;
+  number: string;
   source: ChapterSource;
 }
 
@@ -45,7 +49,7 @@ const withForce = (url: string, force?: boolean) => (force ? `${url}?force=1` : 
 
 export function saveMaterialChapters(
   id: string,
-  chapters: { title: string; startPage: number }[],
+  chapters: ChapterNodeInput[],
   force?: boolean,
 ): Promise<ChapterSaveResult> {
   return requestJson<ChapterSaveResult>(withForce(chaptersUrl(id), force), 'PUT', { chapters });

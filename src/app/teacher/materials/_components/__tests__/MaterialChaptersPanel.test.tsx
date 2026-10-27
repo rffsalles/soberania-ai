@@ -26,11 +26,22 @@ function renderPanel() {
   return render(<MaterialChaptersPanel material={material} open onOpenChange={() => {}} />);
 }
 
-const chapter = { id: 'c1', order: 1, title: 'Intro', startPage: 1, endPage: 10, source: 'OUTLINE' };
+const chapter = {
+  id: 'c1',
+  order: 1,
+  number: '1',
+  title: 'Intro',
+  startPage: 1,
+  endPage: 10,
+  parentId: null,
+  depth: 0,
+  source: 'OUTLINE',
+};
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('MaterialChaptersPanel', () => {
@@ -145,6 +156,73 @@ describe('MaterialChaptersPanel', () => {
         ),
       );
       await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    });
+  });
+
+  describe('editor de árvore', () => {
+    const TREE = [
+      { id: 'u1', order: 1, number: '1', title: 'Unidade 1', startPage: 15, endPage: 42, parentId: null, depth: 0, source: 'AI' },
+      { id: 'u2', order: 2, number: '2', title: 'Unidade 2', startPage: 43, endPage: 66, parentId: null, depth: 0, source: 'AI' },
+      { id: 's21', order: 3, number: '2.1', title: 'Produtos notáveis', startPage: 43, endPage: 47, parentId: 'u2', depth: 1, source: 'AI' },
+      { id: 's22', order: 4, number: '2.2', title: 'Frações', startPage: 48, endPage: 66, parentId: 'u2', depth: 1, source: 'AI' },
+      { id: 's221', order: 5, number: '2.2.1', title: 'Operações com frações', startPage: 51, endPage: 66, parentId: 's22', depth: 2, source: 'AI' },
+      { id: 'u3', order: 6, number: '3', title: 'Unidade 3', startPage: 67, endPage: 174, parentId: null, depth: 0, source: 'AI' },
+    ];
+    const renderTree = () =>
+      render(<MaterialChaptersPanel material={{ ...material, totalPages: 174 }} open onOpenChange={() => {}} />);
+
+    it('mostra número, página final derivada e recua/desrecua', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      renderTree();
+      expect((await screen.findByLabelText('Página final do capítulo 2.2')).textContent).toBe('66');
+      expect((screen.getByRole('button', { name: 'Recuar 2.1' }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Recuar 2.2' }));
+      expect(screen.getByLabelText('Título do capítulo 2.1.1')).toBeTruthy();
+      expect(screen.getByLabelText('Título do capítulo 2.1.1.1')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Desrecuar 2.1.1' }));
+      expect((screen.getByLabelText('Título do capítulo 2.2') as HTMLInputElement).value).toBe('Frações');
+    });
+
+    it('remover subárvore pede confirmação; cancelar mantém tudo', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+      renderTree();
+      await screen.findByLabelText('Título do capítulo 2');
+      fireEvent.click(screen.getByRole('button', { name: 'Remover capítulo 2' }));
+      expect(confirm).toHaveBeenCalledWith('Remover "Unidade 2" e 3 subcapítulo(s)?');
+      expect(screen.getByLabelText('Título do capítulo 2.2.1')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Remover capítulo 2' }));
+      expect(screen.queryByLabelText('Título do capítulo 2.1')).toBeNull();
+      expect((screen.getByLabelText('Título do capítulo 2') as HTMLInputElement).value).toBe('Unidade 3');
+    });
+
+    it('validação por nó bloqueia o salvar', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      renderTree();
+      fireEvent.change(await screen.findByLabelText('Página inicial do capítulo 2.1'), { target: { value: '40' } });
+      expect(screen.getByText('Começa antes do capítulo pai.')).toBeTruthy();
+      expect((screen.getByRole('button', { name: 'Salvar capítulos' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('adiciona subcapítulo e salva a árvore inteira no PUT', async () => {
+      stubFetch({
+        [`GET ${BASE}`]: { success: true, chapters: TREE },
+        [`PUT ${BASE}`]: { success: true, source: 'MANUAL', chapters: TREE, lostLessonLinks: 0 },
+      });
+      renderTree();
+      fireEvent.click(await screen.findByRole('button', { name: 'Adicionar subcapítulo em 2.1' }));
+      fireEvent.change(screen.getByLabelText('Título do capítulo 2.1.1'), { target: { value: 'Quadrado da soma' } });
+      fireEvent.change(screen.getByLabelText('Página inicial do capítulo 2.1.1'), { target: { value: '44' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar capítulos' }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(BASE, expect.objectContaining({ method: 'PUT' })));
+      const body = JSON.parse((fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT')![1]!.body) as string);
+      expect(body.chapters[1]).toEqual({
+        title: 'Unidade 2', startPage: 43,
+        children: [
+          { title: 'Produtos notáveis', startPage: 43, children: [{ title: 'Quadrado da soma', startPage: 44 }] },
+          { title: 'Frações', startPage: 48, children: [{ title: 'Operações com frações', startPage: 51 }] },
+        ],
+      });
     });
   });
 });

@@ -1,13 +1,33 @@
 'use client';
 
 import * as React from 'react';
-import { Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, CornerDownRight, IndentDecrease, IndentIncrease, Plus, Trash2 } from 'lucide-react';
 import { AdaptiveModal } from '@/components/adaptive/adaptive-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RequestError } from '@/components/assessments/use-assessments';
 import { useCurrentUser } from '@/components/layout/use-current-user';
+import {
+  addChild,
+  addSibling,
+  canIndent,
+  canOutdent,
+  countDescendants,
+  endPagesOf,
+  fromChapterDtos,
+  indentNode,
+  moveNode,
+  newChapterKey,
+  numberEditable,
+  outdentNode,
+  removeNode,
+  toChapterPayload,
+  validateEditable,
+  type EditableChapter,
+  type TreeValidation,
+} from '@/components/teaching/chapter-tree-edit';
+import { MAX_CHAPTER_DEPTH } from '@/domains/rag/constants';
 import {
   CHAPTER_SOURCE_LABEL,
   extractMaterialChapters,
@@ -20,19 +40,180 @@ import {
 
 export { CHAPTER_SOURCE_LABEL };
 
-interface Row {
-  title: string;
-  startPage: string;
-}
-
 interface MaterialChaptersPanelProps {
   material: { id: string; title: string; totalPages: number; mimeType?: string | null };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-function toRows(chapters: ChapterDTO[]): Row[] {
-  return chapters.map((c) => ({ title: c.title, startPage: String(c.startPage) }));
+type ChapterPatch = Partial<Pick<EditableChapter, 'title' | 'startPage'>>;
+
+function patchNode(nodes: EditableChapter[], key: string, patch: ChapterPatch): EditableChapter[] {
+  return nodes.map((node) =>
+    node.key === key ? { ...node, ...patch } : { ...node, children: patchNode(node.children, key, patch) },
+  );
+}
+
+interface TreeActions {
+  change: (key: string, patch: ChapterPatch) => void;
+  edit: (fn: (prev: EditableChapter[]) => EditableChapter[]) => void;
+  remove: (node: EditableChapter) => void;
+}
+
+interface ChapterNodeRowProps {
+  node: EditableChapter;
+  depth: number;
+  index: number;
+  siblingCount: number;
+  nodes: EditableChapter[];
+  numbers: Map<string, string>;
+  endPages: Map<string, number | null>;
+  validation: TreeValidation;
+  totalPages: number;
+  actions: TreeActions;
+}
+
+function ChapterNodeRow({
+  node,
+  depth,
+  index,
+  siblingCount,
+  nodes,
+  numbers,
+  endPages,
+  validation,
+  totalPages,
+  actions,
+}: ChapterNodeRowProps) {
+  const number = numbers.get(node.key) ?? '';
+  const message = validation.byKey.get(node.key);
+  const messageId = `capitulo-${node.key}-erro`;
+  const endPage = endPages.get(node.key) ?? null;
+  const blank = (): EditableChapter => ({ key: newChapterKey(), title: '', startPage: node.startPage, children: [] });
+
+  return (
+    <li className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="min-w-10 text-xs font-medium text-text-muted">{number}</span>
+        <Input
+          className="min-w-40 flex-1"
+          aria-label={`Título do capítulo ${number}`}
+          aria-describedby={message ? messageId : undefined}
+          aria-invalid={message ? true : undefined}
+          value={node.title}
+          onChange={(e) => actions.change(node.key, { title: e.target.value })}
+        />
+        <Input
+          aria-label={`Página inicial do capítulo ${number}`}
+          aria-describedby={message ? messageId : undefined}
+          aria-invalid={message ? true : undefined}
+          type="number"
+          min={1}
+          max={totalPages}
+          className="w-24"
+          value={node.startPage}
+          onChange={(e) => actions.change(node.key, { startPage: e.target.value })}
+        />
+        <span aria-label={`Página final do capítulo ${number}`} className="w-12 text-sm text-text-muted">
+          {endPage ?? '—'}
+        </span>
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Adicionar capítulo abaixo de ${number}`}
+            onClick={() => actions.edit((prev) => addSibling(prev, node.key, blank()))}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Adicionar subcapítulo em ${number}`}
+            disabled={depth >= MAX_CHAPTER_DEPTH}
+            onClick={() => actions.edit((prev) => addChild(prev, node.key, blank()))}
+          >
+            <CornerDownRight className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Mover ${number} para cima`}
+            disabled={index === 0}
+            onClick={() => actions.edit((prev) => moveNode(prev, node.key, -1))}
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Mover ${number} para baixo`}
+            disabled={index === siblingCount - 1}
+            onClick={() => actions.edit((prev) => moveNode(prev, node.key, 1))}
+          >
+            <ArrowDown className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Recuar ${number}`}
+            disabled={!canIndent(nodes, node.key)}
+            onClick={() => actions.edit((prev) => indentNode(prev, node.key))}
+          >
+            <IndentIncrease className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Desrecuar ${number}`}
+            disabled={!canOutdent(nodes, node.key)}
+            onClick={() => actions.edit((prev) => outdentNode(prev, node.key))}
+          >
+            <IndentDecrease className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Remover capítulo ${number}`}
+            onClick={() => actions.remove(node)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      {message && (
+        <p id={messageId} className="text-xs text-danger">
+          {message}
+        </p>
+      )}
+      {node.children.length > 0 && (
+        <ul className="space-y-2 border-l border-border pl-4">
+          {node.children.map((child, i) => (
+            <ChapterNodeRow
+              key={child.key}
+              node={child}
+              depth={depth + 1}
+              index={i}
+              siblingCount={node.children.length}
+              nodes={nodes}
+              numbers={numbers}
+              endPages={endPages}
+              validation={validation}
+              totalPages={totalPages}
+              actions={actions}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
 }
 
 interface Conflict {
@@ -41,7 +222,7 @@ interface Conflict {
 }
 
 export function MaterialChaptersPanel({ material, open, onOpenChange }: MaterialChaptersPanelProps) {
-  const [rows, setRows] = React.useState<Row[]>([]);
+  const [nodes, setNodes] = React.useState<EditableChapter[]>([]);
   const [source, setSource] = React.useState<ChapterDTO['source'] | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isBusy, setIsBusy] = React.useState(false);
@@ -60,7 +241,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
     fetchMaterialChapters(material.id)
       .then((chapters) => {
         if (cancelled) return;
-        setRows(toRows(chapters));
+        setNodes(fromChapterDtos(chapters));
         setSource(chapters[0]?.source ?? null);
       })
       .catch((err: unknown) => {
@@ -75,7 +256,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
   }, [open, material.id]);
 
   const applyResult = (result: ChapterSaveResult) => {
-    setRows(toRows(result.chapters));
+    setNodes(fromChapterDtos(result.chapters));
     setSource(result.chapters[0]?.source ?? null);
   };
 
@@ -107,14 +288,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
     }
   };
 
-  const handleSave = () =>
-    run((force) =>
-      saveMaterialChapters(
-        material.id,
-        rows.map((r) => ({ title: r.title.trim(), startPage: Number(r.startPage) })),
-        force,
-      ),
-    );
+  const handleSave = () => run((force) => saveMaterialChapters(material.id, toChapterPayload(nodes), force));
 
   const handleExtract = () =>
     run(
@@ -122,9 +296,24 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
       'Nenhum capítulo encontrado; os capítulos atuais foram mantidos.',
     );
 
-  const updateRow = (index: number, patch: Partial<Row>) => {
+  const numbers = React.useMemo(() => numberEditable(nodes), [nodes]);
+  const endPages = React.useMemo(() => endPagesOf(nodes, material.totalPages), [nodes, material.totalPages]);
+  const validation = React.useMemo(() => validateEditable(nodes, material.totalPages), [nodes, material.totalPages]);
+  const isInvalid = validation.global !== null || validation.byKey.size > 0;
+
+  const edit = (fn: (prev: EditableChapter[]) => EditableChapter[]) => {
     setConflict(null);
-    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    setNodes(fn);
+  };
+
+  const actions: TreeActions = {
+    change: (key, patch) => edit((prev) => patchNode(prev, key, patch)),
+    edit,
+    remove: (node) => {
+      const count = countDescendants(nodes, node.key);
+      if (count > 0 && !window.confirm(`Remover "${node.title}" e ${count} subcapítulo(s)?`)) return;
+      edit((prev) => removeNode(prev, node.key));
+    },
   };
 
   return (
@@ -134,7 +323,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
       title="Capítulos"
       description={`${material.title} (${material.totalPages} páginas)`}
       footer={
-        <Button type="button" onClick={handleSave} disabled={isBusy || isLoading}>
+        <Button type="button" onClick={handleSave} disabled={isBusy || isLoading || isInvalid}>
           Salvar capítulos
         </Button>
       }
@@ -144,44 +333,29 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
 
         {isLoading ? (
           <p className="text-sm text-text-muted">Carregando...</p>
-        ) : rows.length === 0 ? (
+        ) : nodes.length === 0 ? (
           <p className="text-sm text-text-muted">Sem capítulos</p>
         ) : (
-          <ul className="space-y-2">
-            {rows.map((row, index) => {
-              const n = index + 1;
-              return (
-                <li key={index} className="flex items-center gap-2">
-                  <Input
-                    aria-label={`Título do capítulo ${n}`}
-                    value={row.title}
-                    onChange={(e) => updateRow(index, { title: e.target.value })}
-                  />
-                  <Input
-                    aria-label={`Página inicial do capítulo ${n}`}
-                    type="number"
-                    min={1}
-                    max={material.totalPages}
-                    className="w-24"
-                    value={row.startPage}
-                    onChange={(e) => updateRow(index, { startPage: e.target.value })}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Remover capítulo ${n}`}
-                    onClick={() => {
-                      setConflict(null);
-                      setRows((prev) => prev.filter((_, i) => i !== index));
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="space-y-2">
+            {validation.global && <p className="text-xs text-danger">{validation.global}</p>}
+            <ul className="space-y-2">
+              {nodes.map((node, i) => (
+                <ChapterNodeRow
+                  key={node.key}
+                  node={node}
+                  depth={0}
+                  index={i}
+                  siblingCount={nodes.length}
+                  nodes={nodes}
+                  numbers={numbers}
+                  endPages={endPages}
+                  validation={validation}
+                  totalPages={material.totalPages}
+                  actions={actions}
+                />
+              ))}
+            </ul>
+          </div>
         )}
 
         <div className="flex gap-2">
@@ -189,10 +363,9 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => {
-              setConflict(null);
-              setRows((prev) => [...prev, { title: '', startPage: '1' }]);
-            }}
+            onClick={() =>
+              edit((prev) => [...prev, { key: newChapterKey(), title: '', startPage: '1', children: [] }])
+            }
           >
             Adicionar capítulo
           </Button>
