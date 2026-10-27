@@ -54,9 +54,26 @@ function patchNode(nodes: EditableChapter[], key: string, patch: ChapterPatch): 
   );
 }
 
+/** Para onde o foco vai após uma ação estrutural (key null = primeiro nó). */
+type FocusRequest = { key: string | null; target: 'title' | `button:${RowAction}` };
+type RowAction = 'up' | 'down' | 'indent' | 'outdent';
+
+/** Irmão anterior, senão o pai, senão null (primeiro nó restante). */
+function focusKeyAfterRemove(nodes: EditableChapter[], key: string): string | null {
+  const walk = (list: EditableChapter[], parent: string | null): string | null | undefined => {
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].key === key) return i > 0 ? list[i - 1].key : parent;
+      const found = walk(list[i].children, list[i].key);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
+  return walk(nodes, null) ?? null;
+}
+
 interface TreeActions {
   change: (key: string, patch: ChapterPatch) => void;
-  edit: (fn: (prev: EditableChapter[]) => EditableChapter[]) => void;
+  edit: (fn: (prev: EditableChapter[]) => EditableChapter[], focus?: FocusRequest) => void;
   remove: (node: EditableChapter) => void;
 }
 
@@ -93,12 +110,13 @@ function ChapterNodeRow({
 
   return (
     <li className="space-y-1">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-chapter-key={node.key}>
         <span className="min-w-10 text-xs font-medium text-text-muted">{number}</span>
         <Input
           className="min-w-40 flex-1"
           aria-label={`Título do capítulo ${number}`}
           maxLength={CHAPTER_TITLE_MAX}
+          data-field="title"
           aria-describedby={message ? messageId : undefined}
           aria-invalid={message ? true : undefined}
           value={node.title}
@@ -124,7 +142,10 @@ function ChapterNodeRow({
             variant="ghost"
             size="sm"
             aria-label={`Adicionar capítulo abaixo de ${number}`}
-            onClick={() => actions.edit((prev) => addSibling(prev, node.key, blank()))}
+            onClick={() => {
+              const added = blank();
+              actions.edit((prev) => addSibling(prev, node.key, added), { key: added.key, target: 'title' });
+            }}
           >
             <Plus className="h-4 w-4" />
           </Button>
@@ -134,7 +155,10 @@ function ChapterNodeRow({
             size="sm"
             aria-label={`Adicionar subcapítulo em ${number}`}
             disabled={depth >= MAX_CHAPTER_DEPTH}
-            onClick={() => actions.edit((prev) => addChild(prev, node.key, blank()))}
+            onClick={() => {
+              const added = blank();
+              actions.edit((prev) => addChild(prev, node.key, added), { key: added.key, target: 'title' });
+            }}
           >
             <CornerDownRight className="h-4 w-4" />
           </Button>
@@ -144,7 +168,8 @@ function ChapterNodeRow({
             size="sm"
             aria-label={`Mover ${number} para cima`}
             disabled={index === 0}
-            onClick={() => actions.edit((prev) => moveNode(prev, node.key, -1))}
+            data-action="up"
+            onClick={() => actions.edit((prev) => moveNode(prev, node.key, -1), { key: node.key, target: 'button:up' })}
           >
             <ArrowUp className="h-4 w-4" />
           </Button>
@@ -154,7 +179,8 @@ function ChapterNodeRow({
             size="sm"
             aria-label={`Mover ${number} para baixo`}
             disabled={index === siblingCount - 1}
-            onClick={() => actions.edit((prev) => moveNode(prev, node.key, 1))}
+            data-action="down"
+            onClick={() => actions.edit((prev) => moveNode(prev, node.key, 1), { key: node.key, target: 'button:down' })}
           >
             <ArrowDown className="h-4 w-4" />
           </Button>
@@ -164,7 +190,8 @@ function ChapterNodeRow({
             size="sm"
             aria-label={`Recuar ${number}`}
             disabled={!canIndent(nodes, node.key)}
-            onClick={() => actions.edit((prev) => indentNode(prev, node.key))}
+            data-action="indent"
+            onClick={() => actions.edit((prev) => indentNode(prev, node.key), { key: node.key, target: 'button:indent' })}
           >
             <IndentIncrease className="h-4 w-4" />
           </Button>
@@ -174,7 +201,8 @@ function ChapterNodeRow({
             size="sm"
             aria-label={`Desrecuar ${number}`}
             disabled={!canOutdent(nodes, node.key)}
-            onClick={() => actions.edit((prev) => outdentNode(prev, node.key))}
+            data-action="outdent"
+            onClick={() => actions.edit((prev) => outdentNode(prev, node.key), { key: node.key, target: 'button:outdent' })}
           >
             <IndentDecrease className="h-4 w-4" />
           </Button>
@@ -231,6 +259,28 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
   const [error, setError] = React.useState<string | null>(null);
   const [conflict, setConflict] = React.useState<Conflict | null>(null);
   const { user } = useCurrentUser();
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const focusRequest = React.useRef<FocusRequest | null>(null);
+
+  // Depois de cada ação estrutural, devolve o foco ao nó afetado (o elemento clicado pode ter sumido).
+  React.useEffect(() => {
+    const request = focusRequest.current;
+    const root = containerRef.current;
+    if (!request || !root) return;
+    focusRequest.current = null;
+    const rows = Array.from(root.querySelectorAll<HTMLElement>('[data-chapter-key]'));
+    const row = request.key === null ? rows[0] : rows.find((r) => r.dataset.chapterKey === request.key);
+    if (!row) return;
+    const title = row.querySelector<HTMLInputElement>('input[data-field="title"]');
+    if (request.target !== 'title') {
+      const button = row.querySelector<HTMLButtonElement>(`button[data-action="${request.target.slice(7)}"]`);
+      if (button && !button.disabled) {
+        button.focus();
+        return;
+      }
+    }
+    title?.focus();
+  });
 
   React.useEffect(() => {
     if (!open) return;
@@ -302,7 +352,8 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
   const validation = React.useMemo(() => validateEditable(nodes, material.totalPages), [nodes, material.totalPages]);
   const isInvalid = validation.global !== null || validation.byKey.size > 0;
 
-  const edit = (fn: (prev: EditableChapter[]) => EditableChapter[]) => {
+  const edit = (fn: (prev: EditableChapter[]) => EditableChapter[], focus?: FocusRequest) => {
+    if (focus) focusRequest.current = focus;
     setConflict(null);
     setNodes(fn);
   };
@@ -313,7 +364,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
     remove: (node) => {
       const count = countDescendants(nodes, node.key);
       if (count > 0 && !window.confirm(`Remover "${node.title}" e ${count} subcapítulo(s)?`)) return;
-      edit((prev) => removeNode(prev, node.key));
+      edit((prev) => removeNode(prev, node.key), { key: focusKeyAfterRemove(nodes, node.key), target: 'title' });
     },
   };
 
@@ -329,7 +380,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
         </Button>
       }
     >
-      <div className="space-y-3">
+      <div ref={containerRef} className="space-y-3">
         {source && <Badge variant="secondary">{CHAPTER_SOURCE_LABEL[source]}</Badge>}
 
         {isLoading ? (

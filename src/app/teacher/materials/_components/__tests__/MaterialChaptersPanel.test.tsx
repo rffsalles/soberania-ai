@@ -204,6 +204,37 @@ describe('MaterialChaptersPanel', () => {
       expect((screen.getByRole('button', { name: 'Salvar capítulos' }) as HTMLButtonElement).disabled).toBe(true);
     });
 
+    it('foco acompanha o nó após recuar, mover, adicionar e remover', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      renderTree();
+      fireEvent.click(await screen.findByRole('button', { name: 'Recuar 2.2' }));
+      // "Recuar 2.1.1" fica desabilitado (primeiro filho): o foco vai ao título do nó.
+      expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 2.1.1'));
+      fireEvent.click(screen.getByRole('button', { name: 'Desrecuar 2.1.1' }));
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Desrecuar 2.2' }));
+      // Mover para o topo desabilita o botão: o foco vai ao título do nó.
+      fireEvent.click(screen.getByRole('button', { name: 'Mover 2.2 para cima' }));
+      expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 2.1'));
+      expect((document.activeElement as HTMLInputElement).value).toBe('Frações');
+      fireEvent.click(screen.getByRole('button', { name: 'Adicionar capítulo abaixo de 3' }));
+      expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 4'));
+      fireEvent.click(screen.getByRole('button', { name: 'Remover capítulo 4' }));
+      expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 3'));
+      fireEvent.click(screen.getByRole('button', { name: 'Remover capítulo 2.1' }));
+      expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 2'));
+      fireEvent.click(screen.getByRole('button', { name: 'Remover capítulo 1' }));
+      expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 1'));
+      expect((document.activeElement as HTMLInputElement).value).toBe('Unidade 2');
+    });
+
+    it('adicionar subcapítulo foca o título do novo nó', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      renderTree();
+      fireEvent.click(await screen.findByRole('button', { name: 'Adicionar subcapítulo em 2.1' }));
+      expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 2.1.1'));
+    });
+
     it('título com mais de 200 caracteres bloqueia o salvar', async () => {
       stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
       renderTree();
