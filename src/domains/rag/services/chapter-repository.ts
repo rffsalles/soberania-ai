@@ -1,6 +1,6 @@
 import type { ChapterSource, Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
-import type { ChapterLinks, ChapterRow, ChunkAssignment } from '@/domains/rag/chapters';
+import { numberChapters, type ChapterLinks, type ChapterRow, type ChunkAssignment } from '@/domains/rag/chapters';
 
 export type ChapterDTO = {
   id: string;
@@ -9,12 +9,18 @@ export type ChapterDTO = {
   startPage: number;
   endPage: number | null;
   source: ChapterSource;
+  parentId: string | null;
+  depth: number;
+  number: string;
 };
 
-const chapterSelect = { id: true, order: true, title: true, startPage: true, endPage: true, source: true } as const;
+const chapterSelect = {
+  id: true, order: true, title: true, startPage: true, endPage: true, source: true, parentId: true, depth: true,
+} as const;
 
-export function listChapters(materialId: string): Promise<ChapterDTO[]> {
-  return db.materialChapter.findMany({ where: { materialId }, orderBy: { order: 'asc' }, select: chapterSelect });
+export async function listChapters(materialId: string): Promise<ChapterDTO[]> {
+  const found = await db.materialChapter.findMany({ where: { materialId }, orderBy: { order: 'asc' }, select: chapterSelect });
+  return numberChapters(found);
 }
 
 export async function listChapterLinks(materialId: string): Promise<ChapterLinks[]> {
@@ -104,11 +110,18 @@ export function replaceChapters(
     if (beforeWrite) await beforeWrite(tx);
     await tx.materialChapter.deleteMany({ where: { materialId } });
     const idByOrder = new Map<number, string>();
-    const created = await tx.materialChapter.createManyAndReturn({
-      data: rows.map((r) => ({ materialId, title: r.title, order: r.order, startPage: r.startPage, endPage: r.endPage, source })),
-      select: { id: true, order: true },
-    });
-    for (const c of created) idByOrder.set(c.order, c.id);
+    const maxDepth = rows.reduce((m, r) => Math.max(m, r.depth), 0);
+    for (let d = 0; d <= maxDepth; d++) {
+      const level = rows.filter((r) => r.depth === d);
+      if (level.length === 0) continue;
+      const data = level.map((r) => {
+        const parentId = d === 0 ? null : idByOrder.get(r.parentOrder as number);
+        if (parentId === undefined) throw new Error(`Capítulo ${r.order} sem pai gravado (parentOrder ${r.parentOrder}).`);
+        return { materialId, title: r.title, order: r.order, startPage: r.startPage, endPage: r.endPage, source, depth: d, parentId };
+      });
+      const created = await tx.materialChapter.createManyAndReturn({ data, select: { id: true, order: true } });
+      for (const c of created) idByOrder.set(c.order, c.id);
+    }
     const links = relinks.flatMap((l) => {
       const chapterId = idByOrder.get(l.order);
       return chapterId ? [{ lessonPlanId: l.lessonPlanId, chapterId }] : [];
@@ -123,6 +136,19 @@ export function replaceChapters(
           AND ("chapterId" IS DISTINCT FROM ${chapterId}
             OR "chapter" IS DISTINCT FROM COALESCE(${a.title}, 'Página ' || "pageNumber"))`;
     }
-    return tx.materialChapter.findMany({ where: { materialId }, orderBy: { order: 'asc' }, select: chapterSelect });
+    return numberChapters(await tx.materialChapter.findMany({ where: { materialId }, orderBy: { order: 'asc' }, select: chapterSelect }));
   }, REPLACE_CHAPTERS_TX_OPTIONS);
+}
+
+/** Ids dos capítulos informados e de todos os seus descendentes (CTE recursiva). */
+export async function listDescendantIds(chapterIds: string[]): Promise<string[]> {
+  if (chapterIds.length === 0) return [];
+  const found = await db.$queryRaw<{ id: string }[]>`
+    WITH RECURSIVE t AS (
+      SELECT id FROM material_chapters WHERE id = ANY(${chapterIds}::text[])
+      UNION
+      SELECT c.id FROM material_chapters c JOIN t ON c."parentId" = t.id
+    )
+    SELECT id FROM t`;
+  return found.map((r) => r.id);
 }

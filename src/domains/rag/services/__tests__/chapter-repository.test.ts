@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { chunkAssignmentsFromRows, toChapterRows, type ChapterNode } from '../../chapters';
 
 const tx = {
   materialChapter: {
     deleteMany: vi.fn().mockResolvedValue({}),
-    createManyAndReturn: vi.fn().mockResolvedValue([{ id: 'c1', order: 1 }]),
+    createManyAndReturn: vi.fn(async ({ data }: { data: { order: number }[] }) => data.map((d) => ({ id: `id${d.order}`, order: d.order }))),
     findMany: vi.fn().mockResolvedValue([]),
   },
   lessonPlanChapter: { createMany: vi.fn().mockResolvedValue({}) },
@@ -11,18 +12,68 @@ const tx = {
 };
 const $transaction = vi.fn(async (fn: (t: typeof tx) => unknown, _opts?: unknown) => fn(tx));
 const lessonPlanChapterFindMany = vi.fn();
+const dbFindMany = vi.fn();
+const queryRaw = vi.fn();
 const userFindMany = vi.fn();
 vi.mock('@/lib/db', () => ({
   db: {
     $transaction: (fn: never, o: never) => $transaction(fn, o),
+    $queryRaw: (...a: never[]) => queryRaw(...a),
+    materialChapter: { findMany: (a: never) => dbFindMany(a) },
     lessonPlanChapter: { findMany: (a: never) => lessonPlanChapterFindMany(a) },
     user: { findMany: (a: never) => userFindMany(a) },
   },
 }));
 
-import { listChapterLinkDetails, replaceChapters } from '../chapter-repository';
+import { listChapterLinkDetails, listChapters, listDescendantIds, replaceChapters } from '../chapter-repository';
+
+const node = (title: string, startPage: number, ...children: ChapterNode[]): ChapterNode => ({ title, startPage, children });
+const tree3: ChapterNode[] = [
+  { title: 'A', startPage: 3, children: [
+    { title: 'A1', startPage: 3, children: [{ title: 'A1a', startPage: 4, children: [] }] },
+    { title: 'A2', startPage: 7, children: [] },
+  ] },
+  { title: 'B', startPage: 10, children: [] },
+];
+const rows = toChapterRows([node('U1', 5, node('1.1', 5), node('1.2', 8)), node('U2', 12)], 20);
+
+beforeEach(() => vi.clearAllMocks());
 
 describe('replaceChapters', () => {
+  it('insere nível a nível resolvendo parentId pelo parentOrder', async () => {
+    await replaceChapters('m1', toChapterRows(tree3, 15), 'MANUAL' as never, [{ order: 3, lessonPlanId: 'l1' }], []);
+    const levels = tx.materialChapter.createManyAndReturn.mock.calls.map(([a]) => a.data.map((d: any) => [d.order, d.depth, d.parentId]));
+    expect(levels).toEqual([[[1, 0, null], [5, 0, null]], [[2, 1, 'id1'], [4, 1, 'id1']], [[3, 2, 'id2']]]);
+    expect(tx.lessonPlanChapter.createMany).toHaveBeenCalledWith({ data: [{ lessonPlanId: 'l1', chapterId: 'id3' }], skipDuplicates: true });
+  });
+  it('parentOrder sem pai aborta antes dos vínculos', async () => {
+    const orphan = [{ title: 'x', order: 1, depth: 1, parentOrder: 9, startPage: 1, endPage: 5 }];
+    await expect(replaceChapters('m1', orphan, 'MANUAL' as never, [{ order: 1, lessonPlanId: 'l1' }], [])).rejects.toThrow('sem pai gravado');
+    expect(tx.lessonPlanChapter.createMany).not.toHaveBeenCalled();
+  });
+  it('aplica o trecho nulo antes das faixas dos nós', async () => {
+    await replaceChapters('m1', rows, 'MANUAL' as never, [], chunkAssignmentsFromRows(rows, 20));
+    expect(tx.$executeRaw.mock.calls.map((c: any[]) => c[1])).toEqual([null, 'id1', 'id2', 'id3', 'id4']);
+  });
+  it('listChapters deriva number', async () => {
+    dbFindMany.mockResolvedValue([
+      { id: 'u', order: 1, title: 'U1', startPage: 1, endPage: 9, source: 'MANUAL', parentId: null, depth: 0 },
+      { id: 'f', order: 2, title: 'Frações', startPage: 2, endPage: 9, source: 'MANUAL', parentId: 'u', depth: 1 },
+    ]);
+    expect((await listChapters('m1')).map((c) => c.number)).toEqual(['1', '1.1']);
+  });
+  it('listDescendantIds vazio não consulta o banco', async () => {
+    expect(await listDescendantIds([])).toEqual([]);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+  it('listDescendantIds usa CTE recursiva', async () => {
+    queryRaw.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+    expect(await listDescendantIds(['c1'])).toEqual(['c1', 'c2']);
+    const sql = (queryRaw.mock.calls[0][0] as string[]).join('?');
+    expect(sql).toContain('WITH RECURSIVE');
+    expect(sql).toContain('"parentId"');
+  });
+
   it('usa timeout de 60 s, cria capítulos em lote e só reescreve chunks alterados', async () => {
     await replaceChapters(
       'm1',
