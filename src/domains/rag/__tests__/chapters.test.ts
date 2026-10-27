@@ -183,15 +183,15 @@ describe('chunkAssignmentsFromRows', () => {
 
 describe('relinkByTitle', () => {
   it('título igual com página diferente re-vincula', () =>
-    expect(relinkByTitle([{ order: 1, title: 'Conjuntos', startPage: 15 }],
+    expect(relinkByTitle([{ order: 1, title: 'Conjuntos', startPage: 15, depth: 0 }],
       toChapterRows([node('Intro', 1), node('Conjuntos', 17)], 30), [{ order: 1, lessonPlanIds: ['l1'] }]))
       .toEqual({ relinks: [{ order: 2, lessonPlanId: 'l1' }], lostLessonLinks: 0, lostLessonPlanIds: [] }));
   it('normaliza acentos, caixa e espaços', () =>
-    expect(relinkByTitle([{ order: 1, title: 'Frações  e Decimais', startPage: 3 }],
+    expect(relinkByTitle([{ order: 1, title: 'Frações  e Decimais', startPage: 3, depth: 0 }],
       toChapterRows([node('fracoes e decimais', 3)], 9), [{ order: 1, lessonPlanIds: ['l1'] }]).relinks)
       .toEqual([{ order: 1, lessonPlanId: 'l1' }]));
   it('título duplicado só casa com a mesma página', () => {
-    const old = [{ order: 1, title: 'Exercícios', startPage: 10 }, { order: 2, title: 'Exercícios', startPage: 20 }];
+    const old = [{ order: 1, title: 'Exercícios', startPage: 10, depth: 0 }, { order: 2, title: 'Exercícios', startPage: 20, depth: 0 }];
     const links = [{ order: 1, lessonPlanIds: ['l1'] }, { order: 2, lessonPlanIds: ['l2'] }];
     expect(relinkByTitle(old, toChapterRows([node('A', 1, node('Exercícios', 10)), node('B', 15, node('Exercícios', 20))], 30), links).lostLessonLinks).toBe(0);
     expect(relinkByTitle(old, toChapterRows([node('A', 1, node('Exercícios', 12)), node('B', 15, node('Exercícios', 22))], 30), links))
@@ -199,10 +199,52 @@ describe('relinkByTitle', () => {
   });
   it('título que some perde o vínculo e conta aulas distintas', () =>
     expect(relinkByTitle(
-      [{ order: 1, title: 'A', startPage: 1 }, { order: 2, title: 'B', startPage: 5 }],
-      toChapterRows([node('A', 1), node('C', 5)], 9),
+      [{ order: 1, title: 'A', startPage: 1, depth: 0 }, { order: 2, title: 'B', startPage: 5, depth: 0 }],
+      toChapterRows([node('A', 1), node('C', 6)], 9),
       [{ order: 1, lessonPlanIds: ['l1'] }, { order: 2, lessonPlanIds: ['l1', 'l2'] }],
     )).toEqual({ relinks: [{ order: 1, lessonPlanId: 'l1' }], lostLessonLinks: 2, lostLessonPlanIds: ['l1', 'l2'] }));
+  it('renomear na mesma página mantém o vínculo', () =>
+    expect(relinkByTitle(
+      [{ order: 1, title: 'Unidade 1', startPage: 15, depth: 0 }],
+      toChapterRows([node('Unidade 1: Conjuntos', 15), node('Unidade 2', 43)], 60),
+      [{ order: 1, lessonPlanIds: ['l1'] }],
+    )).toEqual({ relinks: [{ order: 1, lessonPlanId: 'l1' }], lostLessonLinks: 0, lostLessonPlanIds: [] }));
+  it('pontuação não impede o casamento por título', () =>
+    expect(relinkByTitle(
+      [{ order: 1, title: 'Frações, decimais', startPage: 3, depth: 0 }],
+      toChapterRows([node('Intro', 1), node('Frações decimais', 9)], 20),
+      [{ order: 1, lessonPlanIds: ['l1'] }],
+    )).toEqual({ relinks: [{ order: 2, lessonPlanId: 'l1' }], lostLessonLinks: 0, lostLessonPlanIds: [] }));
+  it('unicidade só do lado antigo', () => {
+    const old = [{ order: 1, title: 'X', startPage: 3, depth: 0 }, { order: 2, title: 'X', startPage: 8, depth: 0 }];
+    const links = [{ order: 1, lessonPlanIds: ['l1'] }, { order: 2, lessonPlanIds: ['l2'] }];
+    // Um novo 'X' para dois antigos 'X': o passo 2 não casa; sem novo na mesma (página, nível), nada casa.
+    expect(relinkByTitle(old, toChapterRows([node('Intro', 1), node('X', 5)], 20), links))
+      .toEqual({ relinks: [], lostLessonLinks: 2, lostLessonPlanIds: ['l1', 'l2'] });
+    // Com um novo único em (8, 0), o passo 3 casa só o antigo dessa página.
+    expect(relinkByTitle(old, toChapterRows([node('Intro', 1), node('X', 5), node('Y', 8)], 20), links))
+      .toEqual({ relinks: [{ order: 3, lessonPlanId: 'l2' }], lostLessonLinks: 1, lostLessonPlanIds: ['l1'] });
+  });
+  it('passo 3 não casa quando há dois candidatos na mesma página', () => {
+    // Dois novos na mesma (página, nível)
+    expect(relinkByTitle(
+      [{ order: 1, title: 'Antigo', startPage: 5, depth: 1 }],
+      toChapterRows([node('U', 1, node('a', 5), node('b', 5))], 20),
+      [{ order: 1, lessonPlanIds: ['l1'] }],
+    )).toMatchObject({ relinks: [], lostLessonLinks: 1 });
+    // Dois antigos restantes na mesma (página, nível)
+    expect(relinkByTitle(
+      [{ order: 1, title: 'p', startPage: 5, depth: 1 }, { order: 2, title: 'q', startPage: 5, depth: 1 }],
+      toChapterRows([node('U', 1, node('novo', 5))], 20),
+      [{ order: 1, lessonPlanIds: ['l1'] }, { order: 2, lessonPlanIds: ['l2'] }],
+    )).toMatchObject({ relinks: [], lostLessonLinks: 2 });
+  });
+  it('passo 3 exige o mesmo nível', () =>
+    expect(relinkByTitle(
+      [{ order: 1, title: 'Antigo', startPage: 5, depth: 0 }],
+      toChapterRows([node('U', 1, node('novo', 5))], 20),
+      [{ order: 1, lessonPlanIds: ['l1'] }],
+    )).toMatchObject({ relinks: [], lostLessonLinks: 1 }));
 });
 
 describe('outlineToDrafts (segundo nível sem promover seções)', () => {

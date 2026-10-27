@@ -213,8 +213,8 @@ describe('extractAndSaveChapters', () => {
 
   it('reextração re-vincula por título e informa aulas sem par', async () => {
     listChapters.mockResolvedValue([
-      { id: 'o1', order: 1, title: 'A', startPage: 2, endPage: 4 },
-      { id: 'o2', order: 2, title: 'B', startPage: 5, endPage: 20 },
+      { id: 'o1', order: 1, title: 'A', startPage: 2, endPage: 4, depth: 0 },
+      { id: 'o2', order: 2, title: 'B', startPage: 5, endPage: 20, depth: 0 },
     ]);
     listChapterLinks.mockResolvedValue([
       { order: 1, lessonPlanIds: ['l1'] },
@@ -303,8 +303,8 @@ describe('guarda de vínculos', () => {
   beforeEach(() => {
     findMaterial.mockResolvedValue(material);
     listChapters.mockResolvedValue([
-      { id: 'o1', order: 1, title: 'A', startPage: 2, endPage: 4 },
-      { id: 'o2', order: 2, title: 'B', startPage: 5, endPage: 20 },
+      { id: 'o1', order: 1, title: 'A', startPage: 2, endPage: 4, depth: 0 },
+      { id: 'o2', order: 2, title: 'B', startPage: 5, endPage: 20, depth: 0 },
     ]);
     listChapterLinks.mockResolvedValue(linked);
   });
@@ -328,8 +328,20 @@ describe('guarda de vínculos', () => {
 
   it('perder só vínculo próprio não bloqueia', async () => {
     listChapterLinkDetails.mockResolvedValue([{ ...foreign, lessonPlanId: 'l1', teacherId: 't1' }]);
-    const r = await replaceManualChapters('m1', tree([['X', 2], ['B', 5]]), { user: teacher }, depsWith());
+    const r = await replaceManualChapters('m1', tree([['X', 3], ['B', 5]]), { user: teacher }, depsWith());
     expect(r.lostLessonLinks).toBe(1);
+    expect(replaceChapters).toHaveBeenCalled();
+  });
+
+  it('renomear com aula alheia não dá 409', async () => {
+    listChapterLinkDetails.mockResolvedValue([foreign]);
+    const r = await replaceManualChapters('m1', tree([['A renomeado', 2], ['B', 5]]), { user: teacher }, depsWith());
+    expect(r.lostLessonLinks).toBe(0);
+    expect(replaceChapters).toHaveBeenCalled();
+    expect(replaceChapters.mock.calls[0][3]).toEqual([
+      { order: 1, lessonPlanId: 'l1' },
+      { order: 2, lessonPlanId: 'l9' },
+    ]);
   });
 
   it('árvore manual com filhos grava linhas com parentOrder', async () => {

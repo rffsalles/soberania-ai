@@ -260,13 +260,18 @@ function normalizeTitle(title: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/** Re-vincula aulas por título normalizado: 1º mesmo título e página; 2º título único entre os restantes. */
+/**
+ * Re-vincula aulas por título normalizado (sem acentos, caixa, pontuação e espaços extras):
+ * 1º mesmo título e página; 2º título único entre os restantes; 3º (renomeação) mesma página e mesmo
+ * nível, quando o par (startPage, depth) é único entre os novos livres e entre os antigos restantes.
+ */
 export function relinkByTitle(
-  oldChapters: { order: number; title: string; startPage: number }[],
+  oldChapters: { order: number; title: string; startPage: number; depth: number }[],
   newRows: ChapterRow[],
   oldLinks: ChapterLinks[],
 ): RelinkResult {
@@ -289,6 +294,17 @@ export function relinkByTitle(
     const key = normalizeTitle(o.title);
     const newMatches = [...freeNew].filter((order) => normalizeTitle(newByOrder.get(order)!.title) === key);
     const oldMatches = remaining.filter((r) => !pairs.has(r.order) && normalizeTitle(r.title) === key);
+    if (newMatches.length === 1 && oldMatches.length === 1) {
+      pairs.set(o.order, newMatches[0]);
+      freeNew.delete(newMatches[0]);
+    }
+  }
+
+  const unpaired = olds.filter((o) => !pairs.has(o.order));
+  for (const o of unpaired) {
+    const samePlace = (r: { startPage: number; depth: number }) => r.startPage === o.startPage && r.depth === o.depth;
+    const newMatches = [...freeNew].filter((order) => samePlace(newByOrder.get(order)!));
+    const oldMatches = unpaired.filter((r) => !pairs.has(r.order) && samePlace(r));
     if (newMatches.length === 1 && oldMatches.length === 1) {
       pairs.set(o.order, newMatches[0]);
       freeNew.delete(newMatches[0]);
