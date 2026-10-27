@@ -3,10 +3,14 @@ import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+const chaptersState = vi.hoisted(() => ({ loading: false }));
 vi.mock('@/components/teaching/use-plan-chapters', async () => {
   const { MAT_BOOK } = await import('@/components/teaching/__tests__/chapter-tree-fixtures');
   return {
-    usePlanChapters: () => ({ books: [MAT_BOOK], isLoading: false, error: null, reload: vi.fn() }),
+    usePlanChapters: () =>
+      chaptersState.loading
+        ? { books: [], isLoading: true, error: null, reload: vi.fn() }
+        : { books: [MAT_BOOK], isLoading: false, error: null, reload: vi.fn() },
   };
 });
 vi.mock('../MediaTabs', () => ({ MediaTabs: () => null }));
@@ -54,12 +58,24 @@ const GENERATED = {
 };
 
 afterEach(() => {
+  chaptersState.loading = false;
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('LessonEditor', () => {
+  it('enquanto os capítulos carregam mostra "Carregando capítulos..."; depois abre a seleção salva', () => {
+    chaptersState.loading = true;
+    const lesson = makeLesson({ chapters: [{ chapterId: 's221', chapter: { order: 5, number: '2.2.1' } }] });
+    const { rerender } = render(<LessonEditor lesson={lesson} onSaved={() => {}} />);
+    expect(screen.getByText('Carregando capítulos...')).toBeTruthy();
+    expect(screen.queryByText('Nenhum capítulo nos livros do plano.')).toBeNull();
+    chaptersState.loading = false;
+    rerender(<LessonEditor lesson={lesson} onSaved={() => {}} />);
+    expect(screen.getByRole('treeitem', { name: '2.2.1 Operações com frações' })).toBeTruthy();
+  });
+
   it('"Gerar" bloqueado sem capítulo salvo e com seleção não salva, cada um com seu motivo', () => {
     const { rerender } = render(<LessonEditor lesson={makeLesson()} onSaved={() => {}} />);
     const button = screen.getByRole('button', { name: 'Gerar aula com IA' }) as HTMLButtonElement;

@@ -79,4 +79,22 @@ describe('ChapterTreeSelect', () => {
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowLeft' });
     expect(document.activeElement).toBe(u2);
   });
+
+  it('livros que chegam depois da montagem abrem os ancestrais da seleção', () => {
+    const onSelectionChange = vi.fn();
+    const props = { id: 't', label: 'Capítulos desta aula', selectedIds: ['s221'], onSelectionChange };
+    const { rerender } = render(<ChapterTreeSelect {...props} books={[]} />);
+    rerender(<ChapterTreeSelect {...props} books={[MAT_BOOK]} />);
+    expect(screen.getByRole('treeitem', { name: '2.2 Frações' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: '2.2.1 Operações com frações' })).toBeTruthy();
+  });
+
+  it('livros que chegam depois não recolhem o que o professor abriu', () => {
+    const onSelectionChange = vi.fn();
+    const props = { id: 't', label: 'Capítulos desta aula', selectedIds: [], onSelectionChange };
+    const { rerender } = render(<ChapterTreeSelect {...props} books={[MAT_BOOK]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir 2' }));
+    rerender(<ChapterTreeSelect {...props} books={[MAT_BOOK, COMP_BOOK]} />);
+    expect(screen.getByRole('treeitem', { name: '2.1 Produtos notáveis' })).toBeTruthy();
+  });
 });

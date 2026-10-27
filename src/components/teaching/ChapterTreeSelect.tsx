@@ -35,6 +35,15 @@ export function ChapterTreeSelect({
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const itemRefs = React.useRef(new Map<string, HTMLLIElement>());
   const focusRequest = React.useRef<string | null>(null);
+  const selectedRef = React.useRef(selectedIds);
+  selectedRef.current = selectedIds;
+
+  // Os livros podem chegar depois da montagem: abre os ancestrais da seleção
+  // sem recolher o que o professor já abriu.
+  React.useEffect(() => {
+    const needed = selectedRef.current.flatMap((s) => ancestorsOf(s, index));
+    setExpanded((prev) => (needed.every((a) => prev.has(a)) ? prev : new Set([...prev, ...needed])));
+  }, [index]);
 
   const visible = React.useMemo(() => visibleForQuery(query, index), [query, index]);
   const searching = visible !== null;

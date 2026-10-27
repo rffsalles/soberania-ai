@@ -59,7 +59,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   React.useEffect(() => {
     setChapterIds(savedKey ? savedKey.split(',') : []);
   }, [savedKey]);
-  const { books } = usePlanChapters(lesson.courseSchedule.teachingPlanId);
+  const { books, isLoading: chaptersLoading } = usePlanChapters(lesson.courseSchedule.teachingPlanId);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -173,13 +173,17 @@ export function LessonEditor({ lesson, onSaved }: Props) {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          <ChapterTreeSelect
-            id="lesson-chapters"
-            label="Capítulos desta aula"
-            books={books}
-            selectedIds={chapterIds}
-            onSelectionChange={setChapterIds}
-          />
+          {chaptersLoading && books.length === 0 ? (
+            <p className="text-sm text-slate-500">Carregando capítulos...</p>
+          ) : (
+            <ChapterTreeSelect
+              id="lesson-chapters"
+              label="Capítulos desta aula"
+              books={books}
+              selectedIds={chapterIds}
+              onSelectionChange={setChapterIds}
+            />
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={generate} disabled={busy || generateLock !== undefined} className="gap-2">
               {generateLock !== undefined ? <Lock className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
