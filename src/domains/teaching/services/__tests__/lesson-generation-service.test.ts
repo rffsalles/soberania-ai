@@ -26,7 +26,7 @@ function lesson(opts: { chapters?: boolean; teacherId?: string; topicTitle?: str
       },
     },
     chapters: opts.chapters === false ? [] : [
-      { chapter: { id: 'ch3', order: 3, title: 'Modelagem', startPage: 40, endPage: 60, material: { title: 'Sistemas de Banco de Dados', author: 'Elmasri' } } },
+      { chapter: { id: 'ch3', order: 3, number: '3', title: 'Modelagem', startPage: 40, endPage: 60, material: { title: 'Sistemas de Banco de Dados', author: 'Elmasri' } } },
     ],
   };
 }
@@ -38,8 +38,8 @@ const text = (durations: number[]) =>
   });
 
 function makeDeps(opts: {
-  lesson?: ReturnType<typeof lesson> | null; chunks?: DidacticChunk[]; text?: string; fallback?: boolean; throws?: boolean;
-  sample?: DidacticChunk[];
+  lesson?: unknown; chunks?: DidacticChunk[]; text?: string; fallback?: boolean; throws?: boolean;
+  sample?: DidacticChunk[]; descendants?: string[];
 } = {}) {
   const search = vi.fn().mockResolvedValue({ chunks: opts.chunks ?? [chunk] });
   const sampleByChapter = vi.fn().mockResolvedValue(opts.sample ?? []);
@@ -49,10 +49,51 @@ function makeDeps(opts: {
   });
   const deps = {
     findLesson: vi.fn().mockResolvedValue(opts.lesson === undefined ? lesson() : opts.lesson),
+    listDescendantIds: vi.fn(async (ids: string[]) => opts.descendants ?? ids),
     search, streamChat, sampleByChapter,
   } as unknown as LessonGenerationDeps;
   return { deps, search, streamChat, sampleByChapter };
 }
+
+const fracoes = {
+  ...lesson(),
+  chapters: [{ chapter: { id: 's22', order: 4, number: '2.2', title: 'Frações', startPage: 48, endPage: 66,
+    material: { title: 'Matemática Básica', author: 'Silva' } } }],
+};
+
+describe('subárvore expandida', () => {
+  it('expande os nós escolhidos com os descendentes no filtro e rotula só o escolhido', async () => {
+    const { deps, search, streamChat } = makeDeps({ lesson: fracoes, descendants: ['s22', 's221', 's222'] });
+    await generateLessonContent('l1', teacher, deps);
+    expect(deps.listDescendantIds).toHaveBeenCalledWith(['s22']);
+    expect(search.mock.calls.every((c) => JSON.stringify(c[0].allowedChapterIds) === '["s22","s221","s222"]')).toBe(true);
+    const user = streamChat.mock.calls[0][0][1].content as string;
+    expect(user).toContain('Cap. 2.2: Frações — Matemática Básica (Silva), p. 48 a 66');
+    expect(user).not.toContain('Operações com frações');
+  });
+
+  it('amostragem de fallback usa o conjunto expandido', async () => {
+    const { deps, sampleByChapter } = makeDeps({ lesson: fracoes, descendants: ['s22', 's221', 's222'], chunks: [], sample: [chunk] });
+    await generateLessonContent('l1', teacher, deps);
+    expect(sampleByChapter).toHaveBeenCalledWith(['s22', 's221', 's222'], 4, 12);
+  });
+
+  it('raiz salva expande para toda a subárvore', async () => {
+    const raiz = { ...fracoes, chapters: [{ chapter: { ...fracoes.chapters[0].chapter, id: 'u2', number: '2', title: 'Unidade 2', startPage: 43 } }] };
+    const { deps, search } = makeDeps({ lesson: raiz, descendants: ['u2', 's21', 's22', 's221', 's222'] });
+    await generateLessonContent('l1', teacher, deps);
+    expect(search.mock.calls[0][0].allowedChapterIds).toEqual(['u2', 's21', 's22', 's221', 's222']);
+  });
+
+  it('refino filtra pelo conjunto expandido e rotula sem páginas', async () => {
+    const { deps, search, streamChat } = makeDeps({ lesson: fracoes, descendants: ['s22', 's221', 's222'], text: 'Novo texto' });
+    await refineLessonField('l1', teacher, { field: 'methodology', instruction: 'mais curto', current: 'x' }, deps);
+    expect(search.mock.calls[0][0].allowedChapterIds).toEqual(['s22', 's221', 's222']);
+    const user = streamChat.mock.calls[0][0][1].content as string;
+    expect(user).toContain('Cap. 2.2: Frações — Matemática Básica (Silva)');
+    expect(user).not.toContain('p. 48');
+  });
+});
 
 describe('generateLessonContent', () => {
   it('saída válida vira roteiro com início acumulado e citações', async () => {

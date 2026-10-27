@@ -44,7 +44,7 @@ export function buildLessonGenerationMessages(input: LessonGenerationPromptInput
   const chapters = input.chapters
     .map(({ chapter: c }) => {
       const pages = c.endPage ? `p. ${c.startPage} a ${c.endPage}` : `p. ${c.startPage}`;
-      return `Cap. ${c.order}: ${c.title} — ${c.material.title} (${c.material.author}), ${pages}`;
+      return `Cap. ${c.number}: ${c.title} — ${c.material.title} (${c.material.author}), ${pages}`;
     })
     .join('\n');
   const chunks = input.chunks.map((c) => `${formatCitation(c)}\n${c.content}`).join('\n\n');
@@ -139,7 +139,7 @@ export type LessonRefinePromptInput = {
 
 export function buildLessonRefineMessages(input: LessonRefinePromptInput): AIMessage[] {
   const chapters = input.chapters
-    .map(({ chapter: c }) => `Cap. ${c.order}: ${c.title} — ${c.material.title} (${c.material.author})`)
+    .map(({ chapter: c }) => `Cap. ${c.number}: ${c.title} — ${c.material.title} (${c.material.author})`)
     .join('\n');
   const chunks = input.chunks.map((c) => `${formatCitation(c)}\n${c.content}`).join('\n\n');
   const target =

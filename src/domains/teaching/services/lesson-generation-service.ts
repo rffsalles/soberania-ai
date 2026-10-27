@@ -14,6 +14,7 @@ import { LESSON_AI_UNAVAILABLE_MESSAGE, LESSON_DEFAULT_DURATION_MINUTES, NO_LESS
 import { assertOwner } from '../ownership';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
 import { sampleChunksByChapter } from '@/domains/rag/services/chunk-repository';
+import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
 import { findLessonForGeneration } from './lesson-plan-repository';
 import type { PlanActor } from './teaching-plan-service';
 import { collectStream } from '@/domains/agents/collect-stream';
@@ -29,6 +30,7 @@ export type LessonGenerationDeps = {
   findLesson: typeof findLessonForGeneration;
   search(q: RAGSearchQuery): Promise<Pick<RAGSearchResult, 'chunks'>>;
   sampleByChapter: typeof sampleChunksByChapter;
+  listDescendantIds(chapterIds: string[]): Promise<string[]>;
   streamChat: StreamChatFn;
 };
 export type GeneratedLesson = Omit<GeneratedLessonText, 'steps'> & { timeScript: TimeScriptItem[]; citations: string[] };
@@ -37,6 +39,7 @@ const defaultDeps: LessonGenerationDeps = {
   findLesson: findLessonForGeneration,
   search: (q) => executeHybridSearch(q),
   sampleByChapter: sampleChunksByChapter,
+  listDescendantIds,
   streamChat: loggedStreamChat,
 };
 
@@ -75,7 +78,7 @@ export async function generateLessonContent(
   assertOwner(user, plan.teacherId);
   if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
 
-  const allowedChapterIds = lesson.chapters.map((c) => c.chapter.id);
+  const allowedChapterIds = await deps.listDescendantIds(lesson.chapters.map((c) => c.chapter.id));
   const queries = [lesson.topicTitle, plan.generalObjectives, `exemplos e exercícios de ${lesson.topicTitle}`];
   const results = await Promise.all(
     queries.map((query) => deps.search({ query, allowedChapterIds, topK: SEARCH_TOP_K }))
@@ -146,7 +149,7 @@ export async function refineLessonField(
   assertOwner(user, plan.teacherId);
   if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
 
-  const allowedChapterIds = lesson.chapters.map((c) => c.chapter.id);
+  const allowedChapterIds = await deps.listDescendantIds(lesson.chapters.map((c) => c.chapter.id));
   const found = await deps.search({
     query: `${input.instruction} ${lesson.topicTitle}`,
     allowedChapterIds,
