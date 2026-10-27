@@ -174,7 +174,9 @@ describe('MaterialChaptersPanel', () => {
     it('mostra número, página final derivada e recua/desrecua', async () => {
       stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
       renderTree();
-      expect((await screen.findByLabelText('Página final do capítulo 2.2')).textContent).toBe('66');
+      expect((await screen.findByText('Página final do capítulo 2.2:')).parentElement!.textContent).toBe(
+        'Página final do capítulo 2.2: 66',
+      );
       expect((screen.getByRole('button', { name: 'Recuar 2.1' }) as HTMLButtonElement).disabled).toBe(true);
       fireEvent.click(screen.getByRole('button', { name: 'Recuar 2.2' }));
       expect(screen.getByLabelText('Título do capítulo 2.1.1')).toBeTruthy();
@@ -233,6 +235,24 @@ describe('MaterialChaptersPanel', () => {
       renderTree();
       fireEvent.click(await screen.findByRole('button', { name: 'Adicionar subcapítulo em 2.1' }));
       expect(document.activeElement).toBe(screen.getByLabelText('Título do capítulo 2.1.1'));
+    });
+
+    it('remover nó sem título usa o número na confirmação', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderTree();
+      fireEvent.change(await screen.findByLabelText('Título do capítulo 2.2'), { target: { value: '  ' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Remover capítulo 2.2' }));
+      expect(confirm).toHaveBeenCalledWith('Remover "2.2" e 1 subcapítulo(s)?');
+    });
+
+    it('adicionar abaixo começa na página seguinte ao fim do nó (limitada ao total)', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      renderTree();
+      fireEvent.click(await screen.findByRole('button', { name: 'Adicionar capítulo abaixo de 2.1' }));
+      expect((screen.getByLabelText('Página inicial do capítulo 2.2') as HTMLInputElement).value).toBe('48');
+      fireEvent.click(screen.getByRole('button', { name: 'Adicionar capítulo abaixo de 3' }));
+      expect((screen.getByLabelText('Página inicial do capítulo 4') as HTMLInputElement).value).toBe('174');
     });
 
     it('título com mais de 200 caracteres bloqueia o salvar', async () => {

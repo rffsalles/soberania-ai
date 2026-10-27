@@ -48,10 +48,33 @@ interface MaterialChaptersPanelProps {
 
 type ChapterPatch = Partial<Pick<EditableChapter, 'title' | 'startPage'>>;
 
+/** Copia só o caminho até o nó alterado; listas sem mudança voltam com a mesma referência. */
 function patchNode(nodes: EditableChapter[], key: string, patch: ChapterPatch): EditableChapter[] {
-  return nodes.map((node) =>
-    node.key === key ? { ...node, ...patch } : { ...node, children: patchNode(node.children, key, patch) },
-  );
+  let changed = false;
+  const next = nodes.map((node) => {
+    if (node.key === key) {
+      changed = true;
+      return { ...node, ...patch };
+    }
+    const children = patchNode(node.children, key, patch);
+    if (children === node.children) return node;
+    changed = true;
+    return { ...node, children };
+  });
+  return changed ? next : nodes;
+}
+
+type NodeMoves = Map<string, { indent: boolean; outdent: boolean }>;
+
+function movesOf(nodes: EditableChapter[]): NodeMoves {
+  const out: NodeMoves = new Map();
+  const walk = (list: EditableChapter[]) =>
+    list.forEach((node) => {
+      out.set(node.key, { indent: canIndent(nodes, node.key), outdent: canOutdent(nodes, node.key) });
+      walk(node.children);
+    });
+  walk(nodes);
+  return out;
 }
 
 /** Para onde o foco vai após uma ação estrutural (key null = primeiro nó). */
@@ -74,7 +97,7 @@ function focusKeyAfterRemove(nodes: EditableChapter[], key: string): string | nu
 interface TreeActions {
   change: (key: string, patch: ChapterPatch) => void;
   edit: (fn: (prev: EditableChapter[]) => EditableChapter[], focus?: FocusRequest) => void;
-  remove: (node: EditableChapter) => void;
+  remove: (node: EditableChapter, number: string) => void;
 }
 
 interface ChapterNodeRowProps {
@@ -82,7 +105,7 @@ interface ChapterNodeRowProps {
   depth: number;
   index: number;
   siblingCount: number;
-  nodes: EditableChapter[];
+  moves: NodeMoves;
   numbers: Map<string, string>;
   endPages: Map<string, number | null>;
   validation: TreeValidation;
@@ -90,12 +113,12 @@ interface ChapterNodeRowProps {
   actions: TreeActions;
 }
 
-function ChapterNodeRow({
+const ChapterNodeRow = React.memo(function ChapterNodeRow({
   node,
   depth,
   index,
   siblingCount,
-  nodes,
+  moves,
   numbers,
   endPages,
   validation,
@@ -106,7 +129,8 @@ function ChapterNodeRow({
   const message = validation.byKey.get(node.key);
   const messageId = `capitulo-${node.key}-erro`;
   const endPage = endPages.get(node.key) ?? null;
-  const blank = (): EditableChapter => ({ key: newChapterKey(), title: '', startPage: node.startPage, children: [] });
+  const move = moves.get(node.key);
+  const blank = (startPage = node.startPage): EditableChapter => ({ key: newChapterKey(), title: '', startPage, children: [] });
 
   return (
     <li className="space-y-1">
@@ -133,7 +157,8 @@ function ChapterNodeRow({
           value={node.startPage}
           onChange={(e) => actions.change(node.key, { startPage: e.target.value })}
         />
-        <span aria-label={`Página final do capítulo ${number}`} className="w-12 text-sm text-text-muted">
+        <span className="w-12 text-sm text-text-muted">
+          <span className="sr-only">{`Página final do capítulo ${number}: `}</span>
           {endPage ?? '—'}
         </span>
         <div className="flex items-center">
@@ -143,7 +168,7 @@ function ChapterNodeRow({
             size="sm"
             aria-label={`Adicionar capítulo abaixo de ${number}`}
             onClick={() => {
-              const added = blank();
+              const added = blank(endPage === null ? node.startPage : String(Math.min(endPage + 1, totalPages)));
               actions.edit((prev) => addSibling(prev, node.key, added), { key: added.key, target: 'title' });
             }}
           >
@@ -189,7 +214,7 @@ function ChapterNodeRow({
             variant="ghost"
             size="sm"
             aria-label={`Recuar ${number}`}
-            disabled={!canIndent(nodes, node.key)}
+            disabled={!move?.indent}
             data-action="indent"
             onClick={() => actions.edit((prev) => indentNode(prev, node.key), { key: node.key, target: 'button:indent' })}
           >
@@ -200,7 +225,7 @@ function ChapterNodeRow({
             variant="ghost"
             size="sm"
             aria-label={`Desrecuar ${number}`}
-            disabled={!canOutdent(nodes, node.key)}
+            disabled={!move?.outdent}
             data-action="outdent"
             onClick={() => actions.edit((prev) => outdentNode(prev, node.key), { key: node.key, target: 'button:outdent' })}
           >
@@ -211,7 +236,7 @@ function ChapterNodeRow({
             variant="ghost"
             size="sm"
             aria-label={`Remover capítulo ${number}`}
-            onClick={() => actions.remove(node)}
+            onClick={() => actions.remove(node, number)}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -231,7 +256,7 @@ function ChapterNodeRow({
               depth={depth + 1}
               index={i}
               siblingCount={node.children.length}
-              nodes={nodes}
+              moves={moves}
               numbers={numbers}
               endPages={endPages}
               validation={validation}
@@ -243,7 +268,7 @@ function ChapterNodeRow({
       )}
     </li>
   );
-}
+});
 
 interface Conflict {
   items: LinkConflict[];
@@ -350,23 +375,35 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
   const numbers = React.useMemo(() => numberEditable(nodes), [nodes]);
   const endPages = React.useMemo(() => endPagesOf(nodes, material.totalPages), [nodes, material.totalPages]);
   const validation = React.useMemo(() => validateEditable(nodes, material.totalPages), [nodes, material.totalPages]);
+  const moves = React.useMemo(() => movesOf(nodes), [nodes]);
   const isInvalid = validation.global !== null || validation.byKey.size > 0;
 
-  const edit = (fn: (prev: EditableChapter[]) => EditableChapter[], focus?: FocusRequest) => {
+  // Ações estáveis (as linhas são memoizadas); remove lê a árvore atual pelo ref.
+  const nodesRef = React.useRef(nodes);
+  React.useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  const edit = React.useCallback((fn: (prev: EditableChapter[]) => EditableChapter[], focus?: FocusRequest) => {
     if (focus) focusRequest.current = focus;
     setConflict(null);
     setNodes(fn);
-  };
+  }, []);
 
-  const actions: TreeActions = {
-    change: (key, patch) => edit((prev) => patchNode(prev, key, patch)),
-    edit,
-    remove: (node) => {
-      const count = countDescendants(nodes, node.key);
-      if (count > 0 && !window.confirm(`Remover "${node.title}" e ${count} subcapítulo(s)?`)) return;
-      edit((prev) => removeNode(prev, node.key), { key: focusKeyAfterRemove(nodes, node.key), target: 'title' });
-    },
-  };
+  const actions = React.useMemo<TreeActions>(
+    () => ({
+      change: (key, patch) => edit((prev) => patchNode(prev, key, patch)),
+      edit,
+      remove: (node, number) => {
+        const current = nodesRef.current;
+        const count = countDescendants(current, node.key);
+        const name = node.title.trim() || number;
+        if (count > 0 && !window.confirm(`Remover "${name}" e ${count} subcapítulo(s)?`)) return;
+        edit((prev) => removeNode(prev, node.key), { key: focusKeyAfterRemove(current, node.key), target: 'title' });
+      },
+    }),
+    [edit],
+  );
 
   return (
     <AdaptiveModal
@@ -398,7 +435,7 @@ export function MaterialChaptersPanel({ material, open, onOpenChange }: Material
                   depth={0}
                   index={i}
                   siblingCount={nodes.length}
-                  nodes={nodes}
+                  moves={moves}
                   numbers={numbers}
                   endPages={endPages}
                   validation={validation}
