@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   alignDraftsToText,
-  buildChunkAssignments,
+  chunkAssignmentsFromRows,
   isValidChapterSequence,
   headingsToDrafts,
   isGenericOutlineTitle,
@@ -9,7 +9,7 @@ import {
   draftsToTree,
   numberChapters,
   numberNodes,
-  relinkByOrder,
+  relinkByTitle,
   toChapterRows,
   findChapterTreeError,
   isValidChapterTree,
@@ -169,36 +169,54 @@ describe('toChapterRows', () => {
     expect(draftsToTree([{ title: 'a', startPage: 2 }])).toEqual([{ title: 'a', startPage: 2, children: [] }]));
 });
 
-describe('buildChunkAssignments', () => {
-  it('páginas antes do primeiro capítulo ficam sem capítulo', () =>
-    expect(
-      buildChunkAssignments(toChapterRows(draftsToTree([{ title: 'a', startPage: 12 }, { title: 'b', startPage: 25 }]), 300), 300),
-    ).toEqual([
-      { order: null, title: null, fromPage: 1, toPage: 11 },
-      { order: 1, title: 'a', fromPage: 12, toPage: 24 },
-      { order: 2, title: 'b', fromPage: 25, toPage: 300 },
+describe('chunkAssignmentsFromRows', () => {
+  const rows = toChapterRows([node('U1', 5, node('1.1', 5), node('1.2', 8)), node('U2', 12)], 20);
+  it('nó mais profundo vence: faixas em pré-ordem após o trecho nulo', () =>
+    expect(chunkAssignmentsFromRows(rows, 20)).toEqual([
+      { order: null, title: null, fromPage: 1, toPage: 4 },
+      { order: 1, title: 'U1', fromPage: 5, toPage: 11 },
+      { order: 2, title: '1.1', fromPage: 5, toPage: 7 },
+      { order: 3, title: '1.2', fromPage: 8, toPage: 11 },
+      { order: 4, title: 'U2', fromPage: 12, toPage: 20 },
     ]));
-  it('sem faixa nula quando o primeiro capítulo começa na página 1', () =>
-    expect(buildChunkAssignments(toChapterRows(draftsToTree([{ title: 'a', startPage: 1 }]), 10), 10)).toEqual([
-      { order: 1, title: 'a', fromPage: 1, toPage: 10 },
-    ]));
-  it('lista vazia vira uma faixa nula do documento inteiro', () =>
-    expect(buildChunkAssignments([], 50)).toEqual([{ order: null, title: null, fromPage: 1, toPage: 50 }]));
+  it('dois irmãos na página 21: a página fica com o segundo (último em pré-ordem)', () => {
+    const shared = toChapterRows([node('R', 20, node('a', 21), node('b', 21)), node('S', 30)], 40);
+    const result = chunkAssignmentsFromRows(shared, 40);
+    expect(result).toEqual([
+      { order: null, title: null, fromPage: 1, toPage: 19 },
+      { order: 1, title: 'R', fromPage: 20, toPage: 29 },
+      { order: 2, title: 'a', fromPage: 21, toPage: 21 },
+      { order: 3, title: 'b', fromPage: 21, toPage: 29 },
+      { order: 4, title: 'S', fromPage: 30, toPage: 40 },
+    ]);
+    expect(result.filter((a) => a.fromPage <= 21 && 21 <= a.toPage).at(-1)?.title).toBe('b');
+  });
+  it('sem linhas: um trecho nulo do documento inteiro', () =>
+    expect(chunkAssignmentsFromRows([], 20)).toEqual([{ order: null, title: null, fromPage: 1, toPage: 20 }]));
 });
 
-describe('relinkByOrder', () => {
-  it('mesma contagem mantém pares; diferente conta aulas distintas', () => {
-    const old = [
-      { order: 1, lessonPlanIds: ['l1', 'l2'] },
-      { order: 2, lessonPlanIds: ['l2'] },
-    ];
-    expect(relinkByOrder(old, 2).relinks).toEqual([
-      { order: 1, lessonPlanId: 'l1' },
-      { order: 1, lessonPlanId: 'l2' },
-      { order: 2, lessonPlanId: 'l2' },
-    ]);
-    expect(relinkByOrder(old, 3)).toEqual({ relinks: [], lostLessonLinks: 2 });
+describe('relinkByTitle', () => {
+  it('título igual com página diferente re-vincula', () =>
+    expect(relinkByTitle([{ order: 1, title: 'Conjuntos', startPage: 15 }],
+      toChapterRows([node('Intro', 1), node('Conjuntos', 17)], 30), [{ order: 1, lessonPlanIds: ['l1'] }]))
+      .toEqual({ relinks: [{ order: 2, lessonPlanId: 'l1' }], lostLessonLinks: 0, lostLessonPlanIds: [] }));
+  it('normaliza acentos, caixa e espaços', () =>
+    expect(relinkByTitle([{ order: 1, title: 'Frações  e Decimais', startPage: 3 }],
+      toChapterRows([node('fracoes e decimais', 3)], 9), [{ order: 1, lessonPlanIds: ['l1'] }]).relinks)
+      .toEqual([{ order: 1, lessonPlanId: 'l1' }]));
+  it('título duplicado só casa com a mesma página', () => {
+    const old = [{ order: 1, title: 'Exercícios', startPage: 10 }, { order: 2, title: 'Exercícios', startPage: 20 }];
+    const links = [{ order: 1, lessonPlanIds: ['l1'] }, { order: 2, lessonPlanIds: ['l2'] }];
+    expect(relinkByTitle(old, toChapterRows([node('A', 1, node('Exercícios', 10)), node('B', 15, node('Exercícios', 20))], 30), links).lostLessonLinks).toBe(0);
+    expect(relinkByTitle(old, toChapterRows([node('A', 1, node('Exercícios', 12)), node('B', 15, node('Exercícios', 22))], 30), links))
+      .toMatchObject({ relinks: [], lostLessonLinks: 2, lostLessonPlanIds: ['l1', 'l2'] });
   });
+  it('título que some perde o vínculo e conta aulas distintas', () =>
+    expect(relinkByTitle(
+      [{ order: 1, title: 'A', startPage: 1 }, { order: 2, title: 'B', startPage: 5 }],
+      toChapterRows([node('A', 1), node('C', 5)], 9),
+      [{ order: 1, lessonPlanIds: ['l1'] }, { order: 2, lessonPlanIds: ['l1', 'l2'] }],
+    )).toEqual({ relinks: [{ order: 1, lessonPlanId: 'l1' }], lostLessonLinks: 2, lostLessonPlanIds: ['l1', 'l2'] }));
 });
 
 describe('outlineToDrafts (segundo nível sem promover seções)', () => {

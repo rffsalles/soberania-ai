@@ -272,6 +272,76 @@ export function relinkByOrder(
   return { relinks: [], lostLessonLinks: new Set(old.flatMap((c) => c.lessonPlanIds)).size };
 }
 
+/** Faixas por linha em pré-ordem; irmãos na mesma página se sobrepõem e o último UPDATE (último em pré-ordem) vence. */
+export function chunkAssignmentsFromRows(rows: ChapterRow[], totalPages: number): ChunkAssignment[] {
+  if (rows.length === 0) return [{ order: null, title: null, fromPage: 1, toPage: totalPages }];
+  const result: ChunkAssignment[] = [];
+  if (rows[0].startPage > 1) result.push({ order: null, title: null, fromPage: 1, toPage: rows[0].startPage - 1 });
+  for (const r of rows) result.push({ order: r.order, title: r.title, fromPage: r.startPage, toPage: r.endPage });
+  return result;
+}
+
+export type RelinkResult = {
+  relinks: { order: number; lessonPlanId: string }[];
+  lostLessonLinks: number;
+  lostLessonPlanIds: string[];
+};
+
+function normalizeTitle(title: string): string {
+  return title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Re-vincula aulas por título normalizado: 1º mesmo título e página; 2º título único entre os restantes. */
+export function relinkByTitle(
+  oldChapters: { order: number; title: string; startPage: number }[],
+  newRows: ChapterRow[],
+  oldLinks: ChapterLinks[],
+): RelinkResult {
+  const olds = [...oldChapters].sort((a, b) => a.order - b.order);
+  const freeNew = new Set(newRows.map((r) => r.order));
+  const newByOrder = new Map(newRows.map((r) => [r.order, r]));
+  const pairs = new Map<number, number>(); // order antigo -> order novo
+
+  for (const o of olds) {
+    const key = normalizeTitle(o.title);
+    const match = newRows.find((r) => freeNew.has(r.order) && normalizeTitle(r.title) === key && r.startPage === o.startPage);
+    if (match) {
+      pairs.set(o.order, match.order);
+      freeNew.delete(match.order);
+    }
+  }
+
+  const remaining = olds.filter((o) => !pairs.has(o.order));
+  for (const o of remaining) {
+    const key = normalizeTitle(o.title);
+    const newMatches = [...freeNew].filter((order) => normalizeTitle(newByOrder.get(order)!.title) === key);
+    const oldMatches = remaining.filter((r) => !pairs.has(r.order) && normalizeTitle(r.title) === key);
+    if (newMatches.length === 1 && oldMatches.length === 1) {
+      pairs.set(o.order, newMatches[0]);
+      freeNew.delete(newMatches[0]);
+    }
+  }
+
+  const linksByOrder = new Map(oldLinks.map((l) => [l.order, l.lessonPlanIds]));
+  const relinks: RelinkResult['relinks'] = [];
+  const lost: string[] = [];
+  for (const o of olds) {
+    const ids = linksByOrder.get(o.order) ?? [];
+    const target = pairs.get(o.order);
+    if (target === undefined) {
+      for (const id of ids) if (!lost.includes(id)) lost.push(id);
+    } else {
+      for (const lessonPlanId of ids) relinks.push({ order: target, lessonPlanId });
+    }
+  }
+  return { relinks, lostLessonLinks: lost.length, lostLessonPlanIds: lost };
+}
+
 export type ChapterTreeError = { number: string | null; message: string };
 
 function exceedsNodeLimit(tree: ChapterNode[]): boolean {
