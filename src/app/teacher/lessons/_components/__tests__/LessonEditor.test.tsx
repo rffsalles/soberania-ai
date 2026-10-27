@@ -3,57 +3,12 @@ import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-vi.mock('@/components/ui/advanced-multi-combobox', () => ({
-  AdvancedMultiCombobox: ({
-    items,
-    selectedIds,
-    onSelectionChange,
-    label,
-  }: {
-    items: { id: string; title: string }[];
-    selectedIds: string[];
-    onSelectionChange: (ids: string[], items: unknown[]) => void;
-    label?: string;
-  }) => (
-    <fieldset>
-      <legend>{label}</legend>
-      {items.map((item) => (
-        <label key={item.id}>
-          <input
-            type="checkbox"
-            aria-label={item.title}
-            checked={selectedIds.includes(item.id)}
-            onChange={() =>
-              onSelectionChange(
-                selectedIds.includes(item.id) ? selectedIds.filter((i) => i !== item.id) : [...selectedIds, item.id],
-                [],
-              )
-            }
-          />
-        </label>
-      ))}
-    </fieldset>
-  ),
-}));
-vi.mock('@/components/teaching/use-plan-chapters', () => ({
-  usePlanChapters: () => ({
-    books: [
-      {
-        materialId: 'm1',
-        title: 'Livro',
-        author: 'Autor',
-        kind: 'BASIC',
-        chapters: [
-          { id: 'ch1', order: 1, number: '1', parentId: null, depth: 0, title: 'Intro', startPage: 1, endPage: 10 },
-          { id: 'ch2', order: 2, number: '2', parentId: null, depth: 0, title: 'Modelo', startPage: 11, endPage: 20 },
-        ],
-      },
-    ],
-    isLoading: false,
-    error: null,
-    reload: vi.fn(),
-  }),
-}));
+vi.mock('@/components/teaching/use-plan-chapters', async () => {
+  const { MAT_BOOK } = await import('@/components/teaching/__tests__/chapter-tree-fixtures');
+  return {
+    usePlanChapters: () => ({ books: [MAT_BOOK], isLoading: false, error: null, reload: vi.fn() }),
+  };
+});
 vi.mock('../MediaTabs', () => ({ MediaTabs: () => null }));
 
 import { LessonEditor } from '../LessonEditor';
@@ -111,10 +66,10 @@ describe('LessonEditor', () => {
     expect(button.disabled).toBe(true);
     expect(screen.getByText('Selecione e salve ao menos um capítulo para gerar a aula.')).toBeTruthy();
 
-    rerender(<LessonEditor lesson={makeLesson({ chapters: [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }] })} onSaved={() => {}} />);
+    rerender(<LessonEditor lesson={makeLesson({ chapters: [{ chapterId: 'u1', chapter: { order: 1, number: '1' } }] })} onSaved={() => {}} />);
     expect((screen.getByRole('button', { name: 'Gerar aula com IA' }) as HTMLButtonElement).disabled).toBe(false);
 
-    fireEvent.click(screen.getByLabelText('2 Modelo'));
+    fireEvent.click(screen.getByRole('treeitem', { name: '2 Unidade 2' }));
     expect((screen.getByRole('button', { name: 'Gerar aula com IA' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Salve os capítulos selecionados antes de gerar.')).toBeTruthy();
   });
@@ -125,7 +80,7 @@ describe('LessonEditor', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(
       <LessonEditor
-        lesson={makeLesson({ dailyObjective: 'Antigo', chapters: [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }] })}
+        lesson={makeLesson({ dailyObjective: 'Antigo', chapters: [{ chapterId: 'u1', chapter: { order: 1, number: '1' } }] })}
         onSaved={() => {}}
       />,
     );
@@ -165,7 +120,7 @@ describe('LessonEditor', () => {
   });
 
   it('após gerar (formulário não salvo) bloqueia "Publicar"; após salvar, publica o que foi salvo', async () => {
-    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }];
+    const SAVED = [{ chapterId: 'u1', chapter: { order: 1, number: '1' } }];
     const initial = makeLesson({ topicTitle: 'Modelagem', chapters: SAVED });
     const fetchMock = routeFetch({
       [`POST ${BASE}/generate`]: { success: true, data: GENERATED },
@@ -226,12 +181,25 @@ describe('LessonEditor', () => {
     vi.stubGlobal('fetch', fetchMock);
     const onSaved = vi.fn();
     render(<LessonEditor lesson={makeLesson({ topicTitle: 'Modelagem' })} onSaved={onSaved} />);
-    fireEvent.click(screen.getByLabelText('2 Modelo'));
+    fireEvent.click(screen.getByRole('treeitem', { name: '2 Unidade 2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Salvar aula' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const [, init] = fetchMock.mock.calls[0];
-    expect(JSON.parse(init!.body as string).chapterIds).toEqual(['ch2']);
+    expect(JSON.parse(init!.body as string).chapterIds).toEqual(['u2']);
     expect(screen.getByRole('status').textContent).toBe('Aula salva.');
+  });
+
+  it('marcar a unidade com uma seção salva troca a seção pela unidade ao salvar', async () => {
+    const fetchMock = routeFetch({ [`PUT ${BASE}`]: { success: true, lesson: makeLesson() } });
+    vi.stubGlobal('fetch', fetchMock);
+    const onSaved = vi.fn();
+    render(<LessonEditor lesson={makeLesson({ chapters: [{ chapterId: 's21', chapter: { order: 3, number: '2.1' } }] })} onSaved={onSaved} />);
+    expect(screen.getByRole('treeitem', { name: '2 Unidade 2' }).getAttribute('aria-checked')).toBe('mixed');
+    fireEvent.click(screen.getByRole('treeitem', { name: '2 Unidade 2' }));
+    expect(screen.getByText('Salve os capítulos selecionados antes de gerar.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar aula' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).chapterIds).toEqual(['u2']);
   });
 
   describe('refino por etapa', () => {
@@ -239,7 +207,7 @@ describe('LessonEditor', () => {
       { timeSeconds: 0, timeRange: '00:00-10:00', activity: 'A1', description: 'Desc 1' },
       { timeSeconds: 600, timeRange: '10:00-20:00', activity: 'A2', description: 'Desc 2' },
     ];
-    const SAVED = [{ chapterId: 'ch1', chapter: { order: 1, number: '1' } }];
+    const SAVED = [{ chapterId: 'u1', chapter: { order: 1, number: '1' } }];
 
     function startRefine(label: string) {
       fireEvent.click(screen.getByRole('button', { name: `Refinar ${label}` }));

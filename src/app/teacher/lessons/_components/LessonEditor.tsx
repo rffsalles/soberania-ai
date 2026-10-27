@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { AdvancedMultiCombobox } from '@/components/ui/advanced-multi-combobox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   INSTITUTION_TIMEZONE,
@@ -19,7 +18,7 @@ import { toLocalDateTimeInput } from '@/lib/timezone';
 import type { TimeScriptItem } from '@/domains/teaching/time-script';
 import { refineLesson, saveLesson, type LessonItem } from '@/components/teaching/use-lessons';
 import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
-import { planChaptersToComboboxItems } from '@/components/teaching/chapter-combobox-item';
+import { ChapterTreeSelect } from '@/components/teaching/ChapterTreeSelect';
 import { MediaTabs } from './MediaTabs';
 import { RefineField } from './RefineField';
 import { useLessonGeneration } from './use-lesson-generation';
@@ -61,7 +60,6 @@ export function LessonEditor({ lesson, onSaved }: Props) {
     setChapterIds(savedKey ? savedKey.split(',') : []);
   }, [savedKey]);
   const { books } = usePlanChapters(lesson.courseSchedule.teachingPlanId);
-  const chapterItems = React.useMemo(() => planChaptersToComboboxItems(books), [books]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -175,12 +173,12 @@ export function LessonEditor({ lesson, onSaved }: Props) {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          <AdvancedMultiCombobox
+          <ChapterTreeSelect
             id="lesson-chapters"
             label="Capítulos desta aula"
-            items={chapterItems}
+            books={books}
             selectedIds={chapterIds}
-            onSelectionChange={(ids) => setChapterIds(ids)}
+            onSelectionChange={setChapterIds}
           />
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={generate} disabled={busy || generateLock !== undefined} className="gap-2">
