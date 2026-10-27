@@ -240,12 +240,26 @@ export function numberChapters<T extends { id: string; order: number; parentId: 
   return chapters.map((c, i) => ({ ...c, number: numbers[i] }));
 }
 
-/** Faixas por linha em pré-ordem; irmãos na mesma página se sobrepõem e o último UPDATE (último em pré-ordem) vence. */
+/**
+ * Segmentos disjuntos que cobrem 1..totalPages em ordem de página. Cada página fica com o ÚLTIMO nó em
+ * pré-ordem cuja faixa a cobre (o mais profundo/o último irmão); páginas antes da primeira raiz ficam nulas.
+ */
 export function chunkAssignmentsFromRows(rows: ChapterRow[], totalPages: number): ChunkAssignment[] {
   if (rows.length === 0) return [{ order: null, title: null, fromPage: 1, toPage: totalPages }];
+  const owner: (ChapterRow | null)[] = new Array(totalPages + 1).fill(null);
+  for (const r of rows) {
+    for (let page = Math.max(1, r.startPage); page <= Math.min(totalPages, r.endPage); page++) owner[page] = r;
+  }
   const result: ChunkAssignment[] = [];
-  if (rows[0].startPage > 1) result.push({ order: null, title: null, fromPage: 1, toPage: rows[0].startPage - 1 });
-  for (const r of rows) result.push({ order: r.order, title: r.title, fromPage: r.startPage, toPage: r.endPage });
+  for (let page = 1; page <= totalPages; page++) {
+    const r = owner[page];
+    const last = result[result.length - 1];
+    if (last && last.order === (r?.order ?? null)) {
+      last.toPage = page;
+    } else {
+      result.push({ order: r?.order ?? null, title: r?.title ?? null, fromPage: page, toPage: page });
+    }
+  }
   return result;
 }
 

@@ -157,26 +157,29 @@ describe('toChapterRows', () => {
 
 describe('chunkAssignmentsFromRows', () => {
   const rows = toChapterRows([node('U1', 5, node('1.1', 5), node('1.2', 8)), node('U2', 12)], 20);
-  it('nó mais profundo vence: faixas em pré-ordem após o trecho nulo', () =>
+  it('segmentos disjuntos: a página fica com o último nó em pré-ordem que a cobre', () =>
     expect(chunkAssignmentsFromRows(rows, 20)).toEqual([
       { order: null, title: null, fromPage: 1, toPage: 4 },
-      { order: 1, title: 'U1', fromPage: 5, toPage: 11 },
       { order: 2, title: '1.1', fromPage: 5, toPage: 7 },
       { order: 3, title: '1.2', fromPage: 8, toPage: 11 },
       { order: 4, title: 'U2', fromPage: 12, toPage: 20 },
     ]));
   it('dois irmãos na página 21: a página fica com o segundo (último em pré-ordem)', () => {
     const shared = toChapterRows([node('R', 20, node('a', 21), node('b', 21)), node('S', 30)], 40);
-    const result = chunkAssignmentsFromRows(shared, 40);
-    expect(result).toEqual([
+    expect(chunkAssignmentsFromRows(shared, 40)).toEqual([
       { order: null, title: null, fromPage: 1, toPage: 19 },
-      { order: 1, title: 'R', fromPage: 20, toPage: 29 },
-      { order: 2, title: 'a', fromPage: 21, toPage: 21 },
+      { order: 1, title: 'R', fromPage: 20, toPage: 20 },
       { order: 3, title: 'b', fromPage: 21, toPage: 29 },
       { order: 4, title: 'S', fromPage: 30, toPage: 40 },
     ]);
-    expect(result.filter((a) => a.fromPage <= 21 && 21 <= a.toPage).at(-1)?.title).toBe('b');
   });
+  it('pai com página própria antes do primeiro filho', () =>
+    expect(chunkAssignmentsFromRows(toChapterRows([node('U', 5, node('a', 7)), node('V', 10)], 12), 12)).toEqual([
+      { order: null, title: null, fromPage: 1, toPage: 4 },
+      { order: 1, title: 'U', fromPage: 5, toPage: 6 },
+      { order: 2, title: 'a', fromPage: 7, toPage: 9 },
+      { order: 3, title: 'V', fromPage: 10, toPage: 12 },
+    ]));
   it('sem linhas: um trecho nulo do documento inteiro', () =>
     expect(chunkAssignmentsFromRows([], 20)).toEqual([{ order: null, title: null, fromPage: 1, toPage: 20 }]));
 });

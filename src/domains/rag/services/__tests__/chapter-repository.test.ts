@@ -53,7 +53,7 @@ describe('replaceChapters', () => {
   });
   it('aplica o trecho nulo antes das faixas dos nós', async () => {
     await replaceChapters('m1', rows, 'MANUAL' as never, [], chunkAssignmentsFromRows(rows, 20));
-    expect(tx.$executeRaw.mock.calls.map((c: any[]) => c[1])).toEqual([null, 'id1', 'id2', 'id3', 'id4']);
+    expect(tx.$executeRaw.mock.calls.map((c: any[]) => c[1])).toEqual([null, 'id2', 'id3', 'id4']);
   });
   it('listChapters deriva number', async () => {
     dbFindMany.mockResolvedValue([
