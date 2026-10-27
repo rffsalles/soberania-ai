@@ -19,6 +19,22 @@ export const updateOfferingSchema = z.object({
   teacherIds: z.array(z.string()).default([]),
 });
 
+export const createStudentSchema = z.object({
+  name: z.string().trim().min(3, 'Informe o nome completo'),
+  email: z.string().trim().email('E-mail inválido').toLowerCase(),
+  enrollment: z.string().trim().min(3, 'Informe a matrícula'),
+  password: z.string().min(8, 'A senha deve ter no mínimo 8 caracteres'),
+  classId: z.string({ required_error: 'Selecione a turma' }).cuid('Selecione a turma'),
+});
+
+// classId nulo desvincula o aluno da turma.
+export const enrollStudentSchema = z.object({
+  id: z.string({ required_error: 'ID é obrigatório' }).min(1, 'ID é obrigatório'),
+  classId: z.string({ required_error: 'Selecione a turma' }).cuid('Selecione a turma').nullable(),
+});
+
+export type CreateStudentInput = z.infer<typeof createStudentSchema>;
+export type EnrollStudentInput = z.infer<typeof enrollStudentSchema>;
 export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;
 export type CreateOfferingInput = z.infer<typeof createOfferingSchema>;
 

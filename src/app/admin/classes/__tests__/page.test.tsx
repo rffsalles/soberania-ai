@@ -36,4 +36,12 @@ describe('AdminClassesPage', () => {
     expect(row.getByText('2026.1')).toBeTruthy();
     expect(row.getByText('3')).toBeTruthy();
   });
+
+  it('oferece link para os alunos da turma', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, classes: [existing] }), { status: 200 })));
+    render(<AdminClassesPage />);
+    await screen.findByText('3º Semestre · ADS');
+    const link = screen.getByRole('link', { name: 'Alunos' });
+    expect(link.getAttribute('href')).toBe('/admin/classes/cclass00001/students');
+  });
 });

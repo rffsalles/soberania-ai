@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTeacherSchema, createOfferingSchema, updateOfferingSchema, createClassSchema, updateClassSchema, createCourseSchema, updateCourseSchema, createDisciplineSchema, updateDisciplineSchema } from '../admin.validator';
+import { createTeacherSchema, createStudentSchema, enrollStudentSchema, createOfferingSchema, updateOfferingSchema, createClassSchema, updateClassSchema, createCourseSchema, updateCourseSchema, createDisciplineSchema, updateDisciplineSchema } from '../admin.validator';
 
 const valid = {
   name: 'Carlos Silva',
@@ -119,5 +119,37 @@ describe('createDisciplineSchema', () => {
     const parsed = updateDisciplineSchema.parse({ ...base, id: 'd1', workloadHours: 80 });
     expect(parsed).not.toHaveProperty('courseId');
     expect(updateDisciplineSchema.safeParse({ code: 'BD101', name: 'Banco de Dados I', workloadHours: 80 }).error?.issues[0].message).toBe('ID é obrigatório');
+  });
+});
+
+describe('createStudentSchema', () => {
+  const ok = { name: ' Ana Souza ', email: ' ANA@Escola.com ', enrollment: ' 2026001 ', password: '12345678', classId: 'cjld2cjxh0000qzrmn831i7rn' };
+  it('normaliza nome, e-mail e matrícula', () => {
+    const r = createStudentSchema.safeParse(ok);
+    expect(r.success && r.data).toMatchObject({ name: 'Ana Souza', email: 'ana@escola.com', enrollment: '2026001' });
+  });
+  it.each([
+    [{ name: 'Al' }, 'Informe o nome completo'],
+    [{ email: 'x' }, 'E-mail inválido'],
+    [{ enrollment: '12' }, 'Informe a matrícula'],
+    [{ password: '1234567' }, 'A senha deve ter no mínimo 8 caracteres'],
+    [{ classId: 'abc' }, 'Selecione a turma'],
+    [{ classId: undefined }, 'Selecione a turma'],
+  ])('rejeita %j', (patch, msg) => {
+    const r = createStudentSchema.safeParse({ ...ok, ...patch });
+    expect(!r.success && r.error.issues[0].message).toBe(msg);
+  });
+});
+
+describe('enrollStudentSchema', () => {
+  it('aceita turma e null', () => {
+    expect(enrollStudentSchema.safeParse({ id: 'u1', classId: 'cjld2cjxh0000qzrmn831i7rn' }).success).toBe(true);
+    expect(enrollStudentSchema.safeParse({ id: 'u1', classId: null }).success).toBe(true);
+  });
+  it('rejeita id vazio e turma inválida', () => {
+    const a = enrollStudentSchema.safeParse({ id: '', classId: null });
+    expect(!a.success && a.error.issues[0].message).toBe('ID é obrigatório');
+    const b = enrollStudentSchema.safeParse({ id: 'u1', classId: 'x' });
+    expect(!b.success && b.error.issues[0].message).toBe('Selecione a turma');
   });
 });

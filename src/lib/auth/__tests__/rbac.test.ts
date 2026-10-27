@@ -13,6 +13,8 @@ describe('canAccessRoute', () => {
     '/appliance',
     '/api/v1/admin/teachers',
     '/api/v1/admin/classes',
+    '/api/v1/admin/students',
+    '/admin/classes/abc/students',
     '/api/v1/teacher/plans',
     '/api/v1/library/materials',
     '/api/v1/mcp',
@@ -38,7 +40,7 @@ describe('canAccessRoute', () => {
     expect(canAccessRoute(path, TEACHER)).toBe(true);
   });
 
-  it.each(['/appliance', '/admin/subjects', '/admin/classes', '/api/v1/admin/teachers'])(
+  it.each(['/appliance', '/admin/subjects', '/admin/classes', '/api/v1/admin/teachers', '/api/v1/admin/students', '/admin/classes/abc/students'])(
     'nega %s para TEACHER',
     (path) => {
       expect(canAccessRoute(path, TEACHER)).toBe(false);
@@ -53,6 +55,8 @@ describe('canAccessRoute', () => {
     '/reports',
     '/api/v1/admin/teachers',
     '/api/v1/admin/classes',
+    '/api/v1/admin/students',
+    '/admin/classes/abc/students',
     '/api/v1/appliance/telemetry',
     '/api/v1/mcp',
   ])('permite %s para ADMIN', (path) => {

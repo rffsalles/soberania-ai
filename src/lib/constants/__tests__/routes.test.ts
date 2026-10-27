@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAgendaLink } from '../routes';
+import { getAgendaLink, adminClassStudentsPath, API_ROUTES } from '../routes';
 
 describe('getAgendaLink', () => {
   it('maps CLASSROOM to the classroom page', () => {
@@ -16,5 +16,14 @@ describe('getAgendaLink', () => {
   });
   it('maps DRAFT_REVIEW to the draft review page', () => {
     expect(getAgendaLink({ id: 'a5', type: 'DRAFT_REVIEW' })).toBe('/draft-review/a5');
+  });
+});
+
+describe('rotas de matrícula de alunos', () => {
+  it('monta a página de alunos da turma', () => {
+    expect(adminClassStudentsPath('c1')).toBe('/admin/classes/c1/students');
+  });
+  it('expõe a rota da API de alunos', () => {
+    expect(API_ROUTES.ADMIN_STUDENTS).toBe('/api/v1/admin/students');
   });
 });

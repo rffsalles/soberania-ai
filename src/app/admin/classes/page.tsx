@@ -15,7 +15,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ClassFormModal, type ClassOption } from './_components/ClassFormModal';
-import { API_ROUTES } from '@/lib/constants/routes';
+import Link from 'next/link';
+import { API_ROUTES, adminClassStudentsPath } from '@/lib/constants/routes';
 
 export default function AdminClassesPage() {
   const [classes, setClasses] = React.useState<ClassOption[]>([]);
@@ -162,6 +163,12 @@ export default function AdminClassesPage() {
                     >
                       Editar
                     </Button>
+                    <Link
+                      href={adminClassStudentsPath(klass.id)}
+                      className="inline-flex items-center rounded-md px-2.5 py-1.5 text-xs text-brand-teal hover:text-brand-teal/80 cursor-pointer"
+                    >
+                      Alunos
+                    </Link>
                   </TableCell>
                 </TableRow>
               ))

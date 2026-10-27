@@ -63,10 +63,16 @@ export const API_ROUTES = {
   ADMIN_CLASSES: '/api/v1/admin/classes',
   ADMIN_COURSES: '/api/v1/admin/courses',
   ADMIN_DISCIPLINES: '/api/v1/admin/disciplines',
+  ADMIN_STUDENTS: '/api/v1/admin/students',
   ACADEMIC_PERIODS: '/api/v1/academic-periods',
   APPLIANCE: '/api/v1/appliance',
   APPLIANCE_TELEMETRY: '/api/v1/appliance/telemetry',
 } as const;
+
+/** Página de matrícula dos alunos de uma turma. */
+export function adminClassStudentsPath(classId: string): string {
+  return `/admin/classes/${classId}/students`;
+}
 
 /** Link da página de uma agenda, conforme o seu tipo. */
 export function getAgendaLink(agenda: Pick<AgendaDTO, 'id' | 'type'>): string {
