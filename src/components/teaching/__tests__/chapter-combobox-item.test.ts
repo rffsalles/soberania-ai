@@ -22,4 +22,8 @@ describe('chapter-combobox-item', () => {
     expect(formatChapterShortList(['2.10', '2.9'])).toBe('Cap. 2.9, 2.10');
     expect(formatChapterShortList([])).toBe('—');
   });
+
+  it('formatChapterShortList trata segmento não numérico como 0 (sem NaN no comparador)', () => {
+    expect(formatChapterShortList(['2.1', '2.x', '1'])).toBe('Cap. 1, 2.x, 2.1');
+  });
 });

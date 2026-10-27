@@ -340,6 +340,14 @@ describe('escopo do tutor', () => {
     expect(scope?.allowedChapterIds).toEqual(['s22', 's221', 's222']);
   });
 
+  it('loadTutorScope com expansão vazia mantém os capítulos escolhidos (nunca abre o escopo)', async () => {
+    const scope = await loadTutorScope('lp1', {
+      findLessonTutorScope: vi.fn(async () => ({ chapters: [fracoes], planMaterialIds: ['m1'] })),
+      listDescendantIds: vi.fn(async () => []),
+    });
+    expect(scope?.allowedChapterIds).toEqual(['s22']);
+  });
+
   it('loadTutorScope sem capítulos não expande e cai nos materiais do plano', async () => {
     const listDescendantIds = vi.fn();
     const scope = await loadTutorScope('lp1', {

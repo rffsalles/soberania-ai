@@ -83,8 +83,14 @@ export async function loadTutorScope(
   deps: TutorScopeDeps = { findLessonTutorScope, listDescendantIds },
 ): Promise<TutorScope | undefined> {
   const raw = await deps.findLessonTutorScope(lessonPlanId);
-  const expanded = raw && raw.chapters.length > 0 ? await deps.listDescendantIds(raw.chapters.map((c) => c.id)) : [];
-  return toTutorScope(raw, expanded);
+  if (!raw || raw.chapters.length === 0) {
+    // Sem capítulos o escopo vem dos materiais do plano: a lista expandida é só um placeholder ignorado.
+    return toTutorScope(raw, []);
+  }
+  const chosenIds = raw.chapters.map((c) => c.id);
+  const expanded = await deps.listDescendantIds(chosenIds);
+  // Uma lista expandida vazia nunca abre o escopo: volta aos capítulos escolhidos.
+  return toTutorScope(raw, expanded.length ? expanded : chosenIds);
 }
 
 const defaultDeps: ChatDeps = {

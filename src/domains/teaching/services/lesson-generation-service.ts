@@ -67,6 +67,12 @@ async function askModel(
  * Gera objetivo, metodologia, recursos, exercício e roteiro da aula a partir dos trechos dos capítulos vinculados.
  * Não grava nada; o professor revisa e salva. Saída inválida, fora da tolerância de tempo ou fallback → 503.
  */
+/** Escolhidos + descendentes; uma expansão vazia volta aos escolhidos (lista vazia nunca abre o escopo). */
+async function expandChapterIds(chosenIds: string[], deps: Pick<LessonGenerationDeps, 'listDescendantIds'>) {
+  const expanded = await deps.listDescendantIds(chosenIds);
+  return expanded.length ? expanded : chosenIds;
+}
+
 export async function generateLessonContent(
   lessonId: string,
   user: PlanActor,
@@ -78,7 +84,7 @@ export async function generateLessonContent(
   assertOwner(user, plan.teacherId);
   if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
 
-  const allowedChapterIds = await deps.listDescendantIds(lesson.chapters.map((c) => c.chapter.id));
+  const allowedChapterIds = await expandChapterIds(lesson.chapters.map((c) => c.chapter.id), deps);
   const queries = [lesson.topicTitle, plan.generalObjectives, `exemplos e exercícios de ${lesson.topicTitle}`];
   const results = await Promise.all(
     queries.map((query) => deps.search({ query, allowedChapterIds, topK: SEARCH_TOP_K }))
@@ -149,7 +155,7 @@ export async function refineLessonField(
   assertOwner(user, plan.teacherId);
   if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
 
-  const allowedChapterIds = await deps.listDescendantIds(lesson.chapters.map((c) => c.chapter.id));
+  const allowedChapterIds = await expandChapterIds(lesson.chapters.map((c) => c.chapter.id), deps);
   const found = await deps.search({
     query: `${input.instruction} ${lesson.topicTitle}`,
     allowedChapterIds,

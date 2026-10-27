@@ -85,6 +85,15 @@ describe('subárvore expandida', () => {
     expect(search.mock.calls[0][0].allowedChapterIds).toEqual(['u2', 's21', 's22', 's221', 's222']);
   });
 
+  it('expansão vazia mantém os capítulos escolhidos na geração e no refino (nunca abre o escopo)', async () => {
+    const gen = makeDeps({ lesson: fracoes, descendants: [] });
+    await generateLessonContent('l1', teacher, gen.deps);
+    expect(gen.search.mock.calls.every((c) => JSON.stringify(c[0].allowedChapterIds) === '["s22"]')).toBe(true);
+    const ref = makeDeps({ lesson: fracoes, descendants: [], text: 'Novo texto' });
+    await refineLessonField('l1', teacher, { field: 'methodology', instruction: 'mais curto', current: 'x' }, ref.deps);
+    expect(ref.search.mock.calls[0][0].allowedChapterIds).toEqual(['s22']);
+  });
+
   it('refino filtra pelo conjunto expandido e rotula sem páginas', async () => {
     const { deps, search, streamChat } = makeDeps({ lesson: fracoes, descendants: ['s22', 's221', 's222'], text: 'Novo texto' });
     await refineLessonField('l1', teacher, { field: 'methodology', instruction: 'mais curto', current: 'x' }, deps);

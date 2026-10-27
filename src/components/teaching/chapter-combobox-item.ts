@@ -39,8 +39,8 @@ export function planChaptersToComboboxItems(books: ClientPlanChapterBook[]): Com
 }
 
 function compareNumbers(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
+  const pa = a.split('.').map((x) => Number(x) || 0);
+  const pb = b.split('.').map((x) => Number(x) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const d = (pa[i] ?? -1) - (pb[i] ?? -1);
     if (d !== 0) return d;
