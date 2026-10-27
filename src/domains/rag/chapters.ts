@@ -1,5 +1,5 @@
 import type { OutlineEntry } from '@/domains/rag/types';
-import { MAX_CHAPTER_DEPTH, MAX_CHAPTER_NODES, MIN_EXTRACTED_CHAPTERS } from '@/domains/rag/constants';
+import { CHAPTER_TOC_EXTRA_PAGES, MAX_CHAPTER_DEPTH, MAX_CHAPTER_NODES, MIN_EXTRACTED_CHAPTERS } from '@/domains/rag/constants';
 
 export type ChapterNode = { title: string; startPage: number; children: ChapterNode[] };
 export type ChapterRow = {
@@ -85,6 +85,29 @@ const HEADING_TITLE_LOOKAHEAD = 3;
 /** Linha de sumário: líder de pontos (juntos ou separados por espaço)/reticências seguido do número de página no fim. */
 const TOC_LINE_PATTERN = /(\.{3,}|…|(?:\.\s+){2,}\.)\s*\d+\s*$/;
 
+/** true quando a página tem ao menos TOC_PAGE_MIN_LINES linhas de sumário. */
+export function isTocPage(text: string): boolean {
+  const tocLines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && TOC_LINE_PATTERN.test(l)).length;
+  return tocLines >= TOC_PAGE_MIN_LINES;
+}
+
+/**
+ * Páginas a enviar à extração de capítulos: as `windowSize` primeiras, mais até `maxExtra` páginas de sumário
+ * detectadas depois delas (sumários podem vir após capa, prefácio e apresentação), na ordem original.
+ */
+export function selectTocPages<T extends { pageNumber: number; text: string }>(
+  pages: T[],
+  windowSize: number,
+  maxExtra: number = CHAPTER_TOC_EXTRA_PAGES,
+): T[] {
+  const head = pages.slice(0, windowSize);
+  const extra = pages.slice(windowSize).filter((p) => isTocPage(p.text)).slice(0, maxExtra);
+  return [...head, ...extra];
+}
+
 /**
  * Detecta cabeçalhos "Unidade N", "Capítulo N"... no topo das páginas. Exige numeração sequencial
  * a partir de 1 e páginas crescentes; ≥ 2 acertos ou null. Repetições do mesmo número ficam na 1ª ocorrência.
@@ -93,11 +116,11 @@ export function headingsToDrafts(pages: { pageNumber: number; text: string }[]):
   const drafts: ChapterDraft[] = [];
   let lastPage = 0;
   for (const page of pages) {
+    if (isTocPage(page.text)) continue;
     const allLines = page.text
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean);
-    if (allLines.filter((l) => TOC_LINE_PATTERN.test(l)).length >= TOC_PAGE_MIN_LINES) continue;
     for (const raw of allLines.slice(0, HEADING_SCAN_LINES)) {
       if (TOC_LINE_PATTERN.test(raw)) continue;
       const line = raw.replace(/\s+/g, ' ');

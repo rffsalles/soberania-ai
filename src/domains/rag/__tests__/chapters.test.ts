@@ -4,6 +4,8 @@ import {
   chunkAssignmentsFromRows,
   headingsToDrafts,
   isGenericOutlineTitle,
+  isTocPage,
+  selectTocPages,
   outlineToDrafts,
   draftsToTree,
   numberChapters,
@@ -542,5 +544,25 @@ describe('isValidChapterTree', () => {
     expect(isValidChapterTree([node('A', 0), node('B', 5)], 20)).toBe(false);
     expect(isValidChapterTree([node('A', 1), node('B', 21)], 20)).toBe(false);
     expect(isValidChapterTree([node('A', 1), node('B', 2.5)], 20)).toBe(false);
+  });
+});
+
+describe('isTocPage', () => {
+  it('3 linhas com líder e número é sumário; 2 não', () => {
+    expect(isTocPage('Sumário\nA ........ 3\nB . . . . 9\nC …… 12')).toBe(true);
+    expect(isTocPage('A ........ 3\nB ........ 9\nTexto')).toBe(false);
+  });
+});
+
+describe('selectTocPages', () => {
+  const page = (pageNumber: number, text: string) => ({ pageNumber, text });
+  const toc = 'Sumário\nA ........ 3\nB ........ 9\nC ........ 12';
+  it('sem sumário fora da janela devolve só a janela', () => {
+    const pages = Array.from({ length: 20 }, (_, i) => page(i + 1, `Texto ${i + 1}`));
+    expect(selectTocPages(pages, 15).map((p) => p.pageNumber)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+  });
+  it('acrescenta no máximo 10 páginas de sumário depois da janela', () => {
+    const pages = Array.from({ length: 50 }, (_, i) => page(i + 1, i + 1 >= 30 && i + 1 <= 41 ? toc : `Texto ${i + 1}`));
+    expect(selectTocPages(pages, 5).map((p) => p.pageNumber)).toEqual([1, 2, 3, 4, 5, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]);
   });
 });

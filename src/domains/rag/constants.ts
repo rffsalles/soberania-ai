@@ -28,3 +28,7 @@ export const MIN_EXTRACTED_CHAPTERS = 2;
 export const MAX_CHAPTER_NODES = 500;
 /** Profundidade máxima da árvore de capítulos (raiz = 0). */
 export const MAX_CHAPTER_DEPTH = 6;
+/** Páginas de sumário detectadas fora da janela inicial, no máximo, por material. */
+export const CHAPTER_TOC_EXTRA_PAGES = 10;
+/** Máximo de caracteres por página de sumário detectada (usado na extração por IA). */
+export const CHAPTER_TOC_DETECTED_PAGE_CHARS = 4000;
