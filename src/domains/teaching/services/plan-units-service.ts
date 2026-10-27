@@ -11,6 +11,7 @@ import {
 } from '@/domains/agents/prompts/plan-units-prompt';
 import { NO_DISTRIBUTED_CHAPTERS, PLAN_UNITS_AI_UNAVAILABLE_MESSAGE } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
+import { chapterParentIndex, rootBooks, toRootIds } from '../chapter-roots';
 import { findScheduleForDistribution } from './course-schedule-repository';
 import { listPlanChapters, updatePlanById } from './teaching-plan-repository';
 import { planChapterIds, type PlanChapterBook } from './plan-chapters-service';
@@ -64,14 +65,18 @@ export async function generateUnitsFromDistribution(
   if (!schedule) throw new DomainError(404, 'Cronograma não encontrado.');
   assertOwner(user, schedule.teachingPlan.teacherId);
 
-  const lessons = schedule.lessonPlans
+  const rawLessons = schedule.lessonPlans
     .map((l) => ({ classNumber: l.classNumber, topicTitle: l.topicTitle ?? '', chapterIds: l.chapters.map((c) => c.chapterId) }))
     .filter((l) => l.chapterIds.length > 0);
-  if (lessons.length === 0) throw new DomainError(422, NO_DISTRIBUTED_CHAPTERS);
+  if (rawLessons.length === 0) throw new DomainError(422, NO_DISTRIBUTED_CHAPTERS);
 
-  const minUnits = Math.max(1, Math.min(PLAN_UNITS_MIN, countLessonGroups(lessons)));
   const { teachingPlan } = schedule;
-  const books = await deps.listPlanChapters(teachingPlan.id);
+  const allBooks = await deps.listPlanChapters(teachingPlan.id);
+  // Aulas podem referenciar seções; o plano trabalha só com capítulos raiz.
+  const parentIndex = chapterParentIndex(allBooks);
+  const lessons = rawLessons.map((l) => ({ ...l, chapterIds: toRootIds(l.chapterIds, parentIndex) }));
+  const books = rootBooks(allBooks);
+  const minUnits = Math.max(1, Math.min(PLAN_UNITS_MIN, countLessonGroups(lessons)));
   const messages = buildPlanUnitsMessages({
     subjectName: teachingPlan.subject.discipline.name,
     syllabus: teachingPlan.syllabus,

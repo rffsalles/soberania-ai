@@ -40,7 +40,7 @@ export function buildPlanUnitsMessages(input: PlanUnitsPromptInput): AIMessage[]
       const chapters = b.chapters
         .map((c) => {
           const pages = c.endPage ? `p. ${c.startPage} a ${c.endPage}` : `p. ${c.startPage}`;
-          return `id=${c.id} · Cap. ${c.order}: ${c.title} (${pages})`;
+          return `id=${c.id} · Cap. ${c.number}: ${c.title} (${pages})`;
         })
         .join('\n');
       return `${b.title} (${b.author})\n${chapters}`;

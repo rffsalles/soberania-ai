@@ -12,6 +12,22 @@ const books: PlanChapterBook[] = [
   },
 ];
 
+const ch = (id: string, order: number, title: string, startPage: number, endPage: number, parentId: string | null, depth: number, number: string) => ({
+  id, order, title, startPage, endPage, parentId, depth, number,
+});
+const book: PlanChapterBook = {
+  materialId: 'm1', title: 'Matemática Básica', author: 'Silva', kind: 'BASIC',
+  chapters: [
+    ch('u1', 1, 'Unidade 1', 15, 42, null, 0, '1'),
+    ch('u2', 2, 'Unidade 2', 43, 66, null, 0, '2'),
+    ch('s21', 3, 'Produtos notáveis', 43, 47, 'u2', 1, '2.1'),
+    ch('s22', 4, 'Frações', 48, 66, 'u2', 1, '2.2'),
+    ch('s221', 5, 'Operações com frações', 51, 57, 's22', 2, '2.2.1'),
+    ch('s222', 6, 'Frações equivalentes', 58, 66, 's22', 2, '2.2.2'),
+    ch('u3', 7, 'Unidade 3', 67, 94, null, 0, '3'),
+  ],
+};
+
 function schedule(withChapters = true, teacherId = 't1', chapterOf: (n: number) => string[] = (n) => [`ch${n}`]) {
   return {
     id: 'sch1',
@@ -54,6 +70,35 @@ function makeDeps(opts: { sch?: ReturnType<typeof schedule> | null; text?: strin
 }
 
 describe('plan-units-service', () => {
+  it('aulas com seções contam pela raiz do ramo no agrupamento, no prompt e na validação', async () => {
+    const sch = schedule(true, 't1', (n) => (n === 1 ? ['s21'] : n === 2 ? ['s221'] : n === 3 ? ['u1'] : ['u3']));
+    const units = [
+      { unitNumber: 1, title: 'U1', topics: ['a'], chapterIds: ['u1'] },
+      { unitNumber: 2, title: 'U2', topics: ['b'], chapterIds: ['u2'] },
+      { unitNumber: 3, title: 'U3', topics: ['c'], chapterIds: ['u3'] },
+    ];
+    const { deps, saveUnits, streamChat, listPlanChapters } = makeDeps({ sch, text: JSON.stringify({ units }) });
+    listPlanChapters.mockResolvedValue([book]);
+    expect(await generateUnitsFromDistribution('sch1', teacher, deps)).toEqual(units);
+    const user = streamChat.mock.calls[0][0][1].content as string;
+    expect(user).toContain('Aula 1 · Aula 1 · capítulos: u2');
+    expect(user).toContain('Aula 2 · Aula 2 · capítulos: u2');
+    expect(user).not.toContain('id=s21');
+    expect(saveUnits).toHaveBeenCalledWith('p1', units);
+  });
+
+  it('unidade com id de seção é inválida (503)', async () => {
+    const sch = schedule(true, 't1', (n) => (n <= 2 ? ['s21'] : n === 3 ? ['u1'] : ['u3']));
+    const bad = [
+      { unitNumber: 1, title: 'U1', topics: ['a'], chapterIds: ['u1'] },
+      { unitNumber: 2, title: 'U2', topics: ['b'], chapterIds: ['s21'] },
+      { unitNumber: 3, title: 'U3', topics: ['c'], chapterIds: ['u3'] },
+    ];
+    const { deps, listPlanChapters } = makeDeps({ sch, text: JSON.stringify({ units: bad }) });
+    listPlanChapters.mockResolvedValue([book]);
+    await expect(generateUnitsFromDistribution('sch1', teacher, deps)).rejects.toThrow(PLAN_UNITS_AI_UNAVAILABLE_MESSAGE);
+  });
+
   it('resposta válida grava unitsContent e devolve as unidades', async () => {
     const { deps, saveUnits, streamChat } = makeDeps({ text: JSON.stringify({ units }) });
     expect(await generateUnitsFromDistribution('sch1', teacher, deps)).toEqual(units);
