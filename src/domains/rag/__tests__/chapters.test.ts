@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   alignDraftsToText,
   chunkAssignmentsFromRows,
-  headingsToDrafts,
+  headingsToTree,
   isGenericOutlineTitle,
   isTocPage,
   selectTocPages,
@@ -227,7 +227,7 @@ describe('normalizeRelinks', () => {
     ]));
 });
 
-describe('headingsToDrafts', () => {
+describe('headingsToTree', () => {
   const page = (pageNumber: number, text: string) => ({ pageNumber, text });
   const body = (from: number, to: number) =>
     Array.from({ length: to - from + 1 }, (_, i) => page(from + i, `Texto corrido da página ${from + i}`));
@@ -238,18 +238,18 @@ describe('headingsToDrafts', () => {
       'Sumário\nUnidade 1 – Conjuntos . . . . 15\nUnidade 2 – Frações . . . . 43\nUnidade 3 – Geometria . . . 70',
     );
     expect(
-      headingsToDrafts([toc, page(17, 'Unidade 1 – Conjuntos\nTexto'), page(43, 'Unidade 2 – Frações\nTexto')]),
+      headingsToTree([toc, page(17, 'Unidade 1 – Conjuntos\nTexto'), page(43, 'Unidade 2 – Frações\nTexto')]),
     ).toEqual([
-      { title: 'Unidade 1 – Conjuntos', startPage: 17 },
-      { title: 'Unidade 2 – Frações', startPage: 43 },
+      { title: 'Unidade 1 – Conjuntos', startPage: 17, children: [] },
+      { title: 'Unidade 2 – Frações', startPage: 43, children: [] },
     ]);
   });
 
   it('"1, 2, 3, ..." sem número no fim não é sumário', () => {
     const p = page(9, 'Unidade 1 – Contagem\n1, 2, 3, ...\n1, 2, 3, ...\n1, 2, 3, ...');
-    expect(headingsToDrafts([p, page(30, 'Unidade 2 – Soma\nTexto')])).toEqual([
-      { title: 'Unidade 1 – Contagem', startPage: 9 },
-      { title: 'Unidade 2 – Soma', startPage: 30 },
+    expect(headingsToTree([p, page(30, 'Unidade 2 – Soma\nTexto')])).toEqual([
+      { title: 'Unidade 1 – Contagem', startPage: 9, children: [] },
+      { title: 'Unidade 2 – Soma', startPage: 30, children: [] },
     ]);
   });
 
@@ -264,25 +264,25 @@ describe('headingsToDrafts', () => {
       page(100, 'Unidade 4 – Trigonometria'),
       page(130, 'Texto\nUnidade 5 – Estatística'),
     ];
-    expect(headingsToDrafts(pages)).toEqual([
-      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 17 },
-      { title: 'Unidade 2 – Funções', startPage: 40 },
-      { title: 'UNIDADE 3 – Geometria', startPage: 70 },
-      { title: 'Unidade 4 – Trigonometria', startPage: 100 },
-      { title: 'Unidade 5 – Estatística', startPage: 130 },
+    expect(headingsToTree(pages)).toEqual([
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 17, children: [] },
+      { title: 'Unidade 2 – Funções', startPage: 40, children: [] },
+      { title: 'UNIDADE 3 – Geometria', startPage: 70, children: [] },
+      { title: 'Unidade 4 – Trigonometria', startPage: 100, children: [] },
+      { title: 'Unidade 5 – Estatística', startPage: 130, children: [] },
     ]);
   });
 
   it('cabeçalho repetido mantém a primeira ocorrência', () => {
     expect(
-      headingsToDrafts([
+      headingsToTree([
         page(5, 'Unidade 1 – A'),
         page(6, 'Unidade 1 – A\nmais texto'),
         page(20, 'Capítulo 2 - B'),
       ]),
     ).toEqual([
-      { title: 'Unidade 1 – A', startPage: 5 },
-      { title: 'Capítulo 2 - B', startPage: 20 },
+      { title: 'Unidade 1 – A', startPage: 5, children: [] },
+      { title: 'Capítulo 2 - B', startPage: 20, children: [] },
     ]);
   });
 
@@ -290,7 +290,7 @@ describe('headingsToDrafts', () => {
     const toc = (n: number, unit: number) =>
       page(n, `Unidade ${unit} – Tema ${unit}\nIntrodução......... 67\nRazão........... 69\nOutro............ 70`);
     expect(
-      headingsToDrafts([
+      headingsToTree([
         toc(9, 1),
         toc(10, 3),
         page(15, '13Módulo 0\nApresentação\nUNIDADE 1\nObjetivos'),
@@ -301,62 +301,88 @@ describe('headingsToDrafts', () => {
         page(45, '43Módulo 0\nUnidade 2 – Produtos Notáveis\nPRODUTOS'),
       ]),
     ).toEqual([
-      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
-      { title: 'Unidade 2 – Produtos Notáveis', startPage: 43 },
+      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15, children: [] },
+      { title: 'Unidade 2 – Produtos Notáveis', startPage: 43, children: [] },
     ]);
   });
 
   it('"Módulo 0" no topo antes das unidades não lança e não conta como acerto', () => {
     expect(
-      headingsToDrafts([
+      headingsToTree([
         page(3, 'Módulo 0\nApresentação'),
         page(4, 'Capítulo 0'),
         page(15, 'Unidade 1 – A'),
         page(43, 'Unidade 2 – B'),
       ]),
     ).toEqual([
-      { title: 'Unidade 1 – A', startPage: 15 },
-      { title: 'Unidade 2 – B', startPage: 43 },
+      { title: 'Unidade 1 – A', startPage: 15, children: [] },
+      { title: 'Unidade 2 – B', startPage: 43, children: [] },
     ]);
   });
 
   it('linhas de reticências sem número de página no fim não tornam a página um sumário', () => {
     expect(
-      headingsToDrafts([
+      headingsToTree([
         page(5, 'Unidade 1 – A\n1, 2, 3, ...\n4, 5, 6, ...\n7, 8, 9, ...'),
         page(9, 'Unidade 2 – B'),
       ]),
     ).toEqual([
-      { title: 'Unidade 1 – A', startPage: 5 },
-      { title: 'Unidade 2 – B', startPage: 9 },
+      { title: 'Unidade 1 – A', startPage: 5, children: [] },
+      { title: 'Unidade 2 – B', startPage: 9, children: [] },
     ]);
   });
 
   it('página de sumário com líderes de pontos e número é ignorada', () => {
     expect(
-      headingsToDrafts([
+      headingsToTree([
         page(2, 'Unidade 1 – Conjuntos ........ 15\nB ....... 20\nC ....... 30'),
         page(15, 'Unidade 1 – Conjuntos'),
         page(30, 'Unidade 2 – Outro'),
       ]),
     ).toEqual([
-      { title: 'Unidade 1 – Conjuntos', startPage: 15 },
-      { title: 'Unidade 2 – Outro', startPage: 30 },
+      { title: 'Unidade 1 – Conjuntos', startPage: 15, children: [] },
+      { title: 'Unidade 2 – Outro', startPage: 30, children: [] },
     ]);
   });
 
   it('só olha as 3 primeiras linhas não vazias', () => {
-    expect(headingsToDrafts([page(1, 'a\nb\nc\nUnidade 1 – X'), page(2, 'Unidade 2 – Y')])).toBeNull();
+    expect(headingsToTree([page(1, 'a\nb\nc\nUnidade 1 – X'), page(2, 'Unidade 2 – Y')])).toBeNull();
   });
 
   it('numeração fora de sequência devolve null', () =>
-    expect(headingsToDrafts([page(5, 'Unidade 1 – A'), page(9, 'Unidade 3 – C'), page(12, 'Unidade 4 – D')])).toBeNull());
+    expect(headingsToTree([page(5, 'Unidade 1 – A'), page(9, 'Unidade 3 – C'), page(12, 'Unidade 4 – D')])).toBeNull());
 
   it('numeração que não começa em 1 devolve null', () =>
-    expect(headingsToDrafts([page(5, 'Capítulo 2 – A'), page(9, 'Capítulo 3 – C')])).toBeNull());
+    expect(headingsToTree([page(5, 'Capítulo 2 – A'), page(9, 'Capítulo 3 – C')])).toBeNull());
 
   it('um único acerto devolve null', () =>
-    expect(headingsToDrafts([page(5, 'Unidade 1 – A'), page(9, 'Texto')])).toBeNull());
+    expect(headingsToTree([page(5, 'Unidade 1 – A'), page(9, 'Texto')])).toBeNull());
+
+  it('títulos numerados viram filhos com profundidade pela quantidade de pontos', () =>
+    expect(headingsToTree([
+      page(5, 'Capítulo 1 – Redes'), page(6, '1.1 Modelos de camadas'), page(8, 'Texto\n1.2 Endereçamento IP'),
+      page(9, '1.2.1 Sub-redes'), page(20, 'Capítulo 2 – Transporte'), page(22, '2.1 Protocolo TCP'),
+    ])).toEqual([
+      { title: 'Capítulo 1 – Redes', startPage: 5, children: [
+        { title: '1.1 Modelos de camadas', startPage: 6, children: [] },
+        { title: '1.2 Endereçamento IP', startPage: 8, children: [{ title: '1.2.1 Sub-redes', startPage: 9, children: [] }] },
+      ] },
+      { title: 'Capítulo 2 – Transporte', startPage: 20, children: [{ title: '2.1 Protocolo TCP', startPage: 22, children: [] }] },
+    ]));
+
+  it('numerado de outra raiz, sem pai intermediário ou antes da 1ª raiz é ignorado', () =>
+    expect(headingsToTree([
+      page(3, '1.1 Antes da raiz'), page(5, 'Capítulo 1 – A'), page(6, '2.3 Fora da raiz'),
+      page(7, '1.2.1 Sem pai'), page(9, '1.1 Certo'), page(20, 'Capítulo 2 – B'),
+    ])).toEqual([
+      { title: 'Capítulo 1 – A', startPage: 5, children: [{ title: '1.1 Certo', startPage: 9, children: [] }] },
+      { title: 'Capítulo 2 – B', startPage: 20, children: [] },
+    ]));
+
+  it('numerado repetido (cabeçalho corrido) fica na primeira ocorrência', () =>
+    expect(headingsToTree([page(5, 'Capítulo 1 – A'), page(8, '1.1 Seção'), page(9, '1.1 Seção'), page(20, 'Capítulo 2 – B')])?.[0].children).toEqual([
+      { title: '1.1 Seção', startPage: 8, children: [] },
+    ]));
 });
 
 describe('alignDraftsToText', () => {

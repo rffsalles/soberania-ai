@@ -131,6 +131,8 @@ export function outlineToTree(entries: OutlineEntry[]): ChapterNode[] {
 
 const HEADING_SCAN_LINES = 3;
 const HEADING_PATTERN = /^(Unidade|Cap[íi]tulo|Cap\.|Parte|M[óo]dulo)\s+(\d+)\b(.*)$/i;
+/** Título numerado de subnível: "1.1 Texto", "1.2.3 Texto". A profundidade vem da quantidade de pontos. */
+const NUMBERED_HEADING = /^\s*(\d+(?:\.\d+)+)\s+(\S.{2,})$/;
 const TOC_PAGE_MIN_LINES = 3;
 const HEADING_TITLE_LOOKAHEAD = 3;
 /** Linha de sumário: líder de pontos (juntos ou separados por espaço)/reticências seguido do número de página no fim. */
@@ -195,6 +197,60 @@ export function headingsToDrafts(pages: { pageNumber: number; text: string }[]):
     }
   }
   return drafts.length >= MIN_EXTRACTED_CHAPTERS ? drafts : null;
+}
+
+/**
+ * Árvore a partir do texto: raízes "Unidade/Capítulo N" (mesma lógica de headingsToDrafts) e, dentro de cada uma,
+ * títulos numerados "N.M ..." como filhos (profundidade = pontos). Numerado exige pai existente, primeiro número
+ * igual ao índice da raiz atual e páginas não decrescentes; repetição fica na 1ª ocorrência. < MIN_EXTRACTED_CHAPTERS raízes → null.
+ */
+export function headingsToTree(pages: { pageNumber: number; text: string }[]): ChapterNode[] | null {
+  const roots: ChapterNode[] = [];
+  let byNumber = new Map<string, ChapterNode>();
+  let lastPage = 0;
+  for (const page of pages) {
+    if (isTocPage(page.text)) continue;
+    const allLines = page.text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    for (const raw of allLines.slice(0, HEADING_SCAN_LINES)) {
+      if (TOC_LINE_PATTERN.test(raw)) continue;
+      const line = raw.replace(/\s+/g, ' ');
+      const m = HEADING_PATTERN.exec(line);
+      if (!m) {
+        const n = NUMBERED_HEADING.exec(line);
+        if (n && roots.length > 0) {
+          const parts = n[1].split('.');
+          const parent = parts.length === 2 ? roots[roots.length - 1] : byNumber.get(parts.slice(0, -1).join('.'));
+          if (Number(parts[0]) === roots.length && parent && !byNumber.has(n[1]) && page.pageNumber >= lastPage) {
+            const node: ChapterNode = { title: line, startPage: page.pageNumber, children: [] };
+            parent.children.push(node);
+            byNumber.set(n[1], node);
+            lastPage = page.pageNumber;
+          }
+        }
+        continue;
+      }
+      const num = Number(m[2]);
+      if (num === roots.length + 1 && page.pageNumber > lastPage) {
+        roots.push({ title: line, startPage: page.pageNumber, children: [] });
+        byNumber = new Map();
+        lastPage = page.pageNumber;
+      } else if (num > 0 && num === roots.length) {
+        // Página divisória só com "UNIDADE N": adota o título completo da página seguinte.
+        const last = roots[roots.length - 1];
+        const bare = /^\S+\s+\d+$/.test(last.title);
+        if (bare && line.length > last.title.length && page.pageNumber - last.startPage <= HEADING_TITLE_LOOKAHEAD) {
+          last.title = line;
+        }
+      } else if (num > roots.length + 1) {
+        return null;
+      }
+      break;
+    }
+  }
+  return roots.length >= MIN_EXTRACTED_CHAPTERS ? roots : null;
 }
 
 const ALIGN_PAGES_BEFORE = 1;
