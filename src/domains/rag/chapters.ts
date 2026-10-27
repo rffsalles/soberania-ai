@@ -77,7 +77,11 @@ export function outlineToTree(entries: OutlineEntry[]): ChapterNode[] {
     (stack.length > 0 ? stack[stack.length - 1].node.children : roots).push(node);
     stack.push({ depth: entry.depth, node });
   }
-  const tree = enforceOutlineOrder(resolveOutlineNodes(roots), 0, Infinity, { maxSoFar: 0 });
+  return promoteSingleRoot(enforceOutlineOrder(resolveOutlineNodes(roots), 0, Infinity, { maxSoFar: 0 }));
+}
+
+/** Raiz única (ex.: o título do livro) com 3+ filhos: os filhos viram raízes. Caso contrário devolve a própria árvore. */
+export function promoteSingleRoot(tree: ChapterNode[]): ChapterNode[] {
   return tree.length === 1 && tree[0].children.length >= MIN_NESTED_OUTLINE_CHAPTERS ? tree[0].children : tree;
 }
 

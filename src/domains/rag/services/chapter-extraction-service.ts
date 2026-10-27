@@ -14,6 +14,7 @@ import {
   isValidChapterTree,
   normalizeRelinks,
   outlineToTree,
+  promoteSingleRoot,
   relinkByTitle,
   selectTocPages,
   toChapterRows,
@@ -115,7 +116,8 @@ export async function extractChapterDrafts(
   const fromOutline = outlineToTree(nav.outline);
   if (valid(fromOutline)) return { source: 'OUTLINE', tree: fromOutline };
 
-  const rawAi = await askModel(input, nav, deps);
+  const answer = await askModel(input, nav, deps);
+  const rawAi = answer && promoteSingleRoot(answer);
   if (rawAi) {
     let aligned = rawAi;
     try {

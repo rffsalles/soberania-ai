@@ -205,6 +205,18 @@ describe('extractAndSaveChapters', () => {
     expect(r.chapters).toEqual(await replaceChapters.mock.results[0].value);
   });
 
+  it('raiz única da IA com 5 unidades vira 5 raízes', async () => {
+    const units = [2, 5, 8, 11, 14].map((p, i) => ({ title: `Unidade ${i + 1}`, startPage: p, children: [] }));
+    const r = await extractAndSaveChapters(
+      'm1',
+      { buffer, pages, totalPages: 20 },
+      depsWith({ ai: JSON.stringify({ chapters: [{ title: 'Matemática Básica', startPage: 1, children: units }] }) }),
+    );
+    expect(r.source).toBe('AI');
+    const rows: ChapterRow[] = replaceChapters.mock.calls[0][1];
+    expect(rows.map((x) => [x.depth, x.startPage])).toEqual([[0, 2], [0, 5], [0, 8], [0, 11], [0, 14]]);
+  });
+
   it('PDF sem outline usa a IA nas 15 primeiras páginas e grava AI', async () => {
     const r = await extractAndSaveChapters(
       'm1',

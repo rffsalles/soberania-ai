@@ -7,6 +7,7 @@ import {
   isTocPage,
   selectTocPages,
   outlineToTree,
+  promoteSingleRoot,
   numberChapters,
   normalizeRelinks,
   numberNodes,
@@ -54,6 +55,17 @@ describe('outlineToTree', () => {
     ]));
   it('filho que começa depois do próximo irmão do pai sai', () =>
     expect(outlineToTree([e('A', 5, 0), e('A.1', 20, 1), e('B', 15, 0)])).toEqual([n('A', 5), n('B', 15)]));
+});
+
+describe('promoteSingleRoot', () => {
+  it('raiz única com 3+ filhos: os filhos viram raízes; com 2 filhos ou 2 raízes fica igual', () => {
+    const kids = [node('a', 2, node('a1', 3)), node('b', 5), node('c', 9)];
+    expect(promoteSingleRoot([node('Livro', 1, ...kids)])).toEqual(kids);
+    const two = [node('Livro', 1, node('a', 2), node('b', 5))];
+    expect(promoteSingleRoot(two)).toBe(two);
+    const roots = [node('A', 1, ...kids), node('B', 20)];
+    expect(promoteSingleRoot(roots)).toBe(roots);
+  });
 });
 
 describe('isGenericOutlineTitle', () => {
