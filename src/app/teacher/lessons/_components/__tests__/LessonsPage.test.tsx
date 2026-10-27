@@ -40,8 +40,8 @@ vi.mock('@/components/teaching/use-schedules', () => ({
   useSchedules: (id: string | null) => useSchedules(id),
 }));
 const LESSONS = [
-  { id: 'les-1', classNumber: 1, topicTitle: 'Introdução', classDate: '2026-02-01T19:00:00.000Z', status: 'DRAFT' },
-  { id: 'les-2', classNumber: 2, topicTitle: 'Modelo relacional', classDate: '2026-02-08T19:00:00.000Z', status: 'PUBLISHED' },
+  { id: 'les-1', classNumber: 1, topicTitle: 'Introdução', classDate: '2026-02-01T19:00:00.000Z', status: 'DRAFT', dailyObjective: 'Apresentar o curso', timeScript: [{ activity: 'Abertura' }] },
+  { id: 'les-2', classNumber: 2, topicTitle: 'Aula 2', classDate: '2026-02-08T19:00:00.000Z', status: 'PUBLISHED', dailyObjective: '', timeScript: [] },
 ];
 vi.mock('@/components/teaching/use-lessons', () => ({
   useLessons: () => ({ lessons: LESSONS, isLoading: false, error: null, reload: vi.fn() }),
@@ -85,6 +85,20 @@ describe('LessonsPage', () => {
     render(<LessonsPage />);
     expect(screen.getByText('Rascunho')).toBeTruthy();
     expect(screen.getByText('Publicada')).toBeTruthy();
+    expect(screen.getByText('Pronta para publicar')).toBeTruthy();
+    expect(screen.getByText('Incompleta')).toBeTruthy();
+  });
+
+  it('aula incompleta mostra o motivo na lista', () => {
+    search = 'planId=plan-2&scheduleId=sch-9';
+    render(<LessonsPage />);
+    expect(screen.getByText('Defina um título diferente de "Aula N".')).toBeTruthy();
+  });
+
+  it('título do card mostra o contador de aulas prontas', () => {
+    search = 'planId=plan-2&scheduleId=sch-9';
+    render(<LessonsPage />);
+    expect(screen.getByText('· 1 de 2 prontas')).toBeTruthy();
   });
 
   it('trocar o plano limpa o cronograma', () => {

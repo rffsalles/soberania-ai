@@ -5,6 +5,7 @@ import {
   parseLessonGeneration,
   stepsToTimeScript,
 } from '../lesson-generation-prompt';
+import { LESSON_TITLE_MAX_LENGTH } from '@/lib/constants/teaching';
 import type { DidacticChunk } from '@/domains/rag/types';
 
 const chunk: DidacticChunk = {
@@ -29,6 +30,22 @@ describe('buildLessonGenerationMessages', () => {
     expect(user.content).toContain('Cap. 3: Modelagem — Sistemas de Banco de Dados (Elmasri), p. 40 a 60');
     expect(user.content).toContain('[Sistemas de Banco de Dados · Cap. 3, pág. 41]');
     expect(user.content).toContain('Entidades e relacionamentos.');
+  });
+
+  it('system pede topicTitle no JSON esperado', () => {
+    const [system] = buildLessonGenerationMessages({
+      subjectName: 'BD', syllabus: 'S', classNumber: 3, totalClasses: 20,
+      durationMinutes: 100, topicTitle: 'Aula 3', chapters, chunks: [chunk],
+    });
+    expect(system.content).toContain('"topicTitle"');
+  });
+
+  it('título atual próprio: pede para mantê-lo; título padrão: não', () => {
+    const base = { subjectName: 'BD', syllabus: 'S', classNumber: 3, totalClasses: 20, durationMinutes: 100, chapters, chunks: [chunk] };
+    const [, own] = buildLessonGenerationMessages({ ...base, topicTitle: 'Modelagem ER' });
+    expect(own.content).toContain('Mantenha o título atual da aula: "Modelagem ER"');
+    const [, dflt] = buildLessonGenerationMessages({ ...base, topicTitle: 'Aula 3' });
+    expect(dflt.content).not.toContain('Mantenha o título atual');
   });
 });
 
@@ -60,6 +77,22 @@ describe('parseLessonGeneration', () => {
   };
   it('extrai JSON cercado de texto', () => {
     expect(parseLessonGeneration(`ok ${JSON.stringify(valid)} fim`)).toEqual(valid);
+  });
+  it('aceita JSON sem topicTitle ou com topicTitle vazio, deixando o campo ausente', () => {
+    expect(parseLessonGeneration(JSON.stringify(valid))).not.toHaveProperty('topicTitle');
+    const r = parseLessonGeneration(JSON.stringify({ ...valid, topicTitle: '   ' }));
+    expect(r).not.toBeNull();
+    expect(r).not.toHaveProperty('topicTitle');
+  });
+  it('mantém topicTitle aparado e trunca no limite', () => {
+    expect(parseLessonGeneration(JSON.stringify({ ...valid, topicTitle: '  Modelagem ER  ' }))?.topicTitle).toBe('Modelagem ER');
+    const long = parseLessonGeneration(JSON.stringify({ ...valid, topicTitle: 'x'.repeat(LESSON_TITLE_MAX_LENGTH + 50) }));
+    expect(long?.topicTitle).toHaveLength(LESSON_TITLE_MAX_LENGTH);
+  });
+  it('topicTitle de tipo errado não derruba a geração', () => {
+    const r = parseLessonGeneration(JSON.stringify({ ...valid, topicTitle: 42 }));
+    expect(r).not.toBeNull();
+    expect(r).not.toHaveProperty('topicTitle');
   });
   it('null para inválido', () => {
     expect(parseLessonGeneration('sem json')).toBeNull();

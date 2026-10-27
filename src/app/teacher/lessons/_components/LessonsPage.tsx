@@ -4,14 +4,15 @@ import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import { BookOpen } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { useTeacherPlans } from '@/components/assessments/use-assessments';
 import { useSchedules, type ScheduleItem } from '@/components/teaching/use-schedules';
 import { useLessons, type LessonItem } from '@/components/teaching/use-lessons';
 import { AdvancedCombobox } from '@/components/ui/advanced-combobox';
 import { planToComboboxItem } from '@/components/teaching/plan-combobox-item';
 import { LessonEditor } from './LessonEditor';
-import { INSTITUTION_TIMEZONE, LESSON_STATUS } from '@/lib/constants/teaching';
+import { LessonBadges } from './LessonBadges';
+import { lessonReadiness } from '@/domains/teaching/lesson-publish';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 
 // classDate é o instante de início da aula; exibido no fuso da instituição.
 const formatDate = (iso: string) =>
@@ -100,7 +101,14 @@ export function LessonsPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-1">
             <CardHeader>
-              <CardTitle className="text-base">Aulas</CardTitle>
+              <CardTitle className="text-base">
+                Aulas
+                {lessons.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-slate-500">
+                    · {lessons.filter((l) => lessonReadiness(l).ready).length} de {lessons.length} prontas
+                  </span>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {isLoading && <p className="text-sm text-slate-500">Carregando aulas...</p>}
@@ -125,9 +133,7 @@ export function LessonsPage() {
                     #{l.classNumber} · {l.topicTitle}
                   </span>
                   <span className="block text-xs text-slate-500">{formatDate(l.classDate)}</span>
-                  <Badge variant={l.status === LESSON_STATUS.PUBLISHED ? 'default' : 'secondary'} className="mt-1">
-                    {l.status === LESSON_STATUS.PUBLISHED ? 'Publicada' : 'Rascunho'}
-                  </Badge>
+                  <LessonBadges lesson={l} className="mt-1" showReason />
                 </button>
               ))}
             </CardContent>

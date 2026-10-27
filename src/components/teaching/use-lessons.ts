@@ -69,6 +69,7 @@ export async function saveLesson(id: string, draft: LessonDraft): Promise<Lesson
 }
 
 export type GeneratedLesson = {
+  topicTitle?: string;
   dailyObjective: string;
   methodology: string;
   resourcesNeeded: string[];

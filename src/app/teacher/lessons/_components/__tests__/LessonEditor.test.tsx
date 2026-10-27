@@ -111,11 +111,27 @@ describe('LessonEditor', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('gerar aplica o topicTitle retornado; sem topicTitle o título não muda', async () => {
+    const chapters = [{ chapterId: 'u1', chapter: { order: 1, number: '1' } }];
+    vi.stubGlobal('fetch', routeFetch({ [`POST ${BASE}/generate`]: { success: true, data: { ...GENERATED, topicTitle: 'Modelagem ER' } } }));
+    render(<LessonEditor lesson={makeLesson({ chapters })} onSaved={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar aula com IA' }));
+    await waitFor(() => expect((screen.getByLabelText('Título do tópico') as HTMLInputElement).value).toBe('Modelagem ER'));
+
+    cleanup();
+    vi.stubGlobal('fetch', routeFetch({ [`POST ${BASE}/generate`]: { success: true, data: GENERATED } }));
+    render(<LessonEditor lesson={makeLesson({ chapters })} onSaved={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar aula com IA' }));
+    await waitFor(() => expect((screen.getByLabelText('Objetivo diário') as HTMLTextAreaElement).value).toBe('Objetivo gerado'));
+    expect((screen.getByLabelText('Título do tópico') as HTMLInputElement).value).toBe('Aula 3');
+  });
+
   it('"Publicar" bloqueado mostra o que falta; aula completa publica com PUT status', async () => {
     render(<LessonEditor lesson={makeLesson()} onSaved={() => {}} />);
     expect((screen.getByRole('button', { name: 'Publicar' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Defina um título diferente de "Aula N".')).toBeTruthy();
     expect(screen.getByText('Rascunho')).toBeTruthy();
+    expect(screen.getByText('Incompleta')).toBeTruthy();
 
     cleanup();
     const fetchMock = routeFetch({ [`PUT ${BASE}/status`]: { success: true, lesson: makeLesson({ status: 'PUBLISHED' }) } });
@@ -183,6 +199,17 @@ describe('LessonEditor', () => {
     fireEvent.change(screen.getByLabelText('Recursos necessários (um por linha)'), { target: { value: 'A\n\n  ' } });
     expect((screen.getByRole('button', { name: 'Publicar' }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText('Salve as alterações antes de publicar.')).toBeNull();
+  });
+
+  it('rascunho completo mostra o selo "Pronta para publicar"', () => {
+    render(
+      <LessonEditor
+        lesson={makeLesson({ topicTitle: 'Modelagem', dailyObjective: 'Obj', timeScript: GENERATED.timeScript })}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.getByText('Pronta para publicar')).toBeTruthy();
+    expect(screen.queryByText('Incompleta')).toBeNull();
   });
 
   it('aula publicada mostra badge "Publicada" e botão "Despublicar"', () => {

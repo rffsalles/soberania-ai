@@ -10,7 +10,7 @@ import {
   type GeneratedLessonText,
 } from '@/domains/agents/prompts/lesson-generation-prompt';
 import type { RefineLessonInput } from '@/lib/validators/lesson.validator';
-import { LESSON_AI_UNAVAILABLE_MESSAGE, LESSON_DEFAULT_DURATION_MINUTES, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
+import { LESSON_AI_RATE_LIMITED_MESSAGE, LESSON_AI_UNAVAILABLE_MESSAGE, LESSON_DEFAULT_DURATION_MINUTES, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
 import { sampleChunksByChapter } from '@/domains/rag/services/chunk-repository';
@@ -52,12 +52,14 @@ async function askModel(
   deps: LessonGenerationDeps
 ): Promise<GeneratedLessonText | null> {
   try {
-    const { text, fallback } = await collectStream(deps.streamChat, messages, {
+    const { text, fallback, fallbackReason } = await collectStream(deps.streamChat, messages, {
       temperature: GENERATION_TEMPERATURE,
       maxTokens: GENERATION_MAX_TOKENS,
     });
+    if (fallbackReason === 'rate_limit') throw new DomainError(429, LESSON_AI_RATE_LIMITED_MESSAGE);
     return fallback ? null : parseLessonGeneration(text);
   } catch (err) {
+    if (err instanceof DomainError) throw err;
     console.warn('[lesson-generation] falha ao gerar a aula com a IA', err);
     return null;
   }
@@ -119,7 +121,9 @@ export async function generateLessonContent(
   if (!timeScript.success) throw new DomainError(503, LESSON_AI_UNAVAILABLE_MESSAGE);
 
   const { steps: _steps, ...text } = generated;
-  return { ...text, timeScript: timeScript.data, citations: Array.from(new Set(chunks.map(formatCitation))) };
+  // Sem título do modelo, preserva o título próprio do professor; o padrão "Aula N" fica de fora.
+  const topicTitle = text.topicTitle ?? (lesson.topicTitle !== `Aula ${lesson.classNumber}` ? lesson.topicTitle : undefined);
+  return { ...text, ...(topicTitle ? { topicTitle } : {}), timeScript: timeScript.data, citations: Array.from(new Set(chunks.map(formatCitation))) };
 }
 
 export const REFINE_TEMPERATURE = 0.4;
@@ -131,12 +135,14 @@ async function askRefine(
   deps: LessonGenerationDeps
 ): Promise<string | null> {
   try {
-    const { text, fallback } = await collectStream(deps.streamChat, messages, {
+    const { text, fallback, fallbackReason } = await collectStream(deps.streamChat, messages, {
       temperature: REFINE_TEMPERATURE,
       maxTokens: REFINE_MAX_TOKENS,
     });
+    if (fallbackReason === 'rate_limit') throw new DomainError(429, LESSON_AI_RATE_LIMITED_MESSAGE);
     return fallback ? null : text.trim() || null;
   } catch (err) {
+    if (err instanceof DomainError) throw err;
     console.warn('[lesson-generation] falha ao refinar o campo com a IA', err);
     return null;
   }

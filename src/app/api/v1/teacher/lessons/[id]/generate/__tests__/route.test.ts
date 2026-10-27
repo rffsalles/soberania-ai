@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
+import { LESSON_AI_RATE_LIMITED_MESSAGE } from '@/lib/constants/teaching';
 
 const mocks = vi.hoisted(() => ({ requireUser: vi.fn(), generateLessonContent: vi.fn() }));
 
@@ -39,5 +40,12 @@ describe('POST /api/v1/teacher/lessons/[id]/generate', () => {
     const res = await POST(post(), ctx);
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ success: false, error: 'sem conteúdo' });
+  });
+
+  it('429 do service (limite do provedor de IA) vira 429 com a mensagem', async () => {
+    mocks.generateLessonContent.mockRejectedValue(new DomainError(429, LESSON_AI_RATE_LIMITED_MESSAGE));
+    const res = await POST(post(), ctx);
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({ success: false, error: LESSON_AI_RATE_LIMITED_MESSAGE });
   });
 });

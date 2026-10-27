@@ -12,3 +12,12 @@ export function publishBlockReason(lesson: {
   }
   return null;
 }
+
+/** Completude derivada: a aula está pronta quando nada bloqueia a publicação. */
+export function lessonReadiness(lesson: Parameters<typeof publishBlockReason>[0]): {
+  ready: boolean;
+  reason: string | null;
+} {
+  const reason = publishBlockReason(lesson);
+  return { ready: reason === null, reason };
+}

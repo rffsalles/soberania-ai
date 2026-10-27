@@ -18,6 +18,9 @@ export const DEFAULT_NDE_COMPLIANCE_STATUS = NDE_COMPLIANCE_STATUS.PENDING;
 export const LESSON_STATUS = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' } as const;
 export type LessonStatusValue = (typeof LESSON_STATUS)[keyof typeof LESSON_STATUS];
 
+export const LESSON_STATUS_LABEL = { DRAFT: 'Rascunho', PUBLISHED: 'Publicada' } as const;
+export const LESSON_READINESS_LABEL = { READY: 'Pronta para publicar', INCOMPLETE: 'Incompleta' } as const;
+
 export const LESSON_MEDIA_TYPE = { NONE: 'NONE', YOUTUBE: 'YOUTUBE', S3_UPLOAD: 'S3_UPLOAD' } as const;
 export type LessonMediaType = (typeof LESSON_MEDIA_TYPE)[keyof typeof LESSON_MEDIA_TYPE];
 
@@ -84,6 +87,8 @@ export const NO_LESSON_CHAPTERS = 'Selecione e salve ao menos um capítulo para 
 
 export const LESSON_AI_UNAVAILABLE_MESSAGE =
   'IA indisponível no momento. Tente novamente mais tarde ou escreva a aula manualmente.';
+export const LESSON_AI_RATE_LIMITED_MESSAGE =
+  'O provedor de IA atingiu o limite de uso. Aguarde um minuto e tente novamente.';
 export const DISTRIBUTION_AI_UNAVAILABLE_MESSAGE =
   'IA indisponível no momento. Tente novamente mais tarde ou atribua os capítulos manualmente em cada aula.';
 

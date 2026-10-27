@@ -5,7 +5,7 @@ import { Lock, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
+import { LessonBadges } from './LessonBadges';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   INSTITUTION_TIMEZONE,
@@ -80,6 +80,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
     selectionKey,
     hasContent: [dailyObjective, methodology, fixationExercise].some((v) => v.trim() !== '') || steps.length > 0,
     applyGenerated: (data) => {
+      if (data.topicTitle) setTopicTitle(data.topicTitle);
       setDailyObjective(data.dailyObjective);
       setMethodology(data.methodology);
       setResources(data.resourcesNeeded.join('\n'));
@@ -153,7 +154,7 @@ export function LessonEditor({ lesson, onSaved }: Props) {
           <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
             <span className="flex items-center gap-2">
               Aula #{lesson.classNumber}
-              <Badge variant={published ? 'default' : 'secondary'}>{published ? 'Publicada' : 'Rascunho'}</Badge>
+              <LessonBadges lesson={lesson} />
             </span>
             <Button
               type="button"

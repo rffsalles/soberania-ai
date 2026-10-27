@@ -6,7 +6,7 @@ import {
   NO_INDEXED_CHAPTER_CONTENT,
   type LessonGenerationDeps,
 } from '../lesson-generation-service';
-import { LESSON_AI_UNAVAILABLE_MESSAGE, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
+import { LESSON_AI_RATE_LIMITED_MESSAGE, LESSON_AI_UNAVAILABLE_MESSAGE, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
 import type { DidacticChunk } from '@/domains/rag/types';
 
 const teacher = { id: 't1', role: Role.TEACHER };
@@ -38,14 +38,14 @@ const text = (durations: number[]) =>
   });
 
 function makeDeps(opts: {
-  lesson?: unknown; chunks?: DidacticChunk[]; text?: string; fallback?: boolean; throws?: boolean;
+  lesson?: unknown; chunks?: DidacticChunk[]; text?: string; fallback?: boolean; fallbackReason?: 'rate_limit' | 'provider_error'; throws?: boolean;
   sample?: DidacticChunk[]; descendants?: string[];
 } = {}) {
   const search = vi.fn().mockResolvedValue({ chunks: opts.chunks ?? [chunk] });
   const sampleByChapter = vi.fn().mockResolvedValue(opts.sample ?? []);
   const streamChat = vi.fn().mockImplementation(async function* () {
     if (opts.throws) throw new Error('boom');
-    yield { token: opts.text ?? text([20, 50, 30]), fallback: opts.fallback };
+    yield { token: opts.text ?? text([20, 50, 30]), fallback: opts.fallback, fallbackReason: opts.fallbackReason };
   });
   const deps = {
     findLesson: vi.fn().mockResolvedValue(opts.lesson === undefined ? lesson() : opts.lesson),
@@ -117,6 +117,20 @@ describe('generateLessonContent', () => {
     expect(streamChat.mock.calls[0][1]).toMatchObject({ temperature: 0.3, maxTokens: 2000 });
   });
 
+  it('topicTitle do modelo é devolvido', async () => {
+    const t = JSON.stringify({ ...JSON.parse(text([20, 50, 30])), topicTitle: 'Modelagem Entidade-Relacionamento' });
+    const { deps } = makeDeps({ text: t });
+    const r = await generateLessonContent('l1', teacher, deps);
+    expect(r.topicTitle).toBe('Modelagem Entidade-Relacionamento');
+  });
+
+  it('sem topicTitle: título padrão fica ausente; título próprio é mantido', async () => {
+    const dflt = makeDeps({ lesson: lesson({ topicTitle: 'Aula 3' }) });
+    expect(await generateLessonContent('l1', teacher, dflt.deps)).not.toHaveProperty('topicTitle');
+    const own = makeDeps({ lesson: lesson({ topicTitle: 'Modelo ER' }) });
+    expect((await generateLessonContent('l1', teacher, own.deps)).topicTitle).toBe('Modelo ER');
+  });
+
   it('faz 3 buscas filtradas pelos capítulos da aula', async () => {
     const { deps, search } = makeDeps();
     await generateLessonContent('l1', teacher, deps);
@@ -177,6 +191,30 @@ describe('generateLessonContent', () => {
       await expect(generateLessonContent('l1', teacher, makeDeps(o).deps)).rejects.toMatchObject({ status: 503, message: LESSON_AI_UNAVAILABLE_MESSAGE });
     }
     warn.mockRestore();
+  });
+});
+
+describe('limite de uso do provedor', () => {
+  const warn = () => vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const input = { field: 'methodology' as const, instruction: 'mais prática', current: 'Aula expositiva' };
+
+  it('generate: fallback por rate_limit → 429 com a mensagem de limite; provider_error segue 503', async () => {
+    const w = warn();
+    await expect(
+      generateLessonContent('l1', teacher, makeDeps({ fallback: true, fallbackReason: 'rate_limit' }).deps)
+    ).rejects.toMatchObject({ status: 429, message: LESSON_AI_RATE_LIMITED_MESSAGE });
+    await expect(
+      generateLessonContent('l1', teacher, makeDeps({ fallback: true, fallbackReason: 'provider_error' }).deps)
+    ).rejects.toMatchObject({ status: 503, message: LESSON_AI_UNAVAILABLE_MESSAGE });
+    w.mockRestore();
+  });
+
+  it('refine: fallback por rate_limit → 429 com a mensagem de limite', async () => {
+    const w = warn();
+    await expect(
+      refineLessonField('l1', teacher, input, makeDeps({ fallback: true, fallbackReason: 'rate_limit' }).deps)
+    ).rejects.toMatchObject({ status: 429, message: LESSON_AI_RATE_LIMITED_MESSAGE });
+    w.mockRestore();
   });
 });
 
