@@ -421,13 +421,18 @@ model MaterialChapter {
   startPage  Int
   endPage    Int?
   source     ChapterSource
+  parentId   String?
+  depth      Int           @default(0)
   createdAt  DateTime      @default(now())
 
   material    DidacticMaterial    @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  parent      MaterialChapter?    @relation("ChapterTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    MaterialChapter[]   @relation("ChapterTree")
   chunks      MaterialChunk[]
   lessonLinks LessonPlanChapter[]
 
   @@unique([materialId, order])
+  @@index([parentId])
   @@map("material_chapters")
 }
 
