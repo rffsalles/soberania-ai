@@ -205,6 +205,21 @@ describe('LessonEditor', () => {
     expect(screen.getByRole('status').textContent).toBe('Aula salva.');
   });
 
+  it('após salvar a seleção, o aviso de capítulos não salvos some', async () => {
+    const U1 = { chapterId: 'u1', chapter: { order: 1, number: '1' } };
+    const saved = makeLesson({ topicTitle: 'Modelagem', chapters: [U1, { chapterId: 'u2', chapter: { order: 2, number: '2' } }] });
+    vi.stubGlobal('fetch', routeFetch({ [`PUT ${BASE}`]: { success: true, lesson: saved } }));
+    const onSaved = vi.fn();
+    const { rerender } = render(<LessonEditor lesson={makeLesson({ topicTitle: 'Modelagem', chapters: [U1] })} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole('treeitem', { name: '2 Unidade 2' }));
+    expect(screen.getByText('Salve os capítulos selecionados antes de gerar.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar aula' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    rerender(<LessonEditor lesson={saved} onSaved={onSaved} />);
+    expect(screen.queryByText('Salve os capítulos selecionados antes de gerar.')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Gerar aula com IA' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('marcar a unidade com uma seção salva troca a seção pela unidade ao salvar', async () => {
     const fetchMock = routeFetch({ [`PUT ${BASE}`]: { success: true, lesson: makeLesson() } });
     vi.stubGlobal('fetch', fetchMock);

@@ -123,6 +123,11 @@ describe('toChapterRows', () => {
     expect(numberChapters([
       { id: 'u', order: 1, parentId: null }, { id: 'f', order: 2, parentId: 'u' }, { id: 'g', order: 3, parentId: 'u' },
     ]).map((c) => c.number)).toEqual(['1', '1.1', '1.2']));
+  it('numberChapters numera filhos sob dois pais', () =>
+    expect(numberChapters([
+      { id: 'u', order: 1, parentId: null }, { id: 'f', order: 2, parentId: 'u' },
+      { id: 'v', order: 3, parentId: null }, { id: 'g', order: 4, parentId: 'v' }, { id: 'h', order: 5, parentId: 'v' },
+    ]).map((c) => c.number)).toEqual(['1', '1.1', '2', '2.1', '2.2']));
 });
 
 describe('chunkAssignmentsFromRows', () => {

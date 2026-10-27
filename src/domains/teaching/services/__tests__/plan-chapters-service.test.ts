@@ -45,6 +45,16 @@ describe('plan-chapters-service', () => {
     const once = normalizeChapterSelection(['f1', 'f', 'u2'], tree);
     expect(normalizeChapterSelection(once, tree)).toEqual(once);
   });
+  it('folha sozinha fica como está', () => {
+    expect(normalizeChapterSelection(['f1'], tree)).toEqual(['f1']);
+  });
+  it('parentId em ciclo termina', () => {
+    const cyclic: PlanChapterBook[] = [{ ...tree[0], chapters: [
+      { ...tree[0].chapters[0], id: 'a', parentId: 'b' },
+      { ...tree[0].chapters[1], id: 'b', parentId: 'a' },
+    ] }];
+    expect(normalizeChapterSelection(['a'], cyclic)).toEqual(['a']);
+  });
   it('mantém ids desconhecidos', () => {
     expect(normalizeChapterSelection(['x', 'u1'], tree)).toEqual(['x', 'u1']);
   });

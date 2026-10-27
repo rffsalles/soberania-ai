@@ -110,6 +110,12 @@ describe('lesson-service updateLesson', () => {
     expect(calls.replaceLessonChapters).toEqual([{ lessonPlanId: 'own', chapterIds: ['ch1a'] }]);
   });
 
+  it('chapterIds vazio limpa os vínculos', async () => {
+    const { deps, calls } = makeDeps();
+    await updateLesson('own', teacher, { chapterIds: [] }, deps);
+    expect(calls.replaceLessonChapters).toEqual([{ lessonPlanId: 'own', chapterIds: [] }]);
+  });
+
   it('rejeita capítulo de fora do plano; salvar sem chapterIds preserva vínculos', async () => {
     const { deps, calls } = makeDeps();
     await expect(updateLesson('own', teacher, { chapterIds: ['chX'] }, deps)).rejects.toMatchObject({

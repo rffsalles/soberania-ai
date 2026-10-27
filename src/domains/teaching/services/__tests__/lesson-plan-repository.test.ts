@@ -24,6 +24,18 @@ describe('número hierárquico nos repositórios de aula', () => {
     expect(l.chapters[0]).toEqual({ chapterId: 'c1', chapter: { order: 4, number: '2.2' } });
   });
 
+  it('listLessonsBySchedule com duas aulas consulta os números uma vez só', async () => {
+    lessonFindMany.mockResolvedValue([
+      { id: 'l1', chapters: [{ chapterId: 'c1', chapter: { order: 4 } }] },
+      { id: 'l2', chapters: [{ chapterId: 'c2', chapter: { order: 5 } }] },
+    ]);
+    chapterNumbersFor.mockResolvedValue(new Map([['c1', '2.2'], ['c2', '2.3']]));
+    const lessons = await listLessonsBySchedule({ scheduleId: 's1' });
+    expect(chapterNumbersFor).toHaveBeenCalledTimes(1);
+    expect(chapterNumbersFor).toHaveBeenCalledWith(['c1', 'c2']);
+    expect(lessons.map((l) => l.chapters[0].chapter.number)).toEqual(['2.2', '2.3']);
+  });
+
   it('findLessonForGeneration anexa number', async () => {
     lessonFindUnique.mockResolvedValue({ id: 'l1', chapters: [{ chapter: { id: 'c1', order: 4, title: 'T' } }] });
     chapterNumbersFor.mockResolvedValue(new Map([['c1', '2.2']]));

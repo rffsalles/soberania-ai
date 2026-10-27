@@ -76,6 +76,22 @@ describe('chapter-distribution-service', () => {
     expect(user).not.toContain('id=s21');
   });
 
+  it('árvore no caso feliz grava só ids de raiz', async () => {
+    const text = JSON.stringify({
+      lessons: [
+        { classNumber: 1, topicTitle: 'Conjuntos', chapterIds: ['u1'] },
+        { classNumber: 2, topicTitle: 'Álgebra', chapterIds: ['u2'] },
+        { classNumber: 3, topicTitle: 'Funções', chapterIds: ['u2', 'u3'] },
+      ],
+    });
+    const { deps, apply } = makeDeps({ books: [book], text });
+    await distributeChapters('sch1', teacher, deps);
+    expect(apply).toHaveBeenCalledWith([
+      { lessonPlanId: 'l1', topicTitle: 'Conjuntos', chapterIds: ['u1'] },
+      { lessonPlanId: 'l3', topicTitle: 'Funções', chapterIds: ['u2', 'u3'] },
+    ]);
+  });
+
   it('resposta com id de seção é inválida (503) e nada é gravado', async () => {
     const { deps, apply } = makeDeps({ books: [book], text: JSON.stringify({ lessons: [1, 2, 3].map((n) => ({ classNumber: n, topicTitle: 'T', chapterIds: ['s22'] })) }) });
     await expect(distributeChapters('sch1', teacher, deps)).rejects.toMatchObject({ status: 503 });
