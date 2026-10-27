@@ -18,6 +18,12 @@ vi.mock('@/domains/rag/file-parser', async (orig) => ({
 }));
 import { parseDocumentFile } from '@/domains/rag/file-parser';
 
+vi.mock('@/domains/rag/chapters', async (orig) => {
+  const actual = await orig<typeof import('@/domains/rag/chapters')>();
+  return { ...actual, alignDraftsToText: vi.fn(actual.alignDraftsToText) };
+});
+import { alignDraftsToText } from '@/domains/rag/chapters';
+
 const buffer = Buffer.from('pdf');
 const pages: RawDocumentPage[] = Array.from({ length: 20 }, (_, i) => ({
   pageNumber: i + 1,
@@ -151,6 +157,22 @@ describe('extractAndSaveChapters', () => {
     expect(prompt).not.toContain('Página física 16');
     expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.1, maxTokens: 1200 });
     expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'AI', [], expect.any(Array), undefined);
+  });
+
+  it('falha no realinhamento mantém o resultado da IA com as páginas originais', async () => {
+    vi.mocked(alignDraftsToText).mockImplementationOnce(() => {
+      throw new Error('realinhar falhou');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = await extractAndSaveChapters(
+      'm1',
+      { buffer, pages, totalPages: 20 },
+      depsWith({ ai: aiJson([{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }]) }),
+    );
+    expect(warn).toHaveBeenCalledWith('[chapters] Falha ao realinhar capítulos; usando páginas da IA', expect.any(Error));
+    warn.mockRestore();
+    expect(r.source).toBe('AI');
+    expect(replaceChapters.mock.calls[0][1].map((c: { startPage: number }) => c.startPage)).toEqual([3, 9]);
   });
 
   it('páginas impressas da IA são realinhadas ao topo das páginas físicas', async () => {

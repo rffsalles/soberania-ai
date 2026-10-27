@@ -122,7 +122,14 @@ export async function extractChapterDrafts(
   }
 
   const rawAi = await askModel(input, nav, deps);
-  const fromAi = rawAi && alignDraftsToText(rawAi, input.pages);
+  let fromAi = rawAi;
+  if (rawAi) {
+    try {
+      fromAi = alignDraftsToText(rawAi, input.pages);
+    } catch (err) {
+      console.warn('[chapters] Falha ao realinhar capítulos; usando páginas da IA', err);
+    }
+  }
   if (fromAi && isValidChapterSequence(fromAi, input.totalPages, 2)) {
     return { source: 'AI', drafts: fromAi };
   }
