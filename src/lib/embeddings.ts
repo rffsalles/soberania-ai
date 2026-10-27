@@ -2,7 +2,8 @@
  * Provedor de embeddings - Soberania AI
  *
  * `mock` usa hashing determinístico de tokens (sem rede); os demais provedores
- * chamam `POST {AI_BASE_URL}/embeddings` (API compatível com OpenAI).
+ * chamam `POST {AI_EMBEDDING_BASE_URL ou AI_BASE_URL}/embeddings` (API compatível com OpenAI).
+ * `AI_EMBEDDING_MODEL` vazio desliga embeddings (EmbeddingsDisabledError, sem requisição).
  */
 
 import { ENV } from './constants/env';
@@ -24,6 +25,21 @@ export class EmbeddingUnavailableError extends Error {
     super(message, options);
     this.name = 'EmbeddingUnavailableError';
   }
+}
+
+/** Embeddings desligados por configuração (AI_EMBEDDING_MODEL vazio); não é falha do provedor. */
+export class EmbeddingsDisabledError extends EmbeddingUnavailableError {
+  constructor() {
+    super(`Embeddings desligados (${ENV.AI_EMBEDDING_MODEL} vazio)`);
+    this.name = 'EmbeddingsDisabledError';
+  }
+}
+
+/** `false` quando o provedor não é mock e AI_EMBEDDING_MODEL está vazio/ausente. */
+export function embeddingsEnabled(): boolean {
+  const provider = process.env[ENV.AI_PROVIDER] ?? DEFAULT_PROVIDER;
+  if (provider === OFFLINE_PROVIDER) return true;
+  return Boolean(process.env[ENV.AI_EMBEDDING_MODEL]?.trim());
 }
 
 export interface EmbeddingDeps {
@@ -65,21 +81,18 @@ interface EmbeddingConfig {
 
 function readConfig(): EmbeddingConfig {
   const model = process.env[ENV.AI_EMBEDDING_MODEL]?.trim();
-  const baseUrl = process.env[ENV.AI_BASE_URL]?.trim();
-  if (!model) {
-    throw new EmbeddingUnavailableError(
-      `Modelo de embeddings não configurado (${ENV.AI_EMBEDDING_MODEL})`,
-    );
-  }
+  const baseUrl =
+    process.env[ENV.AI_EMBEDDING_BASE_URL]?.trim() || process.env[ENV.AI_BASE_URL]?.trim();
+  if (!model) throw new EmbeddingsDisabledError();
   if (!baseUrl) {
     throw new EmbeddingUnavailableError(
-      `URL do provedor de IA não configurada (${ENV.AI_BASE_URL})`,
+      `URL do provedor de embeddings não configurada (${ENV.AI_EMBEDDING_BASE_URL} ou ${ENV.AI_BASE_URL})`,
     );
   }
   return {
     model,
     baseUrl: baseUrl.replace(/\/+$/, ''),
-    apiKey: process.env[ENV.AI_API_KEY] || undefined,
+    apiKey: process.env[ENV.AI_EMBEDDING_API_KEY] || process.env[ENV.AI_API_KEY] || undefined,
   };
 }
 

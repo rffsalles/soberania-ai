@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { EmbeddingUnavailableError } from '@/lib/embeddings';
-import { executeHybridSearch, formatCitation, rrfMerge, RRF_K, type HybridSearchDeps } from '../hybrid-search';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EmbeddingUnavailableError, EmbeddingsDisabledError } from '@/lib/embeddings';
+import { executeHybridSearch, formatCitation, resetEmbeddingNoticeForTests, rrfMerge, RRF_K, type HybridSearchDeps } from '../hybrid-search';
 import { RAG_MAX_TOP_K } from '../constants';
 import type { DidacticChunk } from '../types';
 
@@ -26,6 +26,8 @@ function makeDeps(over: Partial<HybridSearchDeps> = {}): HybridSearchDeps {
     ...over,
   };
 }
+
+beforeEach(() => resetEmbeddingNoticeForTests());
 
 describe('rrfMerge', () => {
   it('uses k = 60 by default', () => {
@@ -81,6 +83,39 @@ describe('executeHybridSearch', () => {
     expect(deps.search).toHaveBeenCalledWith(expect.objectContaining({ embedding: null }));
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  it('avisa só uma vez por processo em buscas repetidas com embeddings indisponíveis', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeDeps({
+      embed: vi.fn(async () => {
+        throw new EmbeddingUnavailableError('offline');
+      }),
+    });
+    await executeHybridSearch({ query: 'join' }, deps);
+    await executeHybridSearch({ query: 'join' }, deps);
+    await executeHybridSearch({ query: 'join' }, deps);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(deps.search).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
+  });
+
+  it('embeddings desligados por config: uma linha console.info, sem warning, busca léxica funciona', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const deps = makeDeps({
+      embed: vi.fn(async () => {
+        throw new EmbeddingsDisabledError();
+      }),
+    });
+    const r1 = await executeHybridSearch({ query: 'join' }, deps);
+    await executeHybridSearch({ query: 'join' }, deps);
+    expect(r1.chunks).toHaveLength(1);
+    expect(deps.search).toHaveBeenCalledWith(expect.objectContaining({ embedding: null }));
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+    info.mockRestore();
   });
 
   it('propagates unexpected embedding errors', async () => {

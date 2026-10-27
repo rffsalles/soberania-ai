@@ -5,7 +5,7 @@ import type { AIMessage } from '@/lib/ai-provider';
 
 const messages: AIMessage[] = [{ role: 'user', content: 'oi' }];
 
-function streamOf(chunks: Array<{ token: string; fallback?: boolean }>): StreamChatFn {
+function streamOf(chunks: Array<{ token: string; fallback?: boolean; fallbackReason?: 'rate_limit' | 'provider_error' }>): StreamChatFn {
   return vi.fn(async function* () {
     for (const c of chunks) yield c;
   }) as unknown as StreamChatFn;
@@ -34,5 +34,14 @@ describe('collectStream', () => {
       throw new Error('boom');
     }) as unknown as StreamChatFn;
     await expect(collectStream(streamChat, messages, { temperature: 0.2, maxTokens: 100 })).rejects.toThrow('boom');
+  });
+
+  it('propaga o primeiro fallbackReason visto', async () => {
+    const streamChat = streamOf([
+      { token: 'x', fallback: true, fallbackReason: 'rate_limit' },
+      { token: 'y', fallback: true, fallbackReason: 'provider_error' },
+    ]);
+    const result = await collectStream(streamChat, messages, { temperature: 0.3, maxTokens: 10 });
+    expect(result).toEqual({ text: 'xy', fallback: true, fallbackReason: 'rate_limit' });
   });
 });

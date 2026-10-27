@@ -38,6 +38,19 @@ export interface InferenceTelemetry {
   activeLora?: string;
 }
 
+export type FallbackReason = 'rate_limit' | 'provider_error';
+
+/** Maior espera aceita antes de refazer uma chamada recusada por limite de uso (429). */
+export const RATE_LIMIT_MAX_RETRY_DELAY_MS = 20_000;
+
+/** Atraso sugerido pelo provedor (cabeçalho `retry-after` ou "try again in Ns" no corpo); null se não houver. */
+function parseRetryDelayMs(retryAfterHeader: string | null, body: string): number | null {
+  const header = retryAfterHeader !== null ? Number(retryAfterHeader) : NaN;
+  if (Number.isFinite(header) && header >= 0) return Math.ceil(header * 1000);
+  const match = /try again in (\d+(?:\.\d+)?)s/i.exec(body);
+  return match ? Math.ceil(Number(match[1]) * 1000) : null;
+}
+
 export interface StreamChunk {
   token: string;
   isComplete: boolean;
@@ -45,6 +58,8 @@ export interface StreamChunk {
   telemetry?: InferenceTelemetry;
   /** true quando o stream veio do modo determinístico (provider mock/indisponível) */
   fallback?: boolean;
+  /** Por que o stream caiu no fallback: limite de uso do provedor (429) ou outra falha dele */
+  fallbackReason?: FallbackReason;
 }
 
 export interface AICompletionOptions {
@@ -150,6 +165,8 @@ export class AIProviderGateway {
       currentProvider !== 'mock' &&
       (Boolean(currentApiKey) || currentProvider === 'ollama' || currentProvider === 'vllm');
 
+    let fallbackReason: FallbackReason = 'provider_error';
+
     if (isLiveProvider) {
       try {
         console.log(`[AIProvider] Chamando ${currentProvider.toUpperCase()} (${currentModel}) em ${currentBaseUrl}...`);
@@ -179,11 +196,28 @@ export class AIProviderGateway {
           requestInit.dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
           doFetch = undiciFetch as unknown as typeof fetch;
         }
-        const response = await doFetch(`${currentBaseUrl}/chat/completions`, requestInit);
+        let response = await doFetch(`${currentBaseUrl}/chat/completions`, requestInit);
 
         if (!response.ok) {
           const errText = await response.text();
           console.error(`[AIProvider Error ${response.status}] ${currentProvider}: ${errText}`);
+          if (response.status === 429) {
+            fallbackReason = 'rate_limit';
+            const delayMs = parseRetryDelayMs(response.headers.get('retry-after'), errText);
+            // "Request too large" não melhora esperando: o pedido excede o limite do modelo.
+            const retryable =
+              delayMs !== null && delayMs <= RATE_LIMIT_MAX_RETRY_DELAY_MS && !/request too large/i.test(errText);
+            if (retryable) {
+              console.warn(`[AIProvider] 429 em ${currentProvider}; aguardando ${delayMs}ms para repetir uma vez.`);
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+              response = await doFetch(`${currentBaseUrl}/chat/completions`, requestInit);
+              if (!response.ok) {
+                const retryErrText = await response.text();
+                console.error(`[AIProvider Error ${response.status}] ${currentProvider}: ${retryErrText}`);
+                fallbackReason = response.status === 429 ? 'rate_limit' : 'provider_error';
+              }
+            }
+          }
         }
 
         if (response.ok && response.body) {
@@ -282,6 +316,7 @@ export class AIProviderGateway {
         token: word + (i === fallbackWords.length - 1 ? '' : ' '),
         isComplete: false,
         fallback: true,
+        fallbackReason,
       };
     }
 
@@ -306,6 +341,7 @@ export class AIProviderGateway {
       citation: options.citation,
       telemetry: fallbackTelemetry,
       fallback: true,
+      fallbackReason,
     };
   }
 

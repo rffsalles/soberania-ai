@@ -3,6 +3,8 @@ import {
   EMBEDDING_BATCH_SIZE,
   EMBEDDING_DIMENSIONS,
   EmbeddingUnavailableError,
+  EmbeddingsDisabledError,
+  embeddingsEnabled,
   embedTexts,
   hashEmbedding,
 } from '../embeddings';
@@ -132,5 +134,51 @@ describe('embedTexts', () => {
       EmbeddingUnavailableError,
     );
     expect(f).not.toHaveBeenCalled();
+  });
+});
+
+describe('embeddings desligados e endpoint próprio', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('modelo vazio: embeddingsEnabled é false e embedTexts lança EmbeddingsDisabledError sem fetch', async () => {
+    stubProvider();
+    vi.stubEnv('AI_EMBEDDING_MODEL', '');
+    const f = fakeFetch();
+    expect(embeddingsEnabled()).toBe(false);
+    const erro = await embedTexts(['a'], { fetch: f as unknown as typeof fetch }).catch((e) => e);
+    expect(erro).toBeInstanceOf(EmbeddingsDisabledError);
+    expect(erro).toBeInstanceOf(EmbeddingUnavailableError);
+    expect(erro.message).toContain('Embeddings desligados');
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it('modelo definido e provedor real: embeddingsEnabled é true; mock é sempre true', () => {
+    stubProvider();
+    expect(embeddingsEnabled()).toBe(true);
+    vi.stubEnv('AI_PROVIDER', 'mock');
+    vi.stubEnv('AI_EMBEDDING_MODEL', '');
+    expect(embeddingsEnabled()).toBe(true);
+  });
+
+  it('usa AI_EMBEDDING_BASE_URL e AI_EMBEDDING_API_KEY quando definidos', async () => {
+    stubProvider(API_KEY);
+    vi.stubEnv('AI_EMBEDDING_BASE_URL', 'http://embeddings.local/v1/');
+    vi.stubEnv('AI_EMBEDDING_API_KEY', 'chave-embeddings');
+    const f = fakeFetch();
+    await embedTexts(['a 1'], { fetch: f as unknown as typeof fetch });
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe('http://embeddings.local/v1/embeddings');
+    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer chave-embeddings');
+  });
+
+  it('cai para AI_BASE_URL e AI_API_KEY quando as variáveis de embeddings estão vazias', async () => {
+    stubProvider(API_KEY);
+    vi.stubEnv('AI_EMBEDDING_BASE_URL', '');
+    vi.stubEnv('AI_EMBEDDING_API_KEY', '');
+    const f = fakeFetch();
+    await embedTexts(['a 1'], { fetch: f as unknown as typeof fetch });
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe(`${BASE_URL}/embeddings`);
+    expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${API_KEY}`);
   });
 });

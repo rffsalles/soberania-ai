@@ -1,4 +1,4 @@
-import { embedTexts, EmbeddingUnavailableError } from '@/lib/embeddings';
+import { embedTexts, EmbeddingUnavailableError, EmbeddingsDisabledError } from '@/lib/embeddings';
 import { DEFAULT_TOP_K, RAG_MAX_TOP_K, RAG_MIN_TOP_K, RRF_K, isSyntheticChapter } from './constants';
 import * as chunkRepo from './services/chunk-repository';
 import * as categoryRepo from './services/category-repository';
@@ -44,13 +44,30 @@ export function formatCitation(chunk: Pick<DidacticChunk, 'bookTitle' | 'chapter
   return `[${chunk.bookTitle} · ${chapterName}, pág. ${chunk.pageNumber}]`;
 }
 
+let embeddingNoticeLogged = false;
+
+/** Só para testes: reabre o aviso único por processo. */
+export function resetEmbeddingNoticeForTests(): void {
+  embeddingNoticeLogged = false;
+}
+
+function logEmbeddingNoticeOnce(err: EmbeddingUnavailableError): void {
+  if (embeddingNoticeLogged) return;
+  embeddingNoticeLogged = true;
+  if (err instanceof EmbeddingsDisabledError) {
+    console.info('[HybridSearch] Embeddings desligados por configuração; usando apenas busca léxica.');
+    return;
+  }
+  console.warn('[HybridSearch] Embeddings indisponíveis, usando apenas busca léxica:', err.message);
+}
+
 async function embedQuery(query: string, deps: HybridSearchDeps): Promise<number[] | null> {
   try {
     const [embedding] = await deps.embed([query]);
     return embedding ?? null;
   } catch (err) {
     if (!(err instanceof EmbeddingUnavailableError)) throw err;
-    console.warn('[HybridSearch] Embeddings indisponíveis, usando apenas busca léxica:', err.message);
+    logEmbeddingNoticeOnce(err);
     return null;
   }
 }

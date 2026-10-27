@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import * as fileParser from '../../file-parser';
 import { DomainError } from '@/lib/api/domain-error';
 import { MATERIAL_STATUS } from '@/lib/constants/library';
-import { EmbeddingUnavailableError } from '@/lib/embeddings';
+import { EmbeddingUnavailableError, EmbeddingsDisabledError } from '@/lib/embeddings';
 import {
   ingestTextDocument,
   reindexMaterial,
@@ -125,6 +125,22 @@ describe('uploadAndIngest', () => {
     expect(result.material.status).toBe(MATERIAL_STATUS.INDEXED_LEXICAL_ONLY);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  it('ingestão não quebra com embeddings desligados: chunks salvos sem vetor, INDEXED_LEXICAL_ONLY', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { deps, statuses, embedded } = makeDeps({
+      embed: vi.fn(async () => {
+        throw new EmbeddingsDisabledError();
+      }),
+    });
+    const result = await uploadAndIngest(file, meta, deps);
+    expect(embedded).toHaveLength(0);
+    expect(statuses).toEqual([{ id: 'm1', status: MATERIAL_STATUS.INDEXED_LEXICAL_ONLY }]);
+    expect(result.material.status).toBe(MATERIAL_STATUS.INDEXED_LEXICAL_ONLY);
+    warn.mockRestore();
+    info.mockRestore();
   });
 
   it('defaults to Geral when no categories are given', async () => {

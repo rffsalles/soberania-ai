@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { aiProvider, type InferenceTelemetry } from '../ai-provider';
 
 describe('AI Provider Gateway', () => {
@@ -104,6 +104,129 @@ describe('AI Provider Gateway', () => {
       expect(telemetry!.completionTokens).toBe(1);
       expect(telemetry!.promptTokens).toBe(0);
       expect(telemetry!.totalTokens).toBe(0);
+    });
+  });
+
+  describe('erros do provedor (429 e demais)', () => {
+    const env = { ...process.env };
+    beforeEach(() => {
+      process.env.AI_PROVIDER = 'groq';
+      process.env.AI_API_KEY = 'k';
+      process.env.AI_BASE_URL = 'https://api.example.test/v1';
+      vi.useFakeTimers();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+      process.env = { ...env };
+    });
+
+    const rateLimitBody = (message: string) =>
+      JSON.stringify({ error: { message, type: 'tokens', code: 'rate_limit_exceeded' } });
+    const okResponse = () =>
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Olá' } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200 },
+      );
+
+    async function collect() {
+      const done = (async () => {
+        const chunks = [];
+        for await (const chunk of aiProvider.streamChat([{ role: 'user', content: 'oi' }])) chunks.push(chunk);
+        return chunks;
+      })();
+      await vi.runAllTimersAsync();
+      return done;
+    }
+
+    it('429 com retry-after dentro do teto: espera e refaz a chamada uma vez, sem fallback', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(rateLimitBody('Rate limit reached. Please try again in 1.5s.'), {
+            status: 429,
+            headers: { 'retry-after': '2' },
+          }),
+        )
+        .mockResolvedValueOnce(okResponse());
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks = await collect();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(chunks.some((c) => c.fallback)).toBe(false);
+      expect(chunks.map((c) => c.token).join('')).toBe('Olá');
+    });
+
+    it('429 sem cabeçalho: lê o atraso do corpo ("try again in 10.32s")', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(rateLimitBody('Rate limit reached ... Please try again in 10.32s. Visit ...'), { status: 429 }),
+        )
+        .mockResolvedValueOnce(okResponse());
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks = await collect();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(chunks.some((c) => c.fallback)).toBe(false);
+    });
+
+    it('429 que se repete na segunda tentativa cai no fallback com rate_limit', async () => {
+      const fetchMock = vi.fn(
+        async () => new Response(rateLimitBody('x'), { status: 429, headers: { 'retry-after': '1' } }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks = await collect();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(chunks.every((c) => c.fallback && c.fallbackReason === 'rate_limit')).toBe(true);
+    });
+
+    it('429 "Request too large": não repete e cai no fallback com rate_limit', async () => {
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(rateLimitBody('Request too large for model on output tokens per minute (OTPM): Limit 1000, Requested 1566.'), {
+            status: 429,
+            headers: { 'retry-after': '1' },
+          }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks = await collect();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.every((c) => c.fallback === true && c.fallbackReason === 'rate_limit')).toBe(true);
+    });
+
+    it('429 com atraso acima do teto: não repete e cai no fallback com rate_limit', async () => {
+      const fetchMock = vi.fn(
+        async () => new Response(rateLimitBody('x'), { status: 429, headers: { 'retry-after': '60' } }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks = await collect();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(chunks.every((c) => c.fallback && c.fallbackReason === 'rate_limit')).toBe(true);
+    });
+
+    it('429 sem atraso identificável: não repete', async () => {
+      const fetchMock = vi.fn(async () => new Response('limite', { status: 429 }));
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks = await collect();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(chunks.every((c) => c.fallbackReason === 'rate_limit')).toBe(true);
+    });
+
+    it('500 cai no fallback com provider_error, sem repetir', async () => {
+      const fetchMock = vi.fn(async () => new Response('erro', { status: 500 }));
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks = await collect();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(chunks.every((c) => c.fallback && c.fallbackReason === 'provider_error')).toBe(true);
+    });
+
+    it('erro de rede cai no fallback com provider_error', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNRESET'); }));
+      const chunks = await collect();
+      expect(chunks.every((c) => c.fallback && c.fallbackReason === 'provider_error')).toBe(true);
     });
   });
 });
