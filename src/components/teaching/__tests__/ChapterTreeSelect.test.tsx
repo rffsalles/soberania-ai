@@ -22,6 +22,14 @@ describe('ChapterTreeSelect', () => {
     expect(screen.queryByRole('treeitem', { name: '2.1 Produtos notáveis' })).toBeNull();
   });
 
+  it('cada livro é um grupo nomeado; o cabeçalho visual fica fora da árvore acessível', () => {
+    setup();
+    const group = screen.getByRole('group', { name: 'Matemática Básica (Silva)' });
+    expect(group.querySelector('[role="treeitem"]')?.getAttribute('aria-label')).toBe('1 Unidade 1');
+    expect(screen.getByRole('group', { name: 'Leituras Complementares (Souza)' })).toBeTruthy();
+    expect(screen.getByText('Matemática Básica (Silva)').getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('marcar pai emite só o pai', () => {
     const { onSelectionChange, item } = setup(['s21']);
     fireEvent.click(item('2 Unidade 2'));

@@ -231,10 +231,12 @@ export function ChapterTreeSelect({
                 if (roots.length === 0) return null;
                 return (
                   <li key={book.materialId} role="none">
-                    <div className="px-1 pb-1 text-xs font-semibold text-slate-500">
+                    <div aria-hidden="true" className="px-1 pb-1 text-xs font-semibold text-slate-500">
                       {`${book.title} (${book.author})`}
                     </div>
-                    <ul role="group">{roots.map(renderNode)}</ul>
+                    <ul role="group" aria-label={`${book.title} (${book.author})`}>
+                      {roots.map(renderNode)}
+                    </ul>
                   </li>
                 );
               })}
