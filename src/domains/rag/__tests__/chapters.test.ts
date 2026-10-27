@@ -155,6 +155,47 @@ describe('relinkByOrder', () => {
   });
 });
 
+describe('outlineToDrafts (segundo nível sem promover seções)', () => {
+  const e = (title: string, pageNumber: number | null, depth: number) => ({ title, pageNumber, depth });
+  it('2 raízes válidas com seções ficam no nível 0', () =>
+    expect(
+      outlineToDrafts([
+        e('Capítulo 1', 5, 0),
+        ...[6, 10, 14, 18, 22].map((p, i) => e(`Seção 1.${i + 1}`, p, 1)),
+        e('Capítulo 2', 40, 0),
+        ...[41, 45, 50, 55].map((p, i) => e(`Seção 2.${i + 1}`, p, 1)),
+      ]),
+    ).toEqual([
+      { title: 'Capítulo 1', startPage: 5 },
+      { title: 'Capítulo 2', startPage: 40 },
+    ]));
+  it('raiz única genérica (.pdf) com 4 capítulos filhos usa os filhos', () =>
+    expect(
+      outlineToDrafts([
+        e('livro.pdf', 1, 0),
+        e('C1', 3, 1),
+        e('C2', 20, 1),
+        e('C3', 40, 1),
+        e('C4', 60, 1),
+      ]),
+    ).toHaveLength(4));
+  it('2 raízes genéricas: usa só os filhos da raiz com mais filhos válidos', () =>
+    expect(
+      outlineToDrafts([
+        e('a.pdf', 1, 0),
+        e('A1', 3, 1),
+        e('A2', 20, 1),
+        e('A3', 40, 1),
+        e('b.pdf', 50, 0),
+        e('B1', 55, 1),
+      ]),
+    ).toEqual([
+      { title: 'A1', startPage: 3 },
+      { title: 'A2', startPage: 20 },
+      { title: 'A3', startPage: 40 },
+    ]));
+});
+
 describe('headingsToDrafts', () => {
   const page = (pageNumber: number, text: string) => ({ pageNumber, text });
   const body = (from: number, to: number) =>

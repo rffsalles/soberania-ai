@@ -37,12 +37,36 @@ function draftsAtDepth(entries: OutlineEntry[], depth: number): ChapterDraft[] {
   return drafts;
 }
 
-/** Converte o outline do PDF em rascunhos (nível 0; cai para o nível 1 quando a raiz é só o título do livro). */
+/** Filhos (nível 1) de cada raiz (nível 0), na ordem do outline; a raiz vem junto para saber se é válida. */
+function childrenByRoot(entries: OutlineEntry[]): { rootValid: boolean; children: OutlineEntry[] }[] {
+  const groups: { rootValid: boolean; children: OutlineEntry[] }[] = [];
+  for (const entry of entries) {
+    if (entry.depth === 0) {
+      const valid = entry.pageNumber !== null && !isGenericOutlineTitle(entry.title.trim());
+      groups.push({ rootValid: valid, children: [] });
+    } else if (entry.depth === 1 && groups.length > 0) {
+      groups[groups.length - 1].children.push(entry);
+    }
+  }
+  return groups;
+}
+
+/**
+ * Converte o outline do PDF em rascunhos. Fica no nível 0 quando há 2+ raízes válidas; com 0 ou 1,
+ * cai para o nível 1 usando só os filhos de UMA raiz (a válida única ou, sem válidas, a com mais filhos válidos).
+ */
 export function outlineToDrafts(entries: OutlineEntry[]): ChapterDraft[] | null {
   const root = draftsAtDepth(entries, 0);
   if (root.length >= MIN_EXTRACTED_CHAPTERS) return root;
-  const nested = draftsAtDepth(entries, 1);
-  return nested.length >= MIN_NESTED_OUTLINE_CHAPTERS ? nested : null;
+  const groups = childrenByRoot(entries);
+  const validRoots = groups.filter((g) => g.rootValid);
+  const candidates = validRoots.length === 1 ? validRoots : groups;
+  let best: ChapterDraft[] = [];
+  for (const g of candidates) {
+    const drafts = draftsAtDepth(g.children, 1);
+    if (drafts.length > best.length) best = drafts;
+  }
+  return best.length >= MIN_NESTED_OUTLINE_CHAPTERS ? best : null;
 }
 
 const HEADING_SCAN_LINES = 3;
