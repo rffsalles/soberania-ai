@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgendaStatus, AgendaType, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { createAgendaSchema, setAgendaStatusSchema } from '@/lib/validators/agenda.validator';
@@ -108,6 +108,25 @@ describe('deriveAgendaStatus', () => {
   it('keeps CANCELLED and COMPLETED', () => {
     expect(deriveAgendaStatus({ ...base, status: AgendaStatus.CANCELLED }, NOW)).toBe('CANCELLED');
     expect(deriveAgendaStatus({ ...base, status: AgendaStatus.COMPLETED }, NOW)).toBe('COMPLETED');
+  });
+});
+
+describe('deriveAgendaStatus com NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', () => {
+  const past = {
+    startTime: new Date(NOW.getTime() - 3 * hour),
+    endTime: new Date(NOW.getTime() - 2 * hour),
+  };
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+  it('SCHEDULED com endTime no passado vira LIVE', () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', 'true');
+    expect(deriveAgendaStatus({ ...past, status: AgendaStatus.SCHEDULED }, NOW)).toBe('LIVE');
+  });
+  it('COMPLETED e CANCELLED continuam terminais', () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', 'true');
+    expect(deriveAgendaStatus({ ...past, status: AgendaStatus.COMPLETED }, NOW)).toBe('COMPLETED');
+    expect(deriveAgendaStatus({ ...past, status: AgendaStatus.CANCELLED }, NOW)).toBe('CANCELLED');
   });
 });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { validateAgendaTimeWindow } from '../agenda-validator';
 import type { AgendaSession } from '../types';
 
@@ -82,5 +82,53 @@ describe('Agendas Domain - Time Window Validation', () => {
     const validation = validateAgendaTimeWindow(session);
     expect(validation.isWithinWindow).toBe(false);
     expect(validation.message).toContain('cancelada');
+  });
+});
+
+describe('Agendas Domain - flag NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', () => {
+  const now = new Date('2026-10-20T12:00:00Z');
+  const make = (status: AgendaSession['status'], startTime: string, endTime: string): AgendaSession => ({
+    id: 'flag',
+    title: 'Aula',
+    subject: 'BD',
+    type: 'CLASSROOM',
+    status,
+    instructorName: 'Prof.',
+    startTime,
+    endTime,
+  });
+  const TEST_MESSAGE = 'Sessão liberada para testes: a janela de horário está sendo ignorada.';
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('libera SCHEDULED com startTime no futuro', () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', 'true');
+    const v = validateAgendaTimeWindow(make('SCHEDULED', '2026-10-21T12:00:00Z', '2026-10-21T13:00:00Z'), now);
+    expect(v.isWithinWindow).toBe(true);
+    expect(v.message).toBe(TEST_MESSAGE);
+  });
+
+  it('libera SCHEDULED e LIVE com endTime no passado', () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', 'true');
+    for (const status of ['SCHEDULED', 'LIVE'] as const) {
+      const v = validateAgendaTimeWindow(make(status, '2026-10-20T09:00:00Z', '2026-10-20T10:00:00Z'), now);
+      expect(v.isWithinWindow).toBe(true);
+      expect(v.minutesRemaining).toBe(0);
+    }
+  });
+
+  it('CANCELLED continua bloqueada', () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', 'true');
+    const v = validateAgendaTimeWindow(make('CANCELLED', '2026-10-20T11:00:00Z', '2026-10-20T13:00:00Z'), now);
+    expect(v.isWithinWindow).toBe(false);
+    expect(v.message).toContain('cancelada');
+  });
+
+  it("com a flag em 'false' mantém o comportamento original", () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW', 'false');
+    const v = validateAgendaTimeWindow(make('SCHEDULED', '2026-10-21T12:00:00Z', '2026-10-21T13:00:00Z'), now);
+    expect(v.isWithinWindow).toBe(false);
   });
 });

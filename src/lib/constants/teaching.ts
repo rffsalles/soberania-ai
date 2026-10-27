@@ -49,6 +49,15 @@ export function resolveInstitutionTimeZone(value: string | undefined): string {
  */
 export const INSTITUTION_TIMEZONE = resolveInstitutionTimeZone(process.env.NEXT_PUBLIC_INSTITUTION_TIMEZONE);
 
+/**
+ * Apenas para testes locais: quando 'true', a janela de horário das sessões é ignorada.
+ * Função (lida em tempo de chamada) com acesso literal a process.env.NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW
+ * para o Next.js embutir o valor no bundle do cliente. Nunca ative em produção.
+ */
+export function isAgendaTimeWindowIgnored(): boolean {
+  return process.env.NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW === 'true';
+}
+
 /** Limites de texto das aulas (M9). */
 export const LESSON_TITLE_MAX_LENGTH = 200;
 export const LESSON_TEXT_MAX_LENGTH = 10_000;

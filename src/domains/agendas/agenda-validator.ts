@@ -1,5 +1,5 @@
 import type { AgendaSession, AgendaStatus, AgendaTimeWindowValidation } from './types';
-import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
+import { INSTITUTION_TIMEZONE, isAgendaTimeWindowIgnored } from '@/lib/constants/teaching';
 
 /**
  * Valida se a requisição do aluno está dentro da janela de horário autorizada para a sessão
@@ -14,6 +14,19 @@ export function validateAgendaTimeWindow(
       minutesRemaining: 0,
       timeUntilStartMinutes: 0,
       message: 'Esta sessão foi cancelada pela coordenação pedagógica.',
+    };
+  }
+
+  if (isAgendaTimeWindowIgnored()) {
+    const endMs = new Date(session.endTime).getTime();
+    const remaining = !isNaN(endMs) && endMs > currentTime.getTime()
+      ? Math.ceil((endMs - currentTime.getTime()) / (1000 * 60))
+      : 0;
+    return {
+      isWithinWindow: true,
+      minutesRemaining: remaining,
+      timeUntilStartMinutes: 0,
+      message: 'Sessão liberada para testes: a janela de horário está sendo ignorada.',
     };
   }
 
@@ -98,6 +111,7 @@ export function deriveAgendaStatus(
   now: Date = new Date()
 ): AgendaStatus {
   if (agenda.status === 'CANCELLED' || agenda.status === 'COMPLETED') return agenda.status;
+  if (isAgendaTimeWindowIgnored()) return 'LIVE';
   const t = now.getTime();
   if (t < new Date(agenda.startTime).getTime()) return 'SCHEDULED';
   if (t > new Date(agenda.endTime).getTime()) return 'COMPLETED';

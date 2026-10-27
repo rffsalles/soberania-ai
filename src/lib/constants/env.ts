@@ -14,4 +14,6 @@ export const ENV = {
   NEXT_PUBLIC_DEMO_MODE: 'NEXT_PUBLIC_DEMO_MODE',
   /** Fuso IANA da instituição (padrão America/Sao_Paulo); lida por acesso literal em lib/constants/teaching. */
   NEXT_PUBLIC_INSTITUTION_TIMEZONE: 'NEXT_PUBLIC_INSTITUTION_TIMEZONE',
+  /** SOMENTE PARA TESTES LOCAIS: 'true' ignora a janela de horário das sessões. Nunca ative em produção. Lida em lib/constants/teaching. */
+  NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW: 'NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW',
 } as const;
