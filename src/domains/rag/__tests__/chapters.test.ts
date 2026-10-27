@@ -582,6 +582,11 @@ describe('applyPageLabels', () => {
     const r = applyPageLabels([node('A', 2), node('B', 50)], labels);
     expect(r).toEqual({ tree: [node('A', 4), node('B', 50)], converted: true });
   });
+
+  it('página mantida (sem rótulo) não avança a busca dos nós seguintes', () => {
+    const r = applyPageLabels([node('A', 1), node('B', 99), node('C', 2)], ['i', 'ii', '1', '2', '3']);
+    expect(r).toEqual({ tree: [node('A', 3), node('B', 99), node('C', 4)], converted: true });
+  });
 });
 
 describe('isValidChapterTree', () => {

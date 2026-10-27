@@ -125,6 +125,8 @@ function hasPageNumberLines(text: string): boolean {
  * Páginas a enviar à extração de capítulos: as `windowSize` primeiras, mais o primeiro bloco contíguo (até
  * `maxExtra`) de páginas de sumário depois delas (sumários podem vir após capa, prefácio e apresentação), na ordem
  * original. Página logo após uma de sumário também conta se tiver linhas terminadas em número de página.
+ * `pages` deve estar ordenado por posição no documento (pageNumber crescente): a janela e a contiguidade
+ * são calculadas pelo índice no array, não pelo pageNumber.
  */
 export function selectTocPages<T extends { pageNumber: number; text: string }>(
   pages: T[],
@@ -367,8 +369,9 @@ export function applyPageLabels(
       if (index !== -1) {
         startPage = index + 1;
         converted = true;
+        // Só um nó convertido avança a busca: a página impressa mantida não é índice de rótulo.
+        previousIndex = index;
       }
-      previousIndex = Math.max(0, startPage - 1);
       return { ...node, startPage, children: convert(node.children) };
     });
   return { tree: convert(tree), converted };

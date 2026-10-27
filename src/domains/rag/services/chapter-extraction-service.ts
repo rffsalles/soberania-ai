@@ -126,7 +126,13 @@ export async function extractChapterDrafts(
   const answer = await askModel(input, nav, deps);
   const promoted = answer && promoteSingleRoot(answer);
   if (promoted) {
-    const { tree: labeled, converted } = applyPageLabels(promoted, nav.pageLabels);
+    let labeled = promoted;
+    let converted = false;
+    try {
+      ({ tree: labeled, converted } = applyPageLabels(promoted, nav.pageLabels));
+    } catch (err) {
+      console.warn('[chapters] falha ao aplicar rótulos de página', err);
+    }
     let aligned = labeled;
     let found = 0;
     try {

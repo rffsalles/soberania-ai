@@ -242,6 +242,20 @@ describe('extractAndSaveChapters', () => {
     expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'AI', [], expect.any(Array), undefined);
   });
 
+  it('exceção ao aplicar os rótulos de página segue com a árvore não convertida', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const labels = ['i', null, ...Array.from({ length: 18 }, (_, i) => String(i + 1))] as unknown as string[];
+    const r = await extractAndSaveChapters(
+      'm1',
+      { buffer, pages, totalPages: 20 },
+      depsWith({ pageLabels: labels, ai: aiJson([{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }]) }),
+    );
+    expect(warn).toHaveBeenCalledWith('[chapters] falha ao aplicar rótulos de página', expect.any(Error));
+    warn.mockRestore();
+    expect(r.source).toBe('AI');
+    expect(replaceChapters.mock.calls[0][1].map((c: { startPage: number }) => c.startPage)).toEqual([3, 9]);
+  });
+
   it('falha no realinhamento mantém o resultado da IA com as páginas originais', async () => {
     vi.mocked(alignTreeToText).mockImplementationOnce(() => {
       throw new Error('realinhar falhou');
