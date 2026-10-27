@@ -390,6 +390,15 @@ describe('headingsToTree', () => {
       { title: 'Capítulo 2 – B', startPage: 20, children: [] },
     ]));
 
+  it('número com separador de milhar ou conta não vira seção', () =>
+    expect(headingsToTree([
+      page(5, 'Capítulo 1 – A'), page(6, '1.500 alunos matriculados'), page(7, '1.2 Endereçamento'),
+      page(20, 'Capítulo 2 – B'), page(21, '2.5 + 3.2 = 7.7'),
+    ])).toEqual([
+      { title: 'Capítulo 1 – A', startPage: 5, children: [{ title: '1.2 Endereçamento', startPage: 7, children: [] }] },
+      { title: 'Capítulo 2 – B', startPage: 20, children: [] },
+    ]));
+
   it('numerado repetido (cabeçalho corrido) fica na primeira ocorrência', () =>
     expect(headingsToTree([page(5, 'Capítulo 1 – A'), page(8, '1.1 Seção'), page(9, '1.1 Seção'), page(20, 'Capítulo 2 – B')])?.[0].children).toEqual([
       { title: '1.1 Seção', startPage: 8, children: [] },
@@ -619,6 +628,14 @@ describe('isTocPage', () => {
     expect(isTocPage('Sumário\nA ........ 3\nB . . . . 9\nC …… 12')).toBe(true);
     expect(isTocPage('A ........ 3\nB ........ 9\nTexto')).toBe(false);
   });
+  it('primeira linha "Sumário", "Índice", "Conteúdo" ou "Contents" basta', () => {
+    expect(isTocPage('Sumário\nApresentação\nUnidade 1')).toBe(true);
+    expect(isTocPage('  \nÍNDICE\nCapítulo 1')).toBe(true);
+    expect(isTocPage('Conteúdo\nA')).toBe(true);
+    expect(isTocPage('Table of Contents\nA')).toBe(true);
+    expect(isTocPage('Sumário executivo do projeto\nTexto')).toBe(false);
+    expect(isTocPage('Texto\nSumário')).toBe(false);
+  });
 });
 
 describe('selectTocPages', () => {
@@ -631,5 +648,18 @@ describe('selectTocPages', () => {
   it('acrescenta no máximo 10 páginas de sumário depois da janela', () => {
     const pages = Array.from({ length: 50 }, (_, i) => page(i + 1, i + 1 >= 30 && i + 1 <= 41 ? toc : `Texto ${i + 1}`));
     expect(selectTocPages(pages, 5).map((p) => p.pageNumber)).toEqual([1, 2, 3, 4, 5, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]);
+  });
+  it('só o primeiro bloco contíguo de sumário depois da janela entra', () => {
+    const pages = Array.from({ length: 50 }, (_, i) =>
+      page(i + 1, (i + 1 >= 30 && i + 1 <= 33) || i + 1 === 40 ? toc : `Texto ${i + 1}`),
+    );
+    expect(selectTocPages(pages, 5).map((p) => p.pageNumber)).toEqual([1, 2, 3, 4, 5, 30, 31, 32, 33]);
+  });
+  it('página sem pontos logo após o sumário conta se tiver 3+ linhas terminadas em número de página', () => {
+    const noDots = 'Capítulo 5 Redes 120\nCapítulo 6 Segurança 140\nCapítulo 7 Nuvem 160';
+    const pages = Array.from({ length: 50 }, (_, i) =>
+      page(i + 1, i + 1 === 30 ? toc : i + 1 === 31 || i + 1 === 45 ? noDots : `Texto ${i + 1}`),
+    );
+    expect(selectTocPages(pages, 5).map((p) => p.pageNumber)).toEqual([1, 2, 3, 4, 5, 30, 31]);
   });
 });

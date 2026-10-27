@@ -87,25 +87,44 @@ export function promoteSingleRoot(tree: ChapterNode[]): ChapterNode[] {
 
 const HEADING_SCAN_LINES = 3;
 const HEADING_PATTERN = /^(Unidade|Cap[íi]tulo|Cap\.|Parte|M[óo]dulo)\s+(\d+)\b(.*)$/i;
-/** Título numerado de subnível: "1.1 Texto", "1.2.3 Texto". A profundidade vem da quantidade de pontos. */
-const NUMBERED_HEADING = /^\s*(\d+(?:\.\d+)+)\s+(\S.{2,})$/;
+/**
+ * Título numerado de subnível: "1.1 Texto", "1.2.3 Texto". A profundidade vem da quantidade de pontos. O texto começa
+ * por letra; segmento de exatamente 3 dígitos após o primeiro é separador de milhar ("1.500 alunos") e é rejeitado.
+ */
+const NUMBERED_HEADING = /^\s*(\d+(?:\.\d+)+)\s+(\p{L}.{2,})$/u;
+const THOUSANDS_SEGMENT = /^\d{3}$/;
 const TOC_PAGE_MIN_LINES = 3;
 const HEADING_TITLE_LOOKAHEAD = 3;
 /** Linha de sumário: líder de pontos (juntos ou separados por espaço)/reticências seguido do número de página no fim. */
 const TOC_LINE_PATTERN = /(\.{3,}|…|(?:\.\s+){2,}\.)\s*\d+\s*$/;
+/** Título de página de sumário na primeira linha não vazia. */
+const TOC_TITLE_PATTERN = /^(sum[aá]rio|[ií]ndice|conte[uú]do|contents|table of contents)$/i;
+/** Linha terminada em número de página, sem líder de pontos (continuação de sumário). */
+const PAGE_NUMBER_LINE = /\s\d{1,4}\s*$/;
 
-/** true quando a página tem ao menos TOC_PAGE_MIN_LINES linhas de sumário. */
-export function isTocPage(text: string): boolean {
-  const tocLines = text
+function nonEmptyLines(text: string): string[] {
+  return text
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter((l) => l && TOC_LINE_PATTERN.test(l)).length;
-  return tocLines >= TOC_PAGE_MIN_LINES;
+    .filter(Boolean);
+}
+
+/** true quando a primeira linha é o título do sumário ou a página tem ao menos TOC_PAGE_MIN_LINES linhas de sumário. */
+export function isTocPage(text: string): boolean {
+  const lines = nonEmptyLines(text);
+  if (lines.length > 0 && TOC_TITLE_PATTERN.test(lines[0])) return true;
+  return lines.filter((l) => TOC_LINE_PATTERN.test(l)).length >= TOC_PAGE_MIN_LINES;
+}
+
+/** Continuação de sumário sem pontos: ao menos TOC_PAGE_MIN_LINES linhas terminadas em número de página. */
+function hasPageNumberLines(text: string): boolean {
+  return nonEmptyLines(text).filter((l) => PAGE_NUMBER_LINE.test(l)).length >= TOC_PAGE_MIN_LINES;
 }
 
 /**
- * Páginas a enviar à extração de capítulos: as `windowSize` primeiras, mais até `maxExtra` páginas de sumário
- * detectadas depois delas (sumários podem vir após capa, prefácio e apresentação), na ordem original.
+ * Páginas a enviar à extração de capítulos: as `windowSize` primeiras, mais o primeiro bloco contíguo (até
+ * `maxExtra`) de páginas de sumário depois delas (sumários podem vir após capa, prefácio e apresentação), na ordem
+ * original. Página logo após uma de sumário também conta se tiver linhas terminadas em número de página.
  */
 export function selectTocPages<T extends { pageNumber: number; text: string }>(
   pages: T[],
@@ -113,7 +132,15 @@ export function selectTocPages<T extends { pageNumber: number; text: string }>(
   maxExtra: number = CHAPTER_TOC_EXTRA_PAGES,
 ): T[] {
   const head = pages.slice(0, windowSize);
-  const extra = pages.slice(windowSize).filter((p) => isTocPage(p.text)).slice(0, maxExtra);
+  const extra: T[] = [];
+  let previousIsToc = head.length > 0 && isTocPage(head[head.length - 1].text);
+  for (const page of pages.slice(windowSize)) {
+    if (extra.length >= maxExtra) break;
+    const toc = isTocPage(page.text) || (previousIsToc && hasPageNumberLines(page.text));
+    if (toc) extra.push(page);
+    else if (extra.length > 0) break;
+    previousIsToc = toc;
+  }
   return [...head, ...extra];
 }
 
@@ -138,8 +165,8 @@ export function headingsToTree(pages: { pageNumber: number; text: string }[]): C
       const m = HEADING_PATTERN.exec(line);
       if (!m) {
         const n = NUMBERED_HEADING.exec(line);
-        if (n && roots.length > 0) {
-          const parts = n[1].split('.');
+        const parts = n ? n[1].split('.') : [];
+        if (n && roots.length > 0 && !parts.slice(1).some((part) => THOUSANDS_SEGMENT.test(part))) {
           const parent = parts.length === 2 ? roots[roots.length - 1] : byNumber.get(parts.slice(0, -1).join('.'));
           if (Number(parts[0]) === roots.length && parent && !byNumber.has(n[1]) && page.pageNumber >= lastPage) {
             const node: ChapterNode = { title: line, startPage: page.pageNumber, children: [] };

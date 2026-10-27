@@ -36,21 +36,63 @@ const chapterNodeSchema: z.ZodType<ChapterNode, z.ZodTypeDef, unknown> = z.lazy(
   z.object({
     title: z.string().trim().min(1),
     startPage: z.coerce.number().int(),
-    children: z.array(chapterNodeSchema).optional().default([]),
+    children: z
+      .array(chapterNodeSchema)
+      .nullish()
+      .transform((v) => v ?? []),
   }),
 );
 
 const chapterExtractionSchema = z.object({ chapters: z.array(chapterNodeSchema) });
 
-/** Extrai o primeiro objeto JSON do texto e valida; null quando ausente ou inválido. */
+/**
+ * Repara JSON cortado (limite de tokens): corta no último `}` que fechou um objeto dentro de array (um nó de
+ * `chapters`/`children`) e anexa os fechamentos pendentes. null quando nenhum nó chegou a fechar.
+ */
+function repairTruncatedJson(text: string): string | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let cut: { index: number; open: string[] } | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') {
+      stack.pop();
+      if (ch === '}' && stack[stack.length - 1] === '[') cut = { index: i + 1, open: [...stack] };
+    }
+  }
+  if (!cut) return null;
+  const closers = cut.open.reverse().map((ch) => (ch === '{' ? '}' : ']')).join('');
+  return text.slice(0, cut.index) + closers;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Extrai o primeiro objeto JSON do texto (reparando resposta truncada) e valida; null quando ausente ou inválido. */
 export function parseChapterExtraction(raw: string): ChapterNode[] | null {
   const start = raw.indexOf('{');
+  if (start === -1) return null;
   const end = raw.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    const parsed = chapterExtractionSchema.safeParse(JSON.parse(raw.slice(start, end + 1)));
-    return parsed.success ? parsed.data.chapters : null;
-  } catch {
-    return null;
+  let json = end > start ? parseJson(raw.slice(start, end + 1)) : undefined;
+  if (json === undefined) {
+    const repaired = repairTruncatedJson(raw.slice(start));
+    if (repaired === null) return null;
+    json = parseJson(repaired);
   }
+  const parsed = chapterExtractionSchema.safeParse(json);
+  return parsed.success ? parsed.data.chapters : null;
 }

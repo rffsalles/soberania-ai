@@ -3,7 +3,7 @@ import { CHAPTER_TOC_DETECTED_PAGE_CHARS, CHAPTER_TOC_PAGE_CHARS } from '@/domai
 import { buildChapterExtractionMessages, parseChapterExtraction } from '../chapter-extraction-prompt';
 
 describe('buildChapterExtractionMessages', () => {
-  it('marca página física e impressa e pede página física', () => {
+  it('marca página física e impressa e pede página impressa', () => {
     const [sys, user] = buildChapterExtractionMessages({ pages: [{ pageNumber: 7, label: 'v', text: 'Sumário' }], totalPages: 300 });
     expect(user.content).toContain('--- Página física 7 (impressa: v) ---');
     expect(user.content).toContain('Sumário');
@@ -54,6 +54,22 @@ describe('parseChapterExtraction', () => {
       ] },
       { title: 'Unidade 2', startPage: 43, children: [] },
     ]);
+  });
+  it('children null vira []', () => {
+    expect(parseChapterExtraction('{"chapters":[{"title":"A","startPage":3,"children":null},{"title":"B","startPage":9}]}')).toEqual([
+      { title: 'A', startPage: 3, children: [] },
+      { title: 'B', startPage: 9, children: [] },
+    ]);
+  });
+  it('resposta truncada no meio do 3º nó devolve os 2 primeiros', () => {
+    const raw = '```json\n{"chapters":[{"title":"A {x}","startPage":3,"children":[]},{"title":"B \\"q\\"","startPage":9,"children":[{"title":"b1","startPage":10,"children":[]}]},{"title":"C","startPa';
+    expect(parseChapterExtraction(raw)).toEqual([
+      { title: 'A {x}', startPage: 3, children: [] },
+      { title: 'B "q"', startPage: 9, children: [{ title: 'b1', startPage: 10, children: [] }] },
+    ]);
+  });
+  it('resposta truncada antes de qualquer nó completo devolve null', () => {
+    expect(parseChapterExtraction('{"chapters":[{"title":"A","startPage":3,"children":[{"title":"a","sta')).toBeNull();
   });
   it('children ausente vira [] e filho inválido invalida tudo', () => {
     expect(parseChapterExtraction('{"chapters":[{"title":"A","startPage":3},{"title":"B","startPage":9}]}')).toEqual([
