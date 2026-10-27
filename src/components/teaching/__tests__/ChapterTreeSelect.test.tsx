@@ -105,4 +105,19 @@ describe('ChapterTreeSelect', () => {
     rerender(<ChapterTreeSelect {...props} books={[MAT_BOOK, COMP_BOOK]} />);
     expect(screen.getByRole('treeitem', { name: '2.1 Produtos notáveis' })).toBeTruthy();
   });
+  it('Enter ou espaço no botão de expandir não alteram a seleção', () => {
+    const { onSelectionChange } = setup();
+    const expand = screen.getByRole('button', { name: 'Expandir 2' });
+    fireEvent.keyDown(expand, { key: 'Enter' });
+    fireEvent.keyDown(expand, { key: ' ' });
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('Home e End vão ao primeiro e ao último item visível', () => {
+    const { item } = setup(['s221']);
+    fireEvent.keyDown(item('2.2 Frações'), { key: 'End' });
+    expect(document.activeElement).toBe(item('1 Apêndice'));
+    fireEvent.keyDown(document.activeElement!, { key: 'Home' });
+    expect(document.activeElement).toBe(item('1 Unidade 1'));
+  });
 });

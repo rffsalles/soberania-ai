@@ -97,7 +97,15 @@ export function ChapterTreeSelect({
     switch (e.key) {
       case ' ':
       case 'Enter':
+        // Enter/espaço vindos do botão de expandir não alternam a seleção.
+        if (e.target !== e.currentTarget) return;
         toggle(nodeId);
+        break;
+      case 'Home':
+        moveTo(flat[0]);
+        break;
+      case 'End':
+        moveTo(flat[flat.length - 1]);
         break;
       case 'ArrowDown':
         moveTo(flat[pos + 1]);
@@ -132,6 +140,8 @@ export function ChapterTreeSelect({
           if (el) itemRefs.current.set(chapter.id, el);
           else itemRefs.current.delete(chapter.id);
         }}
+        // Árvore com checkbox: o APG usa aria-checked, não aria-selected.
+        // eslint-disable-next-line jsx-a11y/role-has-required-aria-props
         role="treeitem"
         aria-label={`${chapter.number} ${chapter.title}`}
         aria-level={chapter.depth + 1}
