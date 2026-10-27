@@ -41,11 +41,12 @@ Não-objetivos (fora desta entrega):
   - Raiz tem `parentId=null` e `depth=0`.
   - Filho tem `depth = pai.depth + 1`.
   - `startPage` do filho >= `startPage` do pai.
-  - Irmãos têm `startPage` estritamente crescente.
-  - `endPage` do filho <= `endPage` do pai.
+  - Irmãos têm `startPage` NÃO DECRESCENTE (irmãos na mesma página são permitidos).
+  - `startPage` do filho <= `endPage` herdado do pai (filho que começa depois do fim do pai é inválido).
   - Profundidade máxima: 6, contando `depth` a partir de 0 (valores 0 a 6 são válidos, 7 níveis; `depth` 7 é inválido).
   - Máximo de 500 nós por material.
-- Regra de `endPage`: vai do `startPage` do nó até o `startPage` do próximo irmão menos 1. O último filho herda o `endPage` do pai. A última raiz vai até `totalPages`. É a regra atual de `toChapterRows` (`src/domains/rag/chapters.ts`, linhas 196-203), estendida.
+- Regra de `endPage`: `endPage = max(startPage, próximoIrmão.startPage - 1)`. O último filho herda o `endPage` do pai. A última raiz vai até `totalPages`. É a regra atual de `toChapterRows` (`src/domains/rag/chapters.ts`, linhas 196-203), estendida.
+- Irmãos que compartilham a página inicial têm faixas sobrepostas nessa página. Na atribuição de chunks (UPDATEs em pré-ordem, o último vence; seção 4), a página compartilhada fica com o último nó em pré-ordem.
 - Migração (somente expansão): uma migration adiciona `parentId` nullable, `depth` com default 0, a FK e o índice. As linhas existentes ficam válidas (raiz, `depth` 0) sem backfill. Rollback: dropar colunas, FK e índice. Não há etapa de contração. Os dados de materiais existentes só mudam quando o professor reextrai ou edita.
 - `LessonPlanChapter` não muda de forma. Grava os nós explicitamente escolhidos, de qualquer profundidade.
 - `MaterialChunk.chapterId` passa a apontar para o NÓ MAIS PROFUNDO cuja faixa cobre `pageNumber`. `MaterialChunk.chapter` (rótulo) recebe o título desse nó. `section` (`prisma/schema.prisma`, linha 439) continua sem uso.
@@ -69,11 +70,12 @@ export type ChapterRow = {
 - `isValidChapterTree(tree, totalPages, minRoots = 2)` substitui `isValidChapterSequence` (linha 185). Exige:
   - pelo menos `minRoots` raízes;
   - páginas entre 1 e `totalPages`;
-  - páginas em pré-ordem não decrescentes, com irmãos estritamente crescentes;
+  - páginas em pré-ordem não decrescentes (cobre filho antes do pai e irmão decrescente; irmãos na mesma página são válidos);
+  - filho com `startPage` <= `endPage` herdado do pai;
   - `depth` <= 6;
   - no máximo 500 nós.
   - Títulos genéricos (`isGenericOutlineTitle`, existente) são descartados antes da validação.
-- `chunkAssignmentsFromRows(rows)` substitui `buildChunkAssignments` (linha 205). Gera uma atribuição por nó, com a faixa inteira do nó (`startPage..endPage`), EM PRÉ-ORDEM. A faixa de um filho está contida na do pai e vem depois dele. Por isso, aplicar os UPDATEs nessa ordem faz o nó mais profundo prevalecer (o último UPDATE vence). Nós irmãos e primos nunca se sobrepõem.
+- `chunkAssignmentsFromRows(rows)` substitui `buildChunkAssignments` (linha 205). Gera uma atribuição por nó, com a faixa inteira do nó (`startPage..endPage`), EM PRÉ-ORDEM. A faixa de um filho está contida na do pai e vem depois dele. Por isso, aplicar os UPDATEs nessa ordem faz o nó mais profundo prevalecer (o último UPDATE vence). Irmãos e primos só se sobrepõem quando compartilham a página inicial; nesse caso a página fica com o último deles em pré-ordem.
   - Preserva o comportamento de `buildChunkAssignments` para páginas fora de qualquer raiz: se a primeira raiz começa depois da página 1, o resultado inclui um trecho com `order: null` (limpa `chapterId` e põe o rótulo "Página N") para as páginas `1..startPage-1`. Esse trecho é aplicado ANTES dos UPDATEs dos nós. Sem linhas, o resultado é um único trecho `order: null` cobrindo `1..totalPages`. Como as raízes são contíguas até `totalPages`, não há outro buraco.
 - `relinkByTitle(oldChapters, newRows, oldLinks)` substitui `relinkByOrder` (linhas 213-224). Casa o capítulo antigo com o novo por (título normalizado sem acentos, caixa e espaços múltiplos; `startPage`). Para os que sobrarem, casa por título normalizado único. Vínculos sem par são perdidos e contados em `lostLessonLinks`. `relinkByTitle` é calculado em `saveDrafts` ANTES de montar o `beforeWrite` (como `relinkByOrder` é hoje). A regra de conflito 409 (`LINKS_CONFLICT_MESSAGE`) dispara quando `lostLessonLinks > 0` e algum vínculo perdido pertence a aula de outro professor. Deixa de disparar pela mudança na contagem de capítulos (hoje `drafts.length !== oldLinks.length`, service linha 150). Com `force` (admin), não dispara.
 - `numberNodes(rows)` calcula `number: string` por nó a partir do índice entre irmãos. Raízes: "1", "2". Filhos: "2.1", "2.3.1". Não é persistido. É derivado na leitura e usado em rótulos.
@@ -96,13 +98,15 @@ Justificativa: HEADINGS só enxerga raízes. Quando há sumário, a IA entrega a
 
 Função `askModel` (linhas 74-95) e prompt em `src/domains/agents/prompts/chapter-extraction-prompt.ts`.
 
-- Entrada: as primeiras `CHAPTER_TOC_PAGES` (15, `src/domains/rag/constants.ts`) páginas, como hoje, MAIS qualquer página de sumário detectada fora dessa janela. Página de sumário é a que tem >= 3 linhas casando `TOC_LINE_PATTERN` (`chapters.ts`, linha 77). Limite de 10 páginas extras.
+- Entrada: as primeiras `CHAPTER_TOC_PAGES` (15, `src/domains/rag/constants.ts`) páginas, como hoje, MAIS qualquer página de sumário detectada fora dessa janela. Página de sumário é a que tem >= 3 linhas casando `TOC_LINE_PATTERN` (`chapters.ts`, linha 77). Limite de 10 páginas extras (`CHAPTER_TOC_EXTRA_PAGES`).
+- Página detectada como sumário vai inteira ao prompt até 4000 caracteres (`CHAPTER_TOC_DETECTED_PAGE_CHARS`); as demais seguem cortadas em `CHAPTER_TOC_PAGE_CHARS` (1200).
 - O prompt pede `{"chapters":[{"title","startPage","children":[...]}]}` com a página IMPRESSA como aparece no sumário. A profundidade é inferida por recuo, numeração ("2.3") ou tipografia. Cabeçalhos corridos e entradas de apresentação ou prefácio como raízes são ignorados.
-- `parseChapterExtraction` (prompt, linha 41) passa a usar um schema zod recursivo (`z.lazy`), com `children` opcional e default `[]`. `EXTRACTION_MAX_TOKENS` (service, linha 72) sobe de 1200 para 4000.
+- `parseChapterExtraction` (prompt, linha 41) passa a usar um schema zod recursivo (`z.lazy`), com `children` opcional e default `[]`. `EXTRACTION_MAX_TOKENS` (service, linha 72) sobe de 1200 para 4000 (`EXTRACTION_MAX_TOKENS = 4000`).
 - Realinhamento: `alignDraftsToText` (`chapters.ts`, linhas 147-183) passa a operar sobre a árvore achatada em pré-ordem.
   - Calcula o deslocamento de cada nó procurando as palavras do título no topo (3 linhas) das páginas `startPage-1` a `startPage+6`.
-  - A normalização remove espaços entre letras (para casar "C ONJUNTO" com "Conjunto"), acentos e caixa.
+  - A normalização remove acentos e caixa. O conjunto de palavras do topo da página é a UNIÃO das palavras do texto normal e do texto com o versalete colapsado (letra isolada juntada à palavra seguinte), para casar "C ONJUNTO" com "Conjunto" sem quebrar "LOGARITMO E EXPONENCIAL". O título é normalizado só do jeito normal.
   - Se >= 50% dos nós com deslocamento encontrado concordam, todos herdam esse deslocamento.
+  - Recuo da raiz para a página divisória: raiz cuja `startPage` veio do primeiro filho (sumário sem página para a unidade; na resposta da IA, `startPage` igual à do primeiro filho) recua até 3 páginas (`HEADING_TITLE_LOOKAHEAD`) se encontrar o próprio título (normalizado) ou "UNIDADE/CAPÍTULO N" (palavra-chave e número de `HEADING_PATTERN`) no topo de uma página anterior, sem passar da página do nó anterior em pré-ordem.
   - Falha mantém as páginas originais (comportamento do commit ab508d2).
 - Não há mesclagem entre estratégias nesta entrega. Se a árvore da IA for válida, HEADINGS não roda, mesmo que HEADINGS produzisse mais raízes.
 
@@ -119,7 +123,7 @@ const NUMBERED_HEADING = /^\s*(\d+(?:\.\d+)+)\s+(\S.{2,})$/;
 
 - Profundidade = quantidade de pontos do número.
 - O primeiro número deve ser igual ao número da raiz corrente.
-- As páginas devem ser crescentes em pré-ordem.
+- As páginas devem ser não decrescentes em pré-ordem (irmãos na mesma página são aceitos).
 - Nó cujo pai intermediário não existe (ex.: "2.3.1" sem "2.3") é ignorado.
 - Sem títulos numerados, o resultado é plano como hoje.
 
@@ -253,9 +257,9 @@ Atualizar os testes existentes e criar os casos abaixo, por área.
 Extração e funções puras:
 
 - `src/domains/rag/__tests__/chapters.test.ts`
-  - `toChapterRows` com 3 níveis e regra de `endPage`.
-  - `isValidChapterTree`: filho antes do pai, irmão não crescente, `depth` 7, 501 nós, 1 raiz com `minRoots=2` (inválido) e com `minRoots=0` ou 1 (válido).
-  - `chunkAssignmentsFromRows` com o nó mais profundo vencendo, e com o trecho `order: null` antes da primeira raiz (aplicado antes dos nós).
+  - `toChapterRows` com 3 níveis e regra de `endPage`, incluindo o clamp `max(startPage, próximoIrmão.startPage - 1)` para irmãos na mesma página.
+  - `isValidChapterTree`: filho antes do pai, irmão decrescente (inválido) e irmão na mesma página (válido), filho depois do fim do pai, `depth` 7, 501 nós, 1 raiz com `minRoots=2` (inválido) e com `minRoots=0` ou 1 (válido).
+  - `chunkAssignmentsFromRows` com o nó mais profundo vencendo, com dois irmãos na mesma página (a página fica com o segundo) e com o trecho `order: null` antes da primeira raiz (aplicado antes dos nós).
   - `relinkByTitle`: título igual com página diferente, título duplicado, perda e conflito.
   - `outlineToTree`: nó sem página, raiz única, títulos genéricos.
   - `headingsToTree`: "2.3" sem "2", profundidade por pontos, resultado plano.
