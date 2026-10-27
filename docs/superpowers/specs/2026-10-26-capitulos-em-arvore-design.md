@@ -82,7 +82,7 @@ export type ChapterRow = {
 
 ## 5. Extração genérica de N níveis (`src/domains/rag/services/chapter-extraction-service.ts`)
 
-A cascata está em `extractChapterDrafts` (linhas 98-137). A primeira estratégia cujo resultado passa em `isValidChapterTree` vence. NOVA ORDEM: OUTLINE, AI, HEADINGS, nenhum. Hoje a ordem é OUTLINE, HEADINGS, AI.
+A cascata está em `extractChapterDrafts` (linhas 98-137). A primeira estratégia cujo resultado passa em `isValidChapterTree` vence. NOVA ORDEM: OUTLINE, AI alinhada, HEADINGS, AI crua, nenhum (detalhes em 5.2). Hoje a ordem é OUTLINE, HEADINGS, AI.
 
 Justificativa: HEADINGS só enxerga raízes. Quando há sumário, a IA entrega a árvore. Custo: a IA passa a rodar em uploads de PDF sem marcadores antes de HEADINGS. Custo aceito.
 
@@ -98,17 +98,21 @@ Justificativa: HEADINGS só enxerga raízes. Quando há sumário, a IA entrega a
 
 Função `askModel` (linhas 74-95) e prompt em `src/domains/agents/prompts/chapter-extraction-prompt.ts`.
 
-- Entrada: as primeiras `CHAPTER_TOC_PAGES` (15, `src/domains/rag/constants.ts`) páginas, como hoje, MAIS qualquer página de sumário detectada fora dessa janela. Página de sumário é a que tem >= 3 linhas casando `TOC_LINE_PATTERN` (`chapters.ts`, linha 77). Limite de 10 páginas extras (`CHAPTER_TOC_EXTRA_PAGES`).
+- Entrada: as primeiras `CHAPTER_TOC_PAGES` (15, `src/domains/rag/constants.ts`) páginas, como hoje, MAIS o primeiro bloco contíguo de páginas de sumário detectado fora dessa janela (para na primeira página que não é sumário depois do bloco). Página de sumário é a que tem >= 3 linhas casando `TOC_LINE_PATTERN` (`chapters.ts`) ou cuja primeira linha não vazia é o título "Sumário", "Índice", "Conteúdo", "Contents" ou "Table of Contents"; página logo após uma de sumário também conta se tiver >= 3 linhas terminadas em número de página, mesmo sem pontos. Limite de 10 páginas extras (`CHAPTER_TOC_EXTRA_PAGES`). Se o texto das páginas selecionadas somar < 200 caracteres, a IA não é chamada.
 - Página detectada como sumário vai inteira ao prompt até 4000 caracteres (`CHAPTER_TOC_DETECTED_PAGE_CHARS`); as demais seguem cortadas em `CHAPTER_TOC_PAGE_CHARS` (1200).
 - O prompt pede `{"chapters":[{"title","startPage","children":[...]}]}` com a página IMPRESSA como aparece no sumário. A profundidade é inferida por recuo, numeração ("2.3") ou tipografia. Cabeçalhos corridos e entradas de apresentação ou prefácio como raízes são ignorados.
-- `parseChapterExtraction` (prompt, linha 41) passa a usar um schema zod recursivo (`z.lazy`), com `children` opcional e default `[]`. `EXTRACTION_MAX_TOKENS` (service, linha 72) sobe de 1200 para 4000 (`EXTRACTION_MAX_TOKENS = 4000`).
+- `parseChapterExtraction` (prompt, linha 41) passa a usar um schema zod recursivo (`z.lazy`), com `children` opcional ou `null` virando `[]`. Resposta truncada (JSON inválido) é reparada: corta no último nó fechado e anexa os fechamentos pendentes; sem nenhum nó completo, null. `EXTRACTION_MAX_TOKENS` (service, linha 72) sobe de 1200 para 4000 (`EXTRACTION_MAX_TOKENS = 4000`).
 - Realinhamento: `alignDraftsToText` (`chapters.ts`, linhas 147-183) passa a operar sobre a árvore achatada em pré-ordem.
   - Calcula o deslocamento de cada nó procurando as palavras do título no topo (3 linhas) das páginas `startPage-1` a `startPage+6`.
   - A normalização remove acentos e caixa. O conjunto de palavras do topo da página é a UNIÃO das palavras do texto normal e do texto com o versalete colapsado (letra isolada juntada à palavra seguinte), para casar "C ONJUNTO" com "Conjunto" sem quebrar "LOGARITMO E EXPONENCIAL". O título é normalizado só do jeito normal.
-  - Se >= 50% dos nós com deslocamento encontrado concordam, todos herdam esse deslocamento.
+  - Se >= 50% dos nós com deslocamento encontrado concordam e a maioria tem apoio mínimo (>= 2 nós concordando, ou árvore com até 3 nós), todos herdam esse deslocamento. Sem isso, cada nó achado usa o próprio deslocamento e os demais ficam.
+  - `alignTreeToText` devolve a árvore e as contagens `found` (nós com deslocamento encontrado) e `total`; `alignDraftsToText` é o wrapper que devolve só a árvore.
   - Recuo da raiz para a página divisória: raiz cuja `startPage` veio do primeiro filho (sumário sem página para a unidade; na resposta da IA, `startPage` igual à do primeiro filho) recua até 3 páginas (`HEADING_TITLE_LOOKAHEAD`) se encontrar o próprio título (normalizado) ou "UNIDADE/CAPÍTULO N" (palavra-chave e número de `HEADING_PATTERN`) no topo de uma página anterior, sem passar da página do nó anterior em pré-ordem.
   - Falha mantém as páginas originais (comportamento do commit ab508d2).
-- Não há mesclagem entre estratégias nesta entrega. Se a árvore da IA for válida, HEADINGS não roda, mesmo que HEADINGS produzisse mais raízes.
+- Rótulos de página: `applyPageLabels` converte a página impressa em física pelos rótulos do PDF (`PdfNavigation.pageLabels`) quando eles são informativos (algum diferente de i + 1), procurando em pré-ordem o primeiro rótulo igual a partir da página do nó anterior; sem rótulo correspondente, o nó mantém a página.
+- Raiz única: `promoteSingleRoot` (a mesma regra do OUTLINE) é aplicada à resposta da IA antes de tudo.
+- Cascata da IA: a árvore promovida, convertida por rótulos e realinhada vence se for válida E tiver confirmação (`found >= 1` ou conversão por rótulos). Sem confirmação, roda HEADINGS; só se HEADINGS não der árvore válida entra a árvore da IA promovida com as páginas como vieram ("IA crua"). Motivo: deslocamento impresso→físico maior que a janela (+6) deixaria páginas impressas gravadas onde HEADINGS acerta.
+- Não há mesclagem entre estratégias nesta entrega.
 
 ### 5.3 HEADINGS
 
@@ -118,8 +122,11 @@ Função `askModel` (linhas 74-95) e prompt em `src/domains/agents/prompts/chapt
 - Novo: títulos numerados nas 3 primeiras linhas, com a regex abaixo, viram nós internos.
 
 ```ts
-const NUMBERED_HEADING = /^\s*(\d+(?:\.\d+)+)\s+(\S.{2,})$/;
+const NUMBERED_HEADING = /^\s*(\d+(?:\.\d+)+)\s+(\p{L}.{2,})$/u;
 ```
+
+- O texto deve começar por letra ("2.5 + 3.2 = 7.7" não é seção) e segmento após o primeiro com exatamente 3 dígitos é separador de milhar ("1.500 alunos") e é rejeitado.
+- No realinhamento (5.2), as palavras-chave de `HEADING_PATTERN` não contam como palavras do título; título que casa `HEADING_PATTERN` exige também o seu número como palavra no topo da página.
 
 - Profundidade = quantidade de pontos do número.
 - O primeiro número deve ser igual ao número da raiz corrente.
