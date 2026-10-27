@@ -20,7 +20,7 @@ import {
 import * as agendaRepo from '@/domains/agendas/services/agenda-repository';
 import * as lessonRepo from './lesson-plan-repository';
 import * as planRepo from './teaching-plan-repository';
-import { planChapterIds, type PlanChapterBook } from './plan-chapters-service';
+import { normalizeChapterSelection, planChapterIds, type PlanChapterBook } from './plan-chapters-service';
 import { assertOwner } from '../ownership';
 import { publishBlockReason } from '../lesson-publish';
 
@@ -144,10 +144,12 @@ export async function updateLesson(id: string, user: LessonActor, raw: unknown, 
   const input = parseLessonInput(raw, existing);
 
   // Valida os capítulos antes de qualquer gravação.
-  const chapterIds = input.chapterIds === undefined ? undefined : [...new Set(input.chapterIds)];
+  let chapterIds = input.chapterIds === undefined ? undefined : [...new Set(input.chapterIds)];
   if (chapterIds !== undefined) {
-    const allowed = planChapterIds(await deps.repo.listPlanChapters(existing.courseSchedule.teachingPlan.id));
+    const books = await deps.repo.listPlanChapters(existing.courseSchedule.teachingPlan.id);
+    const allowed = planChapterIds(books);
     if (chapterIds.some((cid) => !allowed.has(cid))) throw new DomainError(400, CHAPTER_OUTSIDE_PLAN);
+    chapterIds = normalizeChapterSelection(chapterIds, books);
   }
 
   // Explicit whitelist: the parent schedule can never be changed through an update.

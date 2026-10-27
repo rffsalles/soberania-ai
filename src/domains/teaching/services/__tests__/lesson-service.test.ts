@@ -54,7 +54,7 @@ function makeDeps(opts: { lesson?: Partial<LessonWithContext>; teacherId?: strin
         return { ...lessonRow, ...(data as object) } as LessonWithContext;
       },
       listPlanChapters: async () => [
-        { id: 'b1', title: 'Livro', chapters: [{ id: 'ch1', order: 1, title: 'C1' }, { id: 'ch2', order: 2, title: 'C2' }] },
+        { id: 'b1', title: 'Livro', chapters: [{ id: 'ch1', order: 1, title: 'C1', parentId: null }, { id: 'ch2', order: 2, title: 'C2', parentId: null }, { id: 'ch1a', order: 3, title: 'C1a', parentId: 'ch1' }] },
       ] as never,
       replaceLessonChapters: async (lessonPlanId, chapterIds) => {
         rec('replaceLessonChapters', { lessonPlanId, chapterIds });
@@ -96,6 +96,18 @@ describe('lesson-service updateLesson', () => {
     const { deps, calls } = makeDeps();
     await updateLesson('own', teacher, { chapterIds: ['ch1', 'ch1', 'ch2'] }, deps);
     expect(calls.replaceLessonChapters).toEqual([{ lessonPlanId: 'own', chapterIds: ['ch1', 'ch2'] }]);
+  });
+
+  it('ancestral e descendente gravam só o ancestral', async () => {
+    const { deps, calls } = makeDeps();
+    await updateLesson('own', teacher, { chapterIds: ['ch1a', 'ch1', 'ch2'] }, deps);
+    expect(calls.replaceLessonChapters).toEqual([{ lessonPlanId: 'own', chapterIds: ['ch1', 'ch2'] }]);
+  });
+
+  it('nó interno sozinho é aceito', async () => {
+    const { deps, calls } = makeDeps();
+    await updateLesson('own', teacher, { chapterIds: ['ch1a'] }, deps);
+    expect(calls.replaceLessonChapters).toEqual([{ lessonPlanId: 'own', chapterIds: ['ch1a'] }]);
   });
 
   it('rejeita capítulo de fora do plano; salvar sem chapterIds preserva vínculos', async () => {
