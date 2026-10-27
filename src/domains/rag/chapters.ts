@@ -1,5 +1,5 @@
 import type { OutlineEntry } from '@/domains/rag/types';
-import { MIN_EXTRACTED_CHAPTERS } from '@/domains/rag/constants';
+import { MAX_CHAPTER_DEPTH, MAX_CHAPTER_NODES, MIN_EXTRACTED_CHAPTERS } from '@/domains/rag/constants';
 
 export type ChapterNode = { title: string; startPage: number; children: ChapterNode[] };
 export type ChapterRow = {
@@ -270,4 +270,56 @@ export function relinkByOrder(
     };
   }
   return { relinks: [], lostLessonLinks: new Set(old.flatMap((c) => c.lessonPlanIds)).size };
+}
+
+export type ChapterTreeError = { number: string | null; message: string };
+
+function exceedsNodeLimit(tree: ChapterNode[]): boolean {
+  let count = 0;
+  const stack: ChapterNode[] = [...tree];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    count++;
+    if (count > MAX_CHAPTER_NODES) return true;
+    stack.push(...node.children);
+  }
+  return false;
+}
+
+/** Primeiro erro da árvore (checagens e mensagens na ordem da spec), ou null se for válida. */
+export function findChapterTreeError(tree: ChapterNode[], totalPages: number, minRoots = 2): ChapterTreeError | null {
+  if (exceedsNodeLimit(tree)) {
+    return { number: null, message: `O material admite no máximo ${MAX_CHAPTER_NODES} capítulos.` };
+  }
+  const rows = toChapterRows(tree, totalPages);
+  const numbers = numberNodes(rows);
+  let prev = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const n = numbers[i];
+    if (row.depth > MAX_CHAPTER_DEPTH) {
+      return { number: n, message: `Capítulo ${n}: a árvore admite no máximo ${MAX_CHAPTER_DEPTH + 1} níveis.` };
+    }
+    if (!Number.isInteger(row.startPage) || row.startPage < 1 || row.startPage > totalPages) {
+      return { number: n, message: `Capítulo ${n}: a página inicial deve estar entre 1 e ${totalPages}.` };
+    }
+    if (row.startPage < prev) {
+      return {
+        number: n,
+        message: `Capítulo ${n}: a página inicial (${row.startPage}) não pode ser anterior à do item anterior (${prev}).`,
+      };
+    }
+    if (row.startPage > row.endPage) {
+      return { number: n, message: `Capítulo ${n}: começa depois do fim do capítulo pai.` };
+    }
+    prev = row.startPage;
+  }
+  if (tree.length < minRoots) {
+    return { number: null, message: `São necessários pelo menos ${minRoots} capítulos de primeiro nível.` };
+  }
+  return null;
+}
+
+export function isValidChapterTree(tree: ChapterNode[], totalPages: number, minRoots = 2): boolean {
+  return findChapterTreeError(tree, totalPages, minRoots) === null;
 }

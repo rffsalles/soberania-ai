@@ -11,8 +11,14 @@ import {
   numberNodes,
   relinkByOrder,
   toChapterRows,
+  findChapterTreeError,
+  isValidChapterTree,
   type ChapterNode,
 } from '../chapters';
+
+const node = (title: string, startPage: number, ...children: ChapterNode[]): ChapterNode => ({ title, startPage, children });
+const chain = (levels: number): ChapterNode =>
+  Array.from({ length: levels - 1 }).reduce<ChapterNode>((child, _, i) => node(`L${levels - 2 - i}`, 1, child), node(`L${levels - 1}`, 1));
 
 describe('outlineToDrafts', () => {
   it('outline com 2 entradas de 1º nível com página vira rascunho', () =>
@@ -426,5 +432,44 @@ describe('alignDraftsToText', () => {
   it('ignora acentos e pontuação ao comparar', () => {
     const r = alignDraftsToText([{ title: 'UNIDADE 2: FUNCOES e graficos', startPage: 29 }], pages);
     expect(r[0].startPage).toBe(30);
+  });
+});
+
+describe('isValidChapterTree', () => {
+  it('árvore de 3 níveis é válida', () => expect(isValidChapterTree(tree3, 15)).toBe(true));
+  it('filho antes do pai é inválido', () =>
+    expect(findChapterTreeError([node('A', 5, node('a', 3)), node('B', 10)], 20, 0)).toEqual({
+      number: '1.1', message: 'Capítulo 1.1: a página inicial (3) não pode ser anterior à do item anterior (5).' }));
+  it('irmão decrescente é inválido, igual é válido', () => {
+    expect(isValidChapterTree([node('A', 5), node('B', 4)], 20)).toBe(false);
+    expect(findChapterTreeError([node('A', 2, node('a', 4), node('b', 3)), node('B', 10)], 20)?.number).toBe('1.2');
+    expect(isValidChapterTree([node('A', 5), node('B', 5)], 20)).toBe(true);
+    expect(isValidChapterTree([node('A', 2, node('a', 4), node('b', 4)), node('B', 10)], 20)).toBe(true);
+  });
+  it('filho na página do irmão seguinte do pai é inválido (endPage do pai limitado)', () =>
+    // A.endPage = max(5, 6 - 1) = 5; a começa em 6 > 5
+    expect(findChapterTreeError([node('A', 5, node('a', 6)), node('B', 6)], 20)?.message).toBe('Capítulo 1.1: começa depois do fim do capítulo pai.'));
+  it('filho depois do fim do pai é inválido', () =>
+    expect(findChapterTreeError([node('A', 5, node('a', 9)), node('B', 9)], 20)).toEqual({
+      number: '1.1', message: 'Capítulo 1.1: começa depois do fim do capítulo pai.' }));
+  it('depth 7 é inválido e depth 6 é válido', () => {
+    expect(isValidChapterTree([chain(8), node('B', 10)], 20)).toBe(false);   // 8 níveis: depth 0..7
+    expect(isValidChapterTree([chain(7), node('B', 10)], 20)).toBe(true);    // 7 níveis: depth 0..6
+  });
+  it('501 nós é inválido e 500 é válido', () => {
+    const roots = (n: number) => Array.from({ length: n }, (_, i) => node(`C${i + 1}`, i + 1));
+    expect(findChapterTreeError(roots(501), 600)).toEqual({ number: null, message: 'O material admite no máximo 500 capítulos.' });
+    expect(isValidChapterTree(roots(500), 600)).toBe(true);
+  });
+  it('raiz única depende de minRoots', () => {
+    expect(isValidChapterTree([node('A', 1)], 20, 2)).toBe(false);
+    expect(isValidChapterTree([node('A', 1)], 20, 1)).toBe(true);
+    expect(isValidChapterTree([node('A', 1)], 20, 0)).toBe(true);
+    expect(isValidChapterTree([], 20, 0)).toBe(true);
+  });
+  it('página fora do intervalo ou não inteira é inválida', () => {
+    expect(isValidChapterTree([node('A', 0), node('B', 5)], 20)).toBe(false);
+    expect(isValidChapterTree([node('A', 1), node('B', 21)], 20)).toBe(false);
+    expect(isValidChapterTree([node('A', 1), node('B', 2.5)], 20)).toBe(false);
   });
 });
