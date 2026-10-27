@@ -4,7 +4,7 @@ import { DomainError } from '@/lib/api/domain-error';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import type { AIMessage, InferenceTelemetry, StreamChunk } from '@/lib/ai-provider';
 import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
-import { chatWithTutor, startChat, toTutorScope, type ChatDeps } from '../chat-service';
+import { chatWithTutor, loadTutorScope, startChat, toTutorScope, type ChatDeps } from '../chat-service';
 
 const NOW = new Date('2026-10-20T12:00:00.000Z');
 const user = { id: 'stu1', role: Role.STUDENT, classId: 'c1' };
@@ -318,16 +318,36 @@ describe('chatWithTutor', () => {
 });
 
 describe('escopo do tutor', () => {
-  it('toTutorScope: capítulos > materiais do plano > nada', () => {
-    expect(
-      toTutorScope({
-        chapters: [{ id: 'ch3', order: 3, number: '3', title: 'Modelo ER', material: { title: 'Sistemas de Banco de Dados' } }],
-        planMaterialIds: ['m1'],
-      })
-    ).toEqual({ allowedChapterIds: ['ch3'], chapterLabels: ['Cap. 3: Modelo ER (Sistemas de Banco de Dados)'] });
-    expect(toTutorScope({ chapters: [], planMaterialIds: ['m1', 'm2'] })).toEqual({ allowedMaterialIds: ['m1', 'm2'] });
-    expect(toTutorScope({ chapters: [], planMaterialIds: [] })).toBeUndefined();
-    expect(toTutorScope(null)).toBeUndefined();
+  const fracoes = { id: 's22', order: 4, number: '2.2', title: 'Frações', material: { title: 'Matemática Básica' } };
+
+  it('toTutorScope: ids expandidos no filtro, rótulos só dos escolhidos', () => {
+    expect(toTutorScope({ chapters: [fracoes], planMaterialIds: ['m1'] }, ['s22', 's221', 's222'])).toEqual({
+      allowedChapterIds: ['s22', 's221', 's222'],
+      chapterLabels: ['Cap. 2.2: Frações (Matemática Básica)'],
+    });
+    expect(toTutorScope({ chapters: [], planMaterialIds: ['m1', 'm2'] }, [])).toEqual({ allowedMaterialIds: ['m1', 'm2'] });
+    expect(toTutorScope({ chapters: [], planMaterialIds: [] }, [])).toBeUndefined();
+    expect(toTutorScope(null, [])).toBeUndefined();
+  });
+
+  it('loadTutorScope expande os capítulos da aula', async () => {
+    const listDescendantIds = vi.fn(async () => ['s22', 's221', 's222']);
+    const scope = await loadTutorScope('lp1', {
+      findLessonTutorScope: vi.fn(async () => ({ chapters: [fracoes], planMaterialIds: ['m1'] })),
+      listDescendantIds,
+    });
+    expect(listDescendantIds).toHaveBeenCalledWith(['s22']);
+    expect(scope?.allowedChapterIds).toEqual(['s22', 's221', 's222']);
+  });
+
+  it('loadTutorScope sem capítulos não expande e cai nos materiais do plano', async () => {
+    const listDescendantIds = vi.fn();
+    const scope = await loadTutorScope('lp1', {
+      findLessonTutorScope: vi.fn(async () => ({ chapters: [], planMaterialIds: ['m1'] })),
+      listDescendantIds,
+    });
+    expect(listDescendantIds).not.toHaveBeenCalled();
+    expect(scope).toEqual({ allowedMaterialIds: ['m1'] });
   });
 
   it('chat de agenda sem lessonPlanId não consulta o escopo', async () => {

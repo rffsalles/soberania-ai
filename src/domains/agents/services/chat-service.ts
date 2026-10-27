@@ -12,6 +12,7 @@ import { aiProvider, type AICompletionOptions, type AIProviderType, type AIMessa
 import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
 import { isSyntheticChapter } from '@/domains/rag/constants';
 import { findLessonTutorScope } from '@/domains/teaching/services/lesson-plan-repository';
+import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
 import { startTutorPipeline, type TutorScope } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
 
@@ -57,16 +58,33 @@ export type ChatDeps = {
   findTutorScope?(lessonPlanId: string): Promise<TutorScope | undefined>;
 };
 
-export function toTutorScope(raw: Awaited<ReturnType<typeof findLessonTutorScope>>): TutorScope | undefined {
+export function toTutorScope(
+  raw: Awaited<ReturnType<typeof findLessonTutorScope>>,
+  expandedChapterIds: string[],
+): TutorScope | undefined {
   if (!raw) return undefined;
   if (raw.chapters.length > 0) {
     return {
-      allowedChapterIds: raw.chapters.map((c) => c.id),
-      chapterLabels: raw.chapters.map((c) => `Cap. ${c.order}: ${c.title} (${c.material.title})`),
+      allowedChapterIds: expandedChapterIds,
+      chapterLabels: raw.chapters.map((c) => `Cap. ${c.number}: ${c.title} (${c.material.title})`),
     };
   }
   if (raw.planMaterialIds.length > 0) return { allowedMaterialIds: raw.planMaterialIds };
   return undefined;
+}
+
+export type TutorScopeDeps = {
+  findLessonTutorScope: typeof findLessonTutorScope;
+  listDescendantIds(chapterIds: string[]): Promise<string[]>;
+};
+
+export async function loadTutorScope(
+  lessonPlanId: string,
+  deps: TutorScopeDeps = { findLessonTutorScope, listDescendantIds },
+): Promise<TutorScope | undefined> {
+  const raw = await deps.findLessonTutorScope(lessonPlanId);
+  const expanded = raw && raw.chapters.length > 0 ? await deps.listDescendantIds(raw.chapters.map((c) => c.id)) : [];
+  return toTutorScope(raw, expanded);
 }
 
 const defaultDeps: ChatDeps = {
@@ -74,7 +92,7 @@ const defaultDeps: ChatDeps = {
   createInteraction,
   createInferenceLog,
   findLastInteraction,
-  findTutorScope: async (id) => toTutorScope(await findLessonTutorScope(id)),
+  findTutorScope: (id) => loadTutorScope(id),
   streamChat: (messages, options) => aiProvider.streamChat(messages, options),
   get provider() {
     return aiProvider.getProviderConfig().provider;

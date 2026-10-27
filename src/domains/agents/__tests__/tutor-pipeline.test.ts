@@ -60,6 +60,15 @@ describe('startTutorPipeline (escopo da aula)', () => {
     return { search, prompt: sent[0][0].content };
   }
 
+  it('"Esta aula cobre" junta os rótulos hierárquicos e filtra pelos ids expandidos', async () => {
+    const { prompt, search } = await run({
+      allowedChapterIds: ['s22', 's221', 's222', 'u3'],
+      chapterLabels: ['Cap. 2.2: Frações (Matemática Básica)', 'Cap. 3: Unidade 3 (Matemática Básica)'],
+    });
+    expect(prompt).toContain('Esta aula cobre: Cap. 2.2: Frações (Matemática Básica); Cap. 3: Unidade 3 (Matemática Básica).');
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ allowedChapterIds: ['s22', 's221', 's222', 'u3'] }));
+  });
+
   it('com escopo de capítulos filtra a busca e cita os capítulos no prompt', async () => {
     const { search, prompt } = await run({
       allowedChapterIds: ['ch3'],
