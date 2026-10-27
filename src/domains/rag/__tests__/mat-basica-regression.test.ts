@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { headingsToTree, isValidChapterTree, outlineToTree, selectTocPages } from '../chapters';
-import { MAT_BASICA_OUTLINE, MAT_BASICA_TOTAL_PAGES, matBasicaPages } from './fixtures/mat-basica';
+import { alignDraftsToText, headingsToTree, isValidChapterTree, outlineToTree, selectTocPages } from '../chapters';
+import { MAT_BASICA_OUTLINE, MAT_BASICA_PRINTED_TREE, MAT_BASICA_TOTAL_PAGES, matBasicaPages } from './fixtures/mat-basica';
 
 describe('fixture mat basica', () => {
   const pages = matBasicaPages();
@@ -28,5 +28,14 @@ describe('fixture mat basica', () => {
       { title: 'Unidade 4 – Potenciação, Radiciação e Racionalização', startPage: 95, children: [] },
       { title: 'Unidade 5 – Equações de 1º e 2º Graus, Inequações de 1º Grau', startPage: 123, children: [] },
     ]);
+  });
+  it('(c) sumário impresso realinhado cai nas páginas físicas do livro', () => {
+    const aligned = alignDraftsToText(MAT_BASICA_PRINTED_TREE, matBasicaPages());
+    expect(aligned.map((r) => r.startPage)).toEqual([15, 43, 67, 95, 123]);
+    const fundamentais = aligned[0].children[1];
+    expect(fundamentais).toMatchObject({ title: 'Conjuntos numéricos fundamentais', startPage: 20 });
+    expect(fundamentais.children.map((c) => c.startPage)).toEqual([21, 21, 22, 23, 24]);
+    expect(aligned[2].children[3].children[0]).toMatchObject({ title: 'Taxa percentual', startPage: 84 });
+    expect(isValidChapterTree(aligned, MAT_BASICA_TOTAL_PAGES, 2)).toBe(true); // naturais e inteiros na 21: irmãos iguais são válidos
   });
 });

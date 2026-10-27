@@ -259,66 +259,121 @@ const ALIGN_MIN_WORD_LENGTH = 4;
 const ALIGN_MIN_WORD_RATIO = 0.6;
 const ALIGN_MIN_MAJORITY = 0.5;
 
+const stripAccents = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+/** Versalete extraído vira "c onjunto": junta letra isolada à palavra seguinte. */
+const collapseSmallCaps = (t: string) => stripAccents(t).replace(/\b([a-z]) (?=[a-z]{2,})/g, '$1');
+
 function normalizedWords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  return stripAccents(text)
     .replace(/[^a-z0-9]+/g, ' ')
     .split(' ')
     .filter(Boolean);
 }
 
-function pageTopWords(text: string): Set<string> {
-  const top = text
+function topLines(text: string): string[] {
+  return text
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
-    .slice(0, HEADING_SCAN_LINES)
-    .join(' ');
-  return new Set(normalizedWords(top));
+    .slice(0, HEADING_SCAN_LINES);
 }
 
-/**
- * Corrige páginas de capítulos (ex.: impressas em vez de físicas) procurando o título no topo das
- * páginas vizinhas. Se a maioria dos rascunhos se realinha com o mesmo deslocamento, os demais o herdam.
- */
-export function alignDraftsToText(
-  drafts: ChapterDraft[],
-  pages: { pageNumber: number; text: string }[],
-): ChapterDraft[] {
-  const tops = new Map(pages.map((p) => [p.pageNumber, pageTopWords(p.text)]));
-  const offsets: (number | null)[] = drafts.map((d) => {
-    const words = normalizedWords(d.title).filter((w) => w.length >= ALIGN_MIN_WORD_LENGTH);
-    if (words.length === 0) return null;
-    for (let page = d.startPage - ALIGN_PAGES_BEFORE; page <= d.startPage + ALIGN_PAGES_AFTER; page++) {
-      const top = tops.get(page);
-      if (!top) continue;
-      const hits = words.filter((w) => top.has(w)).length;
-      if (hits / words.length >= ALIGN_MIN_WORD_RATIO) return page - d.startPage;
-    }
-    return null;
-  });
+/** Regra 1: palavras do topo = UNIÃO do texto normal com o texto de versalete colapsado. */
+function pageTopWords(text: string): Set<string> {
+  const top = topLines(text).join(' ');
+  return new Set([...normalizedWords(top), ...normalizedWords(collapseSmallCaps(top))]);
+}
 
+function titleWords(title: string): string[] {
+  return normalizedWords(title).filter((w) => w.length >= ALIGN_MIN_WORD_LENGTH);
+}
+
+function topHasTitle(top: Set<string> | undefined, words: string[]): boolean {
+  if (!top || words.length === 0) return false;
+  return words.filter((w) => top.has(w)).length / words.length >= ALIGN_MIN_WORD_RATIO;
+}
+
+/** Deslocamento da primeira página da janela cujo topo traz o título, ou null. */
+function findOffset(node: ChapterNode, tops: Map<number, Set<string>>): number | null {
+  const words = titleWords(node.title);
+  for (let page = node.startPage - ALIGN_PAGES_BEFORE; page <= node.startPage + ALIGN_PAGES_AFTER; page++) {
+    if (topHasTitle(tops.get(page), words)) return page - node.startPage;
+  }
+  return null;
+}
+
+/** Regra 2: deslocamento mais frequente (empate: o primeiro em pré-ordem) se reúne >= 50% dos encontrados. */
+function majorityOffset(offsets: (number | null)[]): number | null {
   const counts = new Map<number, number>();
   for (const o of offsets) if (o !== null) counts.set(o, (counts.get(o) ?? 0) + 1);
   let majority: number | null = null;
   let best = 0;
+  let found = 0;
   for (const [offset, n] of counts) {
+    found += n;
     if (n > best) {
       best = n;
       majority = offset;
     }
   }
-  const inherit = majority !== null && best / drafts.length >= ALIGN_MIN_MAJORITY ? majority : 0;
+  return majority !== null && best / found >= ALIGN_MIN_MAJORITY ? majority : null;
+}
 
-  const result: ChapterDraft[] = [];
-  drafts.forEach((d, i) => {
-    const startPage = d.startPage + (offsets[i] ?? inherit);
-    if (offsets[i] === null && (startPage < 1 || startPage > pages.length)) return;
-    result.push({ ...d, startPage });
-  });
-  return result;
+/** Regra 4: página divisória acima da raiz ("UNIDADE N" ou o próprio título no topo), sem passar de `floor`. */
+function dividerPage(
+  root: ChapterNode,
+  startPage: number,
+  floor: number,
+  pagesByNumber: Map<number, string>,
+  tops: Map<number, Set<string>>,
+): number | null {
+  const words = titleWords(root.title);
+  const m = HEADING_PATTERN.exec(root.title.trim().replace(/\s+/g, ' '));
+  const bare = m ? new RegExp('^' + m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+' + m[2] + '$', 'i') : null;
+  for (let page = startPage - 1; page >= startPage - HEADING_TITLE_LOOKAHEAD && page > floor; page--) {
+    const text = pagesByNumber.get(page);
+    if (text === undefined) continue;
+    if (topHasTitle(tops.get(page), words)) return page;
+    if (bare && topLines(text).some((l) => bare.test(l.replace(/\s+/g, ' ')))) return page;
+  }
+  return null;
+}
+
+function preorder(nodes: ChapterNode[]): ChapterNode[] {
+  return nodes.flatMap((n) => [n, ...preorder(n.children)]);
+}
+
+/**
+ * Corrige páginas da árvore (ex.: impressas em vez de físicas) procurando cada título no topo das páginas
+ * vizinhas. Com maioria, todos herdam o deslocamento; nós fora do livro saem com a subárvore; raízes cuja página
+ * veio do primeiro filho recuam até a divisória da unidade. Não muta a entrada.
+ */
+export function alignDraftsToText(
+  tree: ChapterNode[],
+  pages: { pageNumber: number; text: string }[],
+): ChapterNode[] {
+  const tops = new Map(pages.map((p) => [p.pageNumber, pageTopWords(p.text)]));
+  const pagesByNumber = new Map(pages.map((p) => [p.pageNumber, p.text]));
+  const flat = preorder(tree);
+  const offsets = flat.map((n) => findOffset(n, tops));
+  const majority = majorityOffset(offsets);
+  const shift = new Map(flat.map((n, i) => [n, majority ?? offsets[i] ?? 0]));
+  let previousPage = 0;
+
+  const rebuild = (nodes: ChapterNode[], isRoot: boolean): ChapterNode[] => {
+    const result: ChapterNode[] = [];
+    for (const node of nodes) {
+      let startPage = node.startPage + (shift.get(node) ?? 0);
+      if (startPage < 1 || startPage > pages.length) continue;
+      if (isRoot && node.children.length > 0 && node.children[0].startPage === node.startPage) {
+        startPage = dividerPage(node, startPage, previousPage, pagesByNumber, tops) ?? startPage;
+      }
+      previousPage = startPage;
+      result.push({ ...node, startPage, children: rebuild(node.children, false) });
+    }
+    return result;
+  };
+  return rebuild(tree, true);
 }
 
 /** Ponte da fase 1: cada rascunho plano vira uma raiz sem filhos. */

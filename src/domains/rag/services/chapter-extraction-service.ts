@@ -79,7 +79,7 @@ async function askModel(
   input: ExtractionInput,
   nav: PdfNavigation,
   deps: ChapterExtractionDeps,
-): Promise<ChapterDraft[] | null> {
+): Promise<ChapterNode[] | null> {
   try {
     const tocPages = input.pages.slice(0, CHAPTER_TOC_PAGES).map((p) => ({
       pageNumber: p.pageNumber,

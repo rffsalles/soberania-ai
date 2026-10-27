@@ -387,62 +387,110 @@ describe('headingsToTree', () => {
 
 describe('alignDraftsToText', () => {
   const page = (pageNumber: number, text: string) => ({ pageNumber, text });
-  const pages = [
-    ...Array.from({ length: 60 }, (_, i) => page(i + 1, `Texto qualquer ${i + 1}`)),
-  ];
+  const node = (title: string, startPage: number, children: ChapterNode[] = []): ChapterNode => ({ title, startPage, children });
+  const blank = (total: number) => Array.from({ length: total }, (_, i) => page(i + 1, `Texto qualquer ${i + 1}`));
+  const pages = blank(60);
   pages[16] = page(17, 'Unidade 1 – Conjuntos Numéricos\nTexto');
   pages[29] = page(30, 'Unidade 2 – Funções e Gráficos\nTexto');
   pages[44] = page(45, 'Unidade 3 – Geometria Plana\nTexto');
 
   it('realinha páginas impressas (+2) para a página física cujo topo tem o título', () => {
-    const drafts = [
-      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
-      { title: 'Unidade 2 – Funções e Gráficos', startPage: 28 },
-      { title: 'Unidade 3 – Geometria Plana', startPage: 43 },
+    const tree = [
+      node('Unidade 1 – Conjuntos Numéricos', 15),
+      node('Unidade 2 – Funções e Gráficos', 28),
+      node('Unidade 3 – Geometria Plana', 43),
     ];
-    expect(alignDraftsToText(drafts, pages).map((d) => d.startPage)).toEqual([17, 30, 45]);
-    expect(drafts.map((d) => d.startPage)).toEqual([15, 28, 43]);
+    expect(alignDraftsToText(tree, pages).map((d) => d.startPage)).toEqual([17, 30, 45]);
+    expect(tree.map((d) => d.startPage)).toEqual([15, 28, 43]);
   });
 
   it('draft sem título encontrado herda o deslocamento majoritário', () => {
-    const drafts = [
-      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
-      { title: 'Unidade 2 – Funções e Gráficos', startPage: 28 },
-      { title: 'Título que não existe no texto', startPage: 50 },
+    const tree = [
+      node('Unidade 1 – Conjuntos Numéricos', 15),
+      node('Unidade 2 – Funções e Gráficos', 28),
+      node('Título que não existe no texto', 50),
     ];
-    expect(alignDraftsToText(drafts, pages).map((d) => d.startPage)).toEqual([17, 30, 52]);
+    expect(alignDraftsToText(tree, pages).map((d) => d.startPage)).toEqual([17, 30, 52]);
   });
 
-  it('sem maioria de realinhados, mantém os não encontrados como estão', () => {
-    const drafts = [
-      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
-      { title: 'Nada a ver aqui', startPage: 28 },
-      { title: 'Outro título ausente', startPage: 40 },
-    ];
-    expect(alignDraftsToText(drafts, pages).map((d) => d.startPage)).toEqual([17, 28, 40]);
-  });
-
-  it('deslocamento herdado fora de [1, total] descarta só esse rascunho', () => {
+  it('deslocamento herdado fora de [1, total] descarta o nó com a subárvore', () => {
     const book = Array.from({ length: 300 }, (_, i) => page(i + 1, `Texto ${i + 1}`));
     book[16] = page(17, 'Unidade 1 – Conjuntos Numéricos');
     book[29] = page(30, 'Unidade 2 – Funções e Gráficos');
     const r = alignDraftsToText(
       [
-        { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 15 },
-        { title: 'Unidade 2 – Funções e Gráficos', startPage: 28 },
-        { title: 'Título ausente do texto', startPage: 299 },
+        node('Unidade 1 – Conjuntos Numéricos', 15),
+        node('Unidade 2 – Funções e Gráficos', 28),
+        node('Título ausente do texto', 299, [node('x', 300)]),
       ],
       book,
     );
-    expect(r).toEqual([
-      { title: 'Unidade 1 – Conjuntos Numéricos', startPage: 17 },
-      { title: 'Unidade 2 – Funções e Gráficos', startPage: 30 },
-    ]);
+    expect(r).toEqual([node('Unidade 1 – Conjuntos Numéricos', 17), node('Unidade 2 – Funções e Gráficos', 30)]);
   });
 
   it('ignora acentos e pontuação ao comparar', () => {
-    const r = alignDraftsToText([{ title: 'UNIDADE 2: FUNCOES e graficos', startPage: 29 }], pages);
+    const r = alignDraftsToText([node('UNIDADE 2: FUNCOES e graficos', 29)], pages);
     expect(r[0].startPage).toBe(30);
+  });
+
+  it.each([
+    ['Intervalos', 21, '23Módulo 0\nUnidade 1 – Conjuntos Numéricos\nI NTERVALOS', 23],
+    ['Logaritmo e exponencial', 11, '111Módulo 0\nUnidade 4\nLOGARITMO E EXPONENCIAL', 13],
+  ])('versalete espaçado e letra isolada: "%s" acha o topo com deslocamento 2', (title, printed, top, expected) => {
+    const book = blank(60);
+    book[expected - 1] = page(expected, top);
+    expect(alignDraftsToText([node(title, printed)], book)[0].startPage).toBe(expected);
+  });
+
+  it('maioria dos encontrados impõe o deslocamento a todos, filhos inclusive', () => {
+    const book = blank(60);
+    book[4] = page(5, 'Fundamentos de Redes');
+    book[10] = page(11, 'Protocolos de Camada');
+    book[13] = page(14, 'Camada de Aplicação');
+    const tree = [node('Fundamentos de Redes', 3, [node('Título ausente', 4)]), node('Protocolos de Camada', 9), node('Camada de Aplicação', 14)];
+    expect(alignDraftsToText(tree, book)).toEqual([
+      node('Fundamentos de Redes', 5, [node('Título ausente', 6)]), node('Protocolos de Camada', 11), node('Camada de Aplicação', 16),
+    ]);
+    expect(tree[0].startPage).toBe(3);
+  });
+
+  it('sem maioria cada nó encontrado usa o próprio deslocamento', () => {
+    const book = blank(60);
+    book[4] = page(5, 'Fundamentos de Redes');
+    book[8] = page(9, 'Protocolos de Camada');
+    book[13] = page(14, 'Segurança de Sistemas');
+    const tree = [node('Fundamentos de Redes', 3), node('Protocolos de Camada', 9), node('Segurança de Sistemas', 15), node('Título ausente', 18)];
+    expect(alignDraftsToText(tree, book).map((n) => n.startPage)).toEqual([5, 9, 14, 18]);
+  });
+
+  it('raiz "Unidade N" recua para a divisória "UNIDADE N"', () => {
+    const book = blank(60);
+    book[14] = page(15, '13Módulo 0\nApresentação\nUNIDADE 1');
+    book[16] = page(17, '15Módulo 0\nUnidade 1 – Conjuntos Numéricos\nCONJUNTOS NUMÉRICOS');
+    book[42] = page(43, 'UNIDADE 2');
+    book[44] = page(45, 'Unidade 2 – Frações');
+    const tree = [
+      node('Unidade 1 – Conjuntos Numéricos', 15, [node('Conjuntos Numéricos', 15)]),
+      node('Unidade 2 – Frações', 43, [node('Frações', 43)]),
+    ];
+    expect(alignDraftsToText(tree, book)).toEqual([
+      node('Unidade 1 – Conjuntos Numéricos', 15, [node('Conjuntos Numéricos', 17)]),
+      node('Unidade 2 – Frações', 43, [node('Frações', 45)]),
+    ]);
+  });
+
+  it('divisória com outro número não puxa a raiz', () => {
+    const book = blank(60);
+    book[42] = page(43, 'UNIDADE 3');
+    book[44] = page(45, 'Unidade 2 – Frações');
+    expect(alignDraftsToText([node('Unidade 2 – Frações', 43, [node('Frações', 43)])], book)[0].startPage).toBe(45);
+  });
+
+  it('raiz com página própria no sumário (diferente do primeiro filho) não recua', () => {
+    const book = blank(60);
+    book[42] = page(43, 'UNIDADE 2');
+    book[44] = page(45, 'Unidade 2 – Frações');
+    expect(alignDraftsToText([node('Unidade 2 – Frações', 43, [node('Frações', 44)])], book)[0].startPage).toBe(45);
   });
 });
 
