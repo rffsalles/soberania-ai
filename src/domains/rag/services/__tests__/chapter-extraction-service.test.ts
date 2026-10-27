@@ -22,7 +22,13 @@ vi.mock('@/domains/rag/chapters', async (orig) => {
   const actual = await orig<typeof import('@/domains/rag/chapters')>();
   return { ...actual, alignDraftsToText: vi.fn(actual.alignDraftsToText) };
 });
-import { alignDraftsToText, type ChapterNode } from '@/domains/rag/chapters';
+import { alignDraftsToText, type ChapterNode, type ChapterRow } from '@/domains/rag/chapters';
+import {
+  matBasicaPages,
+  MAT_BASICA_OUTLINE,
+  MAT_BASICA_PRINTED_TREE,
+  MAT_BASICA_TOTAL_PAGES,
+} from '@/domains/rag/__tests__/fixtures/mat-basica';
 
 const node = (title: string, startPage: number, ...children: ChapterNode[]): ChapterNode => ({ title, startPage, children });
 const tree = (pairs: [string, number][]) => pairs.map(([t, p]) => node(t, p));
@@ -94,58 +100,109 @@ describe('extractAndSaveChapters', () => {
     );
   });
 
-  it('outline lixo + "Unidade N" no texto grava HEADINGS sem chamar a IA', async () => {
+  describe('com títulos "Unidade N" no texto e outline lixo', () => {
     const withHeadings = pages.map((p) =>
       [3, 8, 14].includes(p.pageNumber)
         ? { ...p, text: `Unidade ${[3, 8, 14].indexOf(p.pageNumber) + 1} – Tema\nTexto` }
         : p,
     );
-    const r = await extractAndSaveChapters(
-      'm1',
-      { buffer, pages: withHeadings, totalPages: 20 },
-      depsWith({
-        outline: [
-          { title: 'Página em branco', pageNumber: 2, depth: 0 },
-          { title: 'Página em branco', pageNumber: 19, depth: 0 },
+    const garbage = [
+      { title: 'Página em branco', pageNumber: 2, depth: 0 },
+      { title: 'Página em branco', pageNumber: 19, depth: 0 },
+    ];
+
+    it('IA sem resposta válida cai para HEADINGS', async () => {
+      const r = await extractAndSaveChapters(
+        'm1',
+        { buffer, pages: withHeadings, totalPages: 20 },
+        depsWith({ outline: garbage, ai: 'lixo' }),
+      );
+      expect(r.source).toBe('HEADINGS');
+      expect(streamChat).toHaveBeenCalledTimes(1);
+      expect(replaceChapters).toHaveBeenCalledWith(
+        'm1',
+        [
+          expect.objectContaining({ title: 'Unidade 1 – Tema', startPage: 3, endPage: 7 }),
+          expect.objectContaining({ startPage: 8, endPage: 13 }),
+          expect.objectContaining({ startPage: 14, endPage: 20 }),
         ],
-      }),
-    );
-    expect(r.source).toBe('HEADINGS');
-    expect(streamChat).not.toHaveBeenCalled();
-    expect(replaceChapters).toHaveBeenCalledWith(
-      'm1',
-      [
-        expect.objectContaining({ title: 'Unidade 1 – Tema', startPage: 3, endPage: 7 }),
-        expect.objectContaining({ startPage: 8, endPage: 13 }),
-        expect.objectContaining({ startPage: 14, endPage: 20 }),
-      ],
-      'HEADINGS',
-      [],
-      expect.any(Array),
-      undefined,
-    );
+        'HEADINGS',
+        [],
+        expect.any(Array),
+        undefined,
+      );
+    });
+
+    it('IA válida vence HEADINGS', async () => {
+      const r = await extractAndSaveChapters(
+        'm1',
+        { buffer, pages: withHeadings, totalPages: 20 },
+        depsWith({ outline: garbage, ai: aiJson([{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }]) }),
+      );
+      expect(r.source).toBe('AI');
+    });
   });
 
-  it('exceção na heurística de títulos cai para a IA sem lançar', async () => {
+  it('exceção ao ler o texto não derruba a cascata', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    let reads = 0;
     const bad = [
       {
         pageNumber: 1,
         get text(): string {
-          if (reads++ === 0) throw new Error('boom');
-          return '';
+          throw new Error('boom');
         },
       },
       ...pages.slice(1),
     ] as unknown as RawDocumentPage[];
+    const r = await extractAndSaveChapters('m1', { buffer, pages: bad, totalPages: 20 }, depsWith({ ai: 'lixo' }));
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+    expect(r.source).toBeNull();
+    expect(replaceChapters).not.toHaveBeenCalled();
+  });
+
+  it('árvore da IA com depth 7 é rejeitada', async () => {
+    let deep: object = { title: 'Fundo', startPage: 10 };
+    for (let p = 9; p >= 3; p--) deep = { title: `N${p}`, startPage: p, children: [deep] };
+    const r = await extractAndSaveChapters('m1', { buffer, pages, totalPages: 20 },
+      depsWith({ ai: JSON.stringify({ chapters: [deep, { title: 'Outra', startPage: 15 }] }) }));
+    expect(r.source).toBeNull();
+    expect(replaceChapters).not.toHaveBeenCalled();
+  });
+
+  it('árvore realinhada inválida cai para a árvore crua da IA', async () => {
+    vi.mocked(alignDraftsToText).mockImplementationOnce(() => [node('A', 9, node('a', 5)), node('B', 3)]);
     const r = await extractAndSaveChapters(
       'm1',
-      { buffer, pages: bad, totalPages: 20 },
-      depsWith({ ai: aiJson([{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }]) }),
+      { buffer, pages, totalPages: 20 },
+      depsWith({ ai: JSON.stringify({ chapters: [{ title: 'A', startPage: 3, children: [{ title: 'a', startPage: 5 }] }, { title: 'B', startPage: 9 }] }) }),
     );
-    warn.mockRestore();
     expect(r.source).toBe('AI');
+    expect(replaceChapters.mock.calls[0][1].map((x: ChapterRow) => x.startPage)).toEqual([3, 5, 9]);
+  });
+
+  it('mat basica: sumário das páginas 9-11 vira árvore com páginas físicas', async () => {
+    const fixturePages = matBasicaPages();
+    const r = await extractAndSaveChapters('m1', { buffer, pages: fixturePages, totalPages: MAT_BASICA_TOTAL_PAGES },
+      depsWith({ outline: MAT_BASICA_OUTLINE, ai: JSON.stringify({ chapters: MAT_BASICA_PRINTED_TREE }) }));
+    expect(r.source).toBe('AI');
+    const prompt = streamChat.mock.calls[0][0].map((m: { content: string }) => m.content).join('\n');
+    expect(prompt).toContain('Página física 11');
+    expect(prompt).toContain('Logaritmo natural');
+    expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.1, maxTokens: 4000 });
+    const rows: ChapterRow[] = replaceChapters.mock.calls[0][1];
+    expect(rows.filter((x) => x.depth === 0).map((x) => x.startPage)).toEqual([15, 43, 67, 95, 123]);
+    expect(rows.filter((x) => x.depth === 0).at(-1)?.endPage).toBe(174);
+    const fundamentais = rows.find((x) => x.title === 'Conjuntos numéricos fundamentais')!;
+    expect(fundamentais.startPage).toBe(20);
+    expect(rows.filter((x) => x.parentOrder === fundamentais.order).map((x) => [x.title, x.startPage])).toEqual([
+      ['Conjuntos dos números naturais', 21],
+      ['Conjuntos dos números inteiros', 21],
+      ['Conjuntos dos números racionais', 22],
+      ['Conjuntos dos números irracionais', 23],
+      ['Conjuntos dos números reais', 24],
+    ]);
+    expect(r.chapters).toEqual(await replaceChapters.mock.results[0].value);
   });
 
   it('PDF sem outline usa a IA nas 15 primeiras páginas e grava AI', async () => {
@@ -158,7 +215,7 @@ describe('extractAndSaveChapters', () => {
     const prompt = streamChat.mock.calls[0][0].map((m: { content: string }) => m.content).join('\n');
     expect(prompt).toContain('Página física 15');
     expect(prompt).not.toContain('Página física 16');
-    expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.1, maxTokens: 1200 });
+    expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.1, maxTokens: 4000 });
     expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'AI', [], expect.any(Array), undefined);
   });
 

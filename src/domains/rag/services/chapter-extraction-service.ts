@@ -9,15 +9,14 @@ import { CHAPTER_TOC_PAGES } from '@/domains/rag/constants';
 import {
   alignDraftsToText,
   chunkAssignmentsFromRows,
-  draftsToTree,
   findChapterTreeError,
-  headingsToDrafts,
+  headingsToTree,
   isValidChapterTree,
   normalizeRelinks,
-  outlineToDrafts,
+  outlineToTree,
   relinkByTitle,
+  selectTocPages,
   toChapterRows,
-  type ChapterDraft,
   type ChapterNode,
 } from '@/domains/rag/chapters';
 import {
@@ -73,7 +72,7 @@ const defaultDeps: ChapterExtractionDeps = {
 };
 
 const EXTRACTION_TEMPERATURE = 0.1;
-const EXTRACTION_MAX_TOKENS = 1200;
+const EXTRACTION_MAX_TOKENS = 4000;
 
 async function askModel(
   input: ExtractionInput,
@@ -81,7 +80,7 @@ async function askModel(
   deps: ChapterExtractionDeps,
 ): Promise<ChapterNode[] | null> {
   try {
-    const tocPages = input.pages.slice(0, CHAPTER_TOC_PAGES).map((p) => ({
+    const tocPages = selectTocPages(input.pages, CHAPTER_TOC_PAGES).map((p) => ({
       pageNumber: p.pageNumber,
       label: nav.pageLabels?.[p.pageNumber - 1] ?? undefined,
       text: p.text,
@@ -98,7 +97,7 @@ async function askModel(
   }
 }
 
-/** Cascata: outline do PDF, títulos no texto, depois IA sobre o sumário, depois nada. Nunca lança. */
+/** Cascata: outline do PDF, IA sobre o sumário, títulos no texto, nada. Nunca lança. */
 export async function extractChapterDrafts(
   input: ExtractionInput,
   deps: ChapterExtractionDeps = defaultDeps,
@@ -110,36 +109,31 @@ export async function extractChapterDrafts(
     console.warn('[chapters] falha ao ler a navegação do PDF', err);
   }
 
-  // Ponte da fase 1: extratores planos → árvore sem filhos. Fase 2 troca por extração em árvore.
-  const accept = (drafts: ChapterDraft[] | null): ChapterNode[] | null => {
-    if (!drafts) return null;
-    const tree = draftsToTree(drafts);
-    return isValidChapterTree(tree, input.totalPages, 2) ? tree : null;
-  };
+  const valid = (tree: ChapterNode[] | null): tree is ChapterNode[] =>
+    tree !== null && isValidChapterTree(tree, input.totalPages, 2);
 
-  const fromOutline = accept(outlineToDrafts(nav.outline));
-  if (fromOutline) return { source: 'OUTLINE', tree: fromOutline };
-
-  let fromHeadings: ChapterDraft[] | null = null;
-  try {
-    fromHeadings = headingsToDrafts(input.pages);
-  } catch (err) {
-    console.warn('[chapters] falha ao detectar títulos no texto', err);
-  }
-  const headingsTree = accept(fromHeadings);
-  if (headingsTree) return { source: 'HEADINGS', tree: headingsTree };
+  const fromOutline = outlineToTree(nav.outline);
+  if (valid(fromOutline)) return { source: 'OUTLINE', tree: fromOutline };
 
   const rawAi = await askModel(input, nav, deps);
-  let fromAi = rawAi;
   if (rawAi) {
+    let aligned = rawAi;
     try {
-      fromAi = alignDraftsToText(rawAi, input.pages);
+      aligned = alignDraftsToText(rawAi, input.pages);
     } catch (err) {
       console.warn('[chapters] Falha ao realinhar capítulos; usando páginas da IA', err);
     }
+    if (valid(aligned)) return { source: 'AI', tree: aligned };
+    if (valid(rawAi)) return { source: 'AI', tree: rawAi };
   }
-  const aiTree = accept(fromAi);
-  if (aiTree) return { source: 'AI', tree: aiTree };
+
+  let fromHeadings: ChapterNode[] | null = null;
+  try {
+    fromHeadings = headingsToTree(input.pages);
+  } catch (err) {
+    console.warn('[chapters] falha ao detectar títulos no texto', err);
+  }
+  if (valid(fromHeadings)) return { source: 'HEADINGS', tree: fromHeadings };
   return null;
 }
 
