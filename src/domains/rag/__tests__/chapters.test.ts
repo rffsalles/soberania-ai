@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   alignDraftsToText,
   chunkAssignmentsFromRows,
-  isValidChapterSequence,
   headingsToDrafts,
   isGenericOutlineTitle,
   outlineToDrafts,
@@ -110,19 +109,6 @@ describe('outlineToDrafts (níveis e qualidade)', () => {
       { title: 'Cap. 1', startPage: 5 },
       { title: 'Cap. 2', startPage: 9 },
     ]));
-});
-
-describe('isValidChapterSequence', () => {
-  it('rejeita página fora do intervalo, fora de ordem e contagem menor que o mínimo', () => {
-    expect(isValidChapterSequence([{ title: 'a', startPage: 1 }, { title: 'b', startPage: 301 }], 300, 2)).toBe(false);
-    expect(isValidChapterSequence([{ title: 'a', startPage: 0 }, { title: 'b', startPage: 3 }], 300, 2)).toBe(false);
-    expect(isValidChapterSequence([{ title: 'a', startPage: 50 }, { title: 'b', startPage: 20 }], 300, 2)).toBe(false);
-    expect(isValidChapterSequence([{ title: 'a', startPage: 5 }, { title: 'b', startPage: 5 }], 300, 2)).toBe(false);
-    expect(isValidChapterSequence([{ title: 'a', startPage: 1.5 }, { title: 'b', startPage: 5 }], 300, 2)).toBe(false);
-    expect(isValidChapterSequence([{ title: 'a', startPage: 5 }], 300, 2)).toBe(false);
-    expect(isValidChapterSequence([{ title: 'a', startPage: 5 }], 300, 1)).toBe(true);
-    expect(isValidChapterSequence([{ title: 'a', startPage: 1 }, { title: 'b', startPage: 300 }], 300, 2)).toBe(true);
-  });
 });
 
 const tree3: ChapterNode[] = [

@@ -51,7 +51,7 @@ describe('rotas de capítulos do material', () => {
     mocks.replaceManualChapters.mockResolvedValue({ source: 'MANUAL', chapters: [{ id: 'c1' }], lostLessonLinks: 2 });
     const res = await PUT(put({ chapters: [{ title: ' Cap 1 ', startPage: 3 }] }), props);
     expect(res.status).toBe(200);
-    expect(mocks.replaceManualChapters).toHaveBeenCalledWith('m1', [{ title: 'Cap 1', startPage: 3 }], {
+    expect(mocks.replaceManualChapters).toHaveBeenCalledWith('m1', [{ title: 'Cap 1', startPage: 3, children: [] }], {
       user: teacher,
       force: false,
     });
@@ -93,7 +93,7 @@ describe('rotas de capítulos do material', () => {
       new Request(url, { method: 'PUT', body: JSON.stringify({ chapters: [{ title: 'Cap 1', startPage: 3 }] }) }),
       props,
     );
-    expect(mocks.replaceManualChapters).toHaveBeenCalledWith('m1', [{ title: 'Cap 1', startPage: 3 }], {
+    expect(mocks.replaceManualChapters).toHaveBeenCalledWith('m1', [{ title: 'Cap 1', startPage: 3, children: [] }], {
       user: teacher,
       force: true,
     });

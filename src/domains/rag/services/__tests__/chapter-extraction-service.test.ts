@@ -22,7 +22,10 @@ vi.mock('@/domains/rag/chapters', async (orig) => {
   const actual = await orig<typeof import('@/domains/rag/chapters')>();
   return { ...actual, alignDraftsToText: vi.fn(actual.alignDraftsToText) };
 });
-import { alignDraftsToText } from '@/domains/rag/chapters';
+import { alignDraftsToText, type ChapterNode } from '@/domains/rag/chapters';
+
+const node = (title: string, startPage: number, ...children: ChapterNode[]): ChapterNode => ({ title, startPage, children });
+const tree = (pairs: [string, number][]) => pairs.map(([t, p]) => node(t, p));
 
 const buffer = Buffer.from('pdf');
 const pages: RawDocumentPage[] = Array.from({ length: 20 }, (_, i) => ({
@@ -208,20 +211,31 @@ describe('extractAndSaveChapters', () => {
     expect(replaceChapters).not.toHaveBeenCalled();
   });
 
-  it('mesma contagem re-vincula por ordem; contagem diferente informa aulas sem vínculo', async () => {
+  it('reextração re-vincula por título e informa aulas sem par', async () => {
+    listChapters.mockResolvedValue([
+      { id: 'o1', order: 1, title: 'A', startPage: 2, endPage: 4 },
+      { id: 'o2', order: 2, title: 'B', startPage: 5, endPage: 20 },
+    ]);
     listChapterLinks.mockResolvedValue([
       { order: 1, lessonPlanIds: ['l1'] },
       { order: 2, lessonPlanIds: ['l1', 'l2'] },
     ]);
-    const two = [{ title: 'A', pageNumber: 2, depth: 0 }, { title: 'B', pageNumber: 5, depth: 0 }];
-    const same = await extractAndSaveChapters('m1', { buffer, pages, totalPages: 20 }, depsWith({ outline: two }));
+    const three = [
+      { title: 'A', pageNumber: 2, depth: 0 },
+      { title: 'B', pageNumber: 6, depth: 0 },
+      { title: 'C', pageNumber: 8, depth: 0 },
+    ];
+    const same = await extractAndSaveChapters('m1', { buffer, pages, totalPages: 20 }, depsWith({ outline: three }));
     expect(same.lostLessonLinks).toBe(0);
-    expect(replaceChapters.mock.calls[0][3]).toHaveLength(3);
+    expect(replaceChapters.mock.calls[0][3]).toEqual([
+      { order: 1, lessonPlanId: 'l1' },
+      { order: 2, lessonPlanId: 'l1' },
+      { order: 2, lessonPlanId: 'l2' },
+    ]);
 
-    const three = [...two, { title: 'C', pageNumber: 8, depth: 0 }];
-    const diff = await extractAndSaveChapters('m1', { buffer, pages, totalPages: 20 }, depsWith({ outline: three }));
+    const lost = [three[0], { title: 'X', pageNumber: 6, depth: 0 }];
+    const diff = await extractAndSaveChapters('m1', { buffer, pages, totalPages: 20 }, depsWith({ outline: lost }));
     expect(diff.lostLessonLinks).toBe(2);
-    expect(replaceChapters.mock.calls[1][3]).toEqual([]);
   });
 });
 
@@ -256,15 +270,18 @@ describe('replaceManualChapters', () => {
   it('páginas decrescentes dão 400 com a mensagem exata', async () => {
     findMaterial.mockResolvedValue(material);
     await expect(
-      replaceManualChapters('m1', [{ title: 'A', startPage: 9 }, { title: 'B', startPage: 3 }], { user: teacher }, depsWith()),
-    ).rejects.toMatchObject({ status: 400, message: 'As páginas iniciais devem ser crescentes e estar entre 1 e 20.' });
+      replaceManualChapters('m1', tree([['A', 9], ['B', 3]]), { user: teacher }, depsWith()),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Capítulo 2: a página inicial (3) não pode ser anterior à do item anterior (9).',
+    });
     expect(replaceChapters).not.toHaveBeenCalled();
   });
 
   it('válidas gravam com source MANUAL', async () => {
     findMaterial.mockResolvedValue(material);
-    await replaceManualChapters('m1', [{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }], { user: teacher }, depsWith());
-    expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'MANUAL', [], expect.any(Array), expect.anything());
+    await replaceManualChapters('m1', tree([['A', 3], ['B', 9]]), { user: teacher }, depsWith());
+    expect(replaceChapters).toHaveBeenCalledWith('m1', expect.any(Array), 'MANUAL', [], expect.any(Array), undefined);
   });
 
   it('não-PDF dá 400', async () => {
@@ -275,8 +292,6 @@ describe('replaceManualChapters', () => {
 
 describe('guarda de vínculos', () => {
   const material = { id: 'm1', totalPages: 20, mimeType: 'application/pdf', filePath: 'f.pdf', originalFilename: 'livro.pdf' };
-  const three = [{ title: 'A', startPage: 2 }, { title: 'B', startPage: 5 }, { title: 'C', startPage: 8 }];
-  const two = three.slice(0, 2);
   const linked = [
     { order: 1, lessonPlanIds: ['l1'] },
     { order: 2, lessonPlanIds: ['l9'] },
@@ -287,49 +302,61 @@ describe('guarda de vínculos', () => {
 
   beforeEach(() => {
     findMaterial.mockResolvedValue(material);
+    listChapters.mockResolvedValue([
+      { id: 'o1', order: 1, title: 'A', startPage: 2, endPage: 4 },
+      { id: 'o2', order: 2, title: 'B', startPage: 5, endPage: 20 },
+    ]);
     listChapterLinks.mockResolvedValue(linked);
   });
 
-  it('contagem diferente com aula de outro professor → 409 com details e nada gravado', async () => {
+  it('vínculo perdido de outro professor dá 409', async () => {
     listChapterLinkDetails.mockResolvedValue([foreign]);
-    await expect(replaceManualChapters('m1', three, { user: teacher }, depsWith())).rejects.toMatchObject({
+    await expect(replaceManualChapters('m1', tree([['A', 2], ['C', 8]]), { user: teacher }, depsWith())).rejects.toMatchObject({
       status: 409,
       message: LINKS_CONFLICT_MESSAGE,
       details: [{ disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins', professor: 'Ana' }],
     });
-    // a checagem roda dentro da transação (recebe o tx) e aborta antes de qualquer escrita
     expect(listChapterLinkDetails).toHaveBeenCalledWith('m1', { fake: 'tx' });
   });
 
-  it('vínculos só do próprio professor não bloqueiam', async () => {
-    listChapterLinkDetails.mockResolvedValue([{ ...foreign, teacherId: 't1' }]);
-    const r = await replaceManualChapters('m1', three, { user: teacher }, depsWith());
-    expect(replaceChapters).toHaveBeenCalled();
-    expect(r.lostLessonLinks).toBe(2);
+  it('contagem diferente sem vínculo perdido não bloqueia', async () => {
+    listChapterLinkDetails.mockResolvedValue([foreign]);
+    const r = await replaceManualChapters('m1', tree([['A', 2], ['B', 5], ['C', 8]]), { user: teacher }, depsWith());
+    expect(listChapterLinkDetails).not.toHaveBeenCalled();
+    expect(r.lostLessonLinks).toBe(0);
   });
 
-  it('mesma contagem nunca bloqueia', async () => {
-    listChapterLinkDetails.mockResolvedValue([foreign]);
-    await replaceManualChapters('m1', two, { user: teacher }, depsWith());
-    expect(replaceChapters).toHaveBeenCalled();
-    expect(listChapterLinkDetails).not.toHaveBeenCalled();
+  it('perder só vínculo próprio não bloqueia', async () => {
+    listChapterLinkDetails.mockResolvedValue([{ ...foreign, lessonPlanId: 'l1', teacherId: 't1' }]);
+    const r = await replaceManualChapters('m1', tree([['X', 2], ['B', 5]]), { user: teacher }, depsWith());
+    expect(r.lostLessonLinks).toBe(1);
+  });
+
+  it('árvore manual com filhos grava linhas com parentOrder', async () => {
+    await replaceManualChapters('m1', [node('U1', 2, node('Frações', 3)), node('U2', 9)], { user: teacher }, depsWith());
+    expect(replaceChapters.mock.calls[0][1].map((r: { order: number; parentOrder: number | null }) => [r.order, r.parentOrder])).toEqual([
+      [1, null],
+      [2, 1],
+      [3, null],
+    ]);
   });
 
   it('force: TEACHER → 403; ADMIN grava', async () => {
     listChapterLinkDetails.mockResolvedValue([foreign]);
-    await expect(replaceManualChapters('m1', three, { user: teacher, force: true }, depsWith())).rejects.toMatchObject({
+    const next = tree([['A', 2], ['C', 8]]);
+    await expect(replaceManualChapters('m1', next, { user: teacher, force: true }, depsWith())).rejects.toMatchObject({
       status: 403,
       message: FORCE_ADMIN_ONLY_MESSAGE,
     });
     expect(findMaterial).not.toHaveBeenCalled();
-    await replaceManualChapters('m1', three, { user: admin, force: true }, depsWith());
+    await replaceManualChapters('m1', next, { user: admin, force: true }, depsWith());
     expect(replaceChapters).toHaveBeenCalled();
   });
 
-  it('reextração com contagem diferente e vínculo alheio → 409', async () => {
+  it('reextração que perde vínculo alheio → 409', async () => {
     vi.mocked(parseDocumentFile).mockResolvedValue({ pages } as never);
     listChapterLinkDetails.mockResolvedValue([foreign]);
-    const outline = [{ title: 'A', pageNumber: 2, depth: 0 }, { title: 'B', pageNumber: 5, depth: 0 }, { title: 'C', pageNumber: 8, depth: 0 }];
+    const outline = [{ title: 'A', pageNumber: 2, depth: 0 }, { title: 'C', pageNumber: 8, depth: 0 }];
     await expect(reextractMaterialChapters('m1', { user: teacher }, depsWith({ outline }))).rejects.toMatchObject({ status: 409 });
     expect(listChapterLinkDetails).toHaveBeenCalledWith('m1', { fake: 'tx' });
   });

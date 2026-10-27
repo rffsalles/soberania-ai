@@ -8,14 +8,16 @@ import type { PdfNavigation, RawDocumentPage } from '@/domains/rag/types';
 import { CHAPTER_TOC_PAGES } from '@/domains/rag/constants';
 import {
   alignDraftsToText,
-  buildChunkAssignments,
-  headingsToDrafts,
-  isValidChapterSequence,
-  outlineToDrafts,
-  relinkByOrder,
+  chunkAssignmentsFromRows,
   draftsToTree,
+  findChapterTreeError,
+  headingsToDrafts,
+  isValidChapterTree,
+  outlineToDrafts,
+  relinkByTitle,
   toChapterRows,
   type ChapterDraft,
+  type ChapterNode,
 } from '@/domains/rag/chapters';
 import {
   buildChapterExtractionMessages,
@@ -99,7 +101,7 @@ async function askModel(
 export async function extractChapterDrafts(
   input: ExtractionInput,
   deps: ChapterExtractionDeps = defaultDeps,
-): Promise<{ source: ChapterSource; drafts: ChapterDraft[] } | null> {
+): Promise<{ source: ChapterSource; tree: ChapterNode[] } | null> {
   let nav: PdfNavigation = { outline: [], pageLabels: null };
   try {
     nav = await deps.readNavigation(input.buffer);
@@ -107,10 +109,15 @@ export async function extractChapterDrafts(
     console.warn('[chapters] falha ao ler a navegação do PDF', err);
   }
 
-  const fromOutline = outlineToDrafts(nav.outline);
-  if (fromOutline && isValidChapterSequence(fromOutline, input.totalPages, 2)) {
-    return { source: 'OUTLINE', drafts: fromOutline };
-  }
+  // Ponte da fase 1: extratores planos → árvore sem filhos. Fase 2 troca por extração em árvore.
+  const accept = (drafts: ChapterDraft[] | null): ChapterNode[] | null => {
+    if (!drafts) return null;
+    const tree = draftsToTree(drafts);
+    return isValidChapterTree(tree, input.totalPages, 2) ? tree : null;
+  };
+
+  const fromOutline = accept(outlineToDrafts(nav.outline));
+  if (fromOutline) return { source: 'OUTLINE', tree: fromOutline };
 
   let fromHeadings: ChapterDraft[] | null = null;
   try {
@@ -118,9 +125,8 @@ export async function extractChapterDrafts(
   } catch (err) {
     console.warn('[chapters] falha ao detectar títulos no texto', err);
   }
-  if (fromHeadings && isValidChapterSequence(fromHeadings, input.totalPages, 2)) {
-    return { source: 'HEADINGS', drafts: fromHeadings };
-  }
+  const headingsTree = accept(fromHeadings);
+  if (headingsTree) return { source: 'HEADINGS', tree: headingsTree };
 
   const rawAi = await askModel(input, nav, deps);
   let fromAi = rawAi;
@@ -131,29 +137,29 @@ export async function extractChapterDrafts(
       console.warn('[chapters] Falha ao realinhar capítulos; usando páginas da IA', err);
     }
   }
-  if (fromAi && isValidChapterSequence(fromAi, input.totalPages, 2)) {
-    return { source: 'AI', drafts: fromAi };
-  }
+  const aiTree = accept(fromAi);
+  if (aiTree) return { source: 'AI', tree: aiTree };
   return null;
 }
 
 async function saveDrafts(
   materialId: string,
-  drafts: ChapterDraft[],
+  tree: ChapterNode[],
   totalPages: number,
   source: ChapterSource,
   deps: ChapterExtractionDeps,
   opts?: ChapterWriteOptions,
 ): Promise<ChapterSaveResult> {
+  const oldChapters = await deps.repo.listChapters(materialId);
   const oldLinks = await deps.repo.listChapterLinks(materialId);
-  const { relinks, lostLessonLinks } = relinkByOrder(oldLinks, drafts.length);
-  const rows = toChapterRows(draftsToTree(drafts), totalPages);
-  const assignments = buildChunkAssignments(rows, totalPages);
+  const rows = toChapterRows(tree, totalPages);
+  const { relinks, lostLessonLinks, lostLessonPlanIds } = relinkByTitle(oldChapters, rows, oldLinks);
+  const assignments = chunkAssignmentsFromRows(rows, totalPages);
   const beforeWrite =
-    opts && !opts.force && drafts.length !== oldLinks.length
+    opts && !opts.force && lostLessonPlanIds.length > 0
       ? async (tx: Prisma.TransactionClient) => {
           const details = await deps.repo.listChapterLinkDetails(materialId, tx);
-          const foreign = details.filter((d) => d.teacherId !== opts.user.id);
+          const foreign = details.filter((d) => lostLessonPlanIds.includes(d.lessonPlanId) && d.teacherId !== opts.user.id);
           if (foreign.length > 0) {
             const conflicts: ChapterLinkConflict[] = foreign.map((d) => ({
               disciplina: d.disciplina,
@@ -180,7 +186,7 @@ export async function extractAndSaveChapters(
   if (!found) {
     return { source: null, chapters: await deps.repo.listChapters(materialId), lostLessonLinks: 0 };
   }
-  return saveDrafts(materialId, found.drafts, input.totalPages, found.source, deps, opts);
+  return saveDrafts(materialId, found.tree, input.totalPages, found.source, deps, opts);
 }
 
 type MaterialRecord = NonNullable<Awaited<ReturnType<ChapterExtractionDeps['materials']['findMaterial']>>>;
@@ -214,16 +220,15 @@ export async function reextractMaterialChapters(
 
 export async function replaceManualChapters(
   materialId: string,
-  drafts: ChapterDraft[],
+  tree: ChapterNode[],
   opts: ChapterWriteOptions,
   deps: ChapterExtractionDeps = defaultDeps,
 ): Promise<ChapterSaveResult> {
   assertForceAllowed(opts);
   const material = await loadPdfMaterial(materialId, deps);
-  if (!isValidChapterSequence(drafts, material.totalPages, 0)) {
-    throw new DomainError(400, `As páginas iniciais devem ser crescentes e estar entre 1 e ${material.totalPages}.`);
-  }
-  return saveDrafts(materialId, drafts, material.totalPages, 'MANUAL', deps, opts);
+  const error = findChapterTreeError(tree, material.totalPages, 0);
+  if (error) throw new DomainError(400, error.message);
+  return saveDrafts(materialId, tree, material.totalPages, 'MANUAL', deps, opts);
 }
 
 export function listMaterialChapters(
