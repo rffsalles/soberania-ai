@@ -229,7 +229,14 @@ function findOffset(node: ChapterNode, tops: Map<number, Set<string>>): number |
   return null;
 }
 
-/** Regra 2: deslocamento mais frequente (empate: o primeiro em pré-ordem) se reúne >= 50% dos encontrados. */
+/** Maioria com apoio mínimo: o deslocamento só vale para todos com 2+ nós concordando ou árvore de até 3 nós. */
+const ALIGN_MIN_AGREE = 2;
+const ALIGN_SMALL_TREE = 3;
+
+/**
+ * Regra 2: deslocamento mais frequente (empate: o primeiro em pré-ordem) se reúne >= 50% dos encontrados e tem apoio
+ * mínimo (ALIGN_MIN_AGREE nós ou árvore com até ALIGN_SMALL_TREE nós).
+ */
 function majorityOffset(offsets: (number | null)[]): number | null {
   const counts = new Map<number, number>();
   for (const o of offsets) if (o !== null) counts.set(o, (counts.get(o) ?? 0) + 1);
@@ -243,7 +250,8 @@ function majorityOffset(offsets: (number | null)[]): number | null {
       majority = offset;
     }
   }
-  return majority !== null && best / found >= ALIGN_MIN_MAJORITY ? majority : null;
+  const supported = best >= ALIGN_MIN_AGREE || offsets.length <= ALIGN_SMALL_TREE;
+  return majority !== null && supported && best / found >= ALIGN_MIN_MAJORITY ? majority : null;
 }
 
 /** Regra 4: página divisória acima da raiz ("UNIDADE N" ou o próprio título no topo), sem passar de `floor`. */
@@ -273,12 +281,13 @@ function preorder(nodes: ChapterNode[]): ChapterNode[] {
 /**
  * Corrige páginas da árvore (ex.: impressas em vez de físicas) procurando cada título no topo das páginas
  * vizinhas. Com maioria, todos herdam o deslocamento; nós fora do livro saem com a subárvore; raízes cuja página
- * veio do primeiro filho recuam até a divisória da unidade. Não muta a entrada.
+ * veio do primeiro filho recuam até a divisória da unidade. Não muta a entrada. `found` conta os nós (antes de
+ * descartar os de fora do livro) cujo título foi achado; `total` é o número de nós da entrada.
  */
-export function alignDraftsToText(
+export function alignTreeToText(
   tree: ChapterNode[],
   pages: { pageNumber: number; text: string }[],
-): ChapterNode[] {
+): { tree: ChapterNode[]; found: number; total: number } {
   const tops = new Map(pages.map((p) => [p.pageNumber, pageTopWords(p.text)]));
   const pagesByNumber = new Map(pages.map((p) => [p.pageNumber, p.text]));
   const flat = preorder(tree);
@@ -300,7 +309,42 @@ export function alignDraftsToText(
     }
     return result;
   };
-  return rebuild(tree, true);
+  return { tree: rebuild(tree, true), found: offsets.filter((o) => o !== null).length, total: flat.length };
+}
+
+/** Árvore realinhada de alignTreeToText, sem as contagens. */
+export function alignDraftsToText(
+  tree: ChapterNode[],
+  pages: { pageNumber: number; text: string }[],
+): ChapterNode[] {
+  return alignTreeToText(tree, pages).tree;
+}
+
+/**
+ * Converte páginas impressas em físicas pelos rótulos de página do PDF. Só age com rótulos informativos (algum
+ * diferente de i + 1). Em pré-ordem, cada nó procura o primeiro rótulo igual à sua página a partir da página física
+ * do nó anterior; sem rótulo correspondente, mantém a página. Não muta a entrada.
+ */
+export function applyPageLabels(
+  tree: ChapterNode[],
+  pageLabels: string[] | null,
+): { tree: ChapterNode[]; converted: boolean } {
+  if (!pageLabels || pageLabels.every((label, i) => label === String(i + 1))) return { tree, converted: false };
+  const labels = pageLabels.map((l) => l.trim());
+  let previousIndex = 0;
+  let converted = false;
+  const convert = (nodes: ChapterNode[]): ChapterNode[] =>
+    nodes.map((node) => {
+      let startPage = node.startPage;
+      const index = labels.indexOf(String(node.startPage), previousIndex);
+      if (index !== -1) {
+        startPage = index + 1;
+        converted = true;
+      }
+      previousIndex = Math.max(0, startPage - 1);
+      return { ...node, startPage, children: convert(node.children) };
+    });
+  return { tree: convert(tree), converted };
 }
 
 /**

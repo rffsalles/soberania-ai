@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   alignDraftsToText,
+  alignTreeToText,
+  applyPageLabels,
   chunkAssignmentsFromRows,
   headingsToTree,
   isGenericOutlineTitle,
@@ -512,6 +514,64 @@ describe('alignDraftsToText', () => {
     book[42] = page(43, 'UNIDADE 2');
     book[44] = page(45, 'Unidade 2 – Frações');
     expect(alignDraftsToText([node('Unidade 2 – Frações', 43, [node('Frações', 44)])], book)[0].startPage).toBe(45);
+  });
+});
+
+describe('alignTreeToText', () => {
+  const page = (pageNumber: number, text: string) => ({ pageNumber, text });
+  const node = (title: string, startPage: number, children: ChapterNode[] = []): ChapterNode => ({ title, startPage, children });
+  const blank = (total: number) => Array.from({ length: total }, (_, i) => page(i + 1, `Texto qualquer ${i + 1}`));
+
+  it('conta os nós com deslocamento encontrado e o total da árvore de entrada', () => {
+    const book = blank(60);
+    book[4] = page(5, 'Fundamentos de Redes');
+    book[10] = page(11, 'Protocolos de Camada');
+    const tree = [node('Fundamentos de Redes', 3, [node('Título ausente', 4)]), node('Protocolos de Camada', 9)];
+    const r = alignTreeToText(tree, book);
+    expect(r.found).toBe(2);
+    expect(r.total).toBe(3);
+    expect(r.tree).toEqual(alignDraftsToText(tree, book));
+  });
+
+  it('um único achado em 5 nós não impõe o deslocamento: só esse nó muda', () => {
+    const book = blank(60);
+    book[14] = page(15, 'Fundamentos de Redes');
+    const tree = [
+      node('Fundamentos de Redes', 10),
+      node('Título ausente dois', 20),
+      node('Título ausente três', 30),
+      node('Título ausente quatro', 40),
+      node('Título ausente cinco', 50),
+    ];
+    const r = alignTreeToText(tree, book);
+    expect(r.found).toBe(1);
+    expect(r.tree.map((n) => n.startPage)).toEqual([15, 20, 30, 40, 50]);
+  });
+});
+
+describe('applyPageLabels', () => {
+  const node = (title: string, startPage: number, children: ChapterNode[] = []): ChapterNode => ({ title, startPage, children });
+  const arabic = (n: number) => Array.from({ length: n }, (_, i) => String(i + 1));
+
+  it('rótulos romanos antes do miolo: página impressa 1 vira a física 4', () => {
+    const labels = ['i', 'ii', 'iii', ...arabic(20)];
+    const tree = [node('A', 1, [node('a', 1), node('b', 2)]), node('B', 5)];
+    const r = applyPageLabels(tree, labels);
+    expect(r.converted).toBe(true);
+    expect(r.tree).toEqual([node('A', 4, [node('a', 4), node('b', 5)]), node('B', 8)]);
+    expect(tree[0].startPage).toBe(1);
+  });
+
+  it('rótulos triviais 1..N ou ausentes não convertem', () => {
+    const tree = [node('A', 3), node('B', 9)];
+    expect(applyPageLabels(tree, arabic(20))).toEqual({ tree, converted: false });
+    expect(applyPageLabels(tree, null)).toEqual({ tree, converted: false });
+  });
+
+  it('nó sem rótulo correspondente mantém a página', () => {
+    const labels = ['i', 'ii', ...arabic(10)];
+    const r = applyPageLabels([node('A', 2), node('B', 50)], labels);
+    expect(r).toEqual({ tree: [node('A', 4), node('B', 50)], converted: true });
   });
 });
 

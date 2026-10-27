@@ -20,9 +20,9 @@ import { parseDocumentFile } from '@/domains/rag/file-parser';
 
 vi.mock('@/domains/rag/chapters', async (orig) => {
   const actual = await orig<typeof import('@/domains/rag/chapters')>();
-  return { ...actual, alignDraftsToText: vi.fn(actual.alignDraftsToText) };
+  return { ...actual, alignTreeToText: vi.fn(actual.alignTreeToText) };
 });
-import { alignDraftsToText, type ChapterNode, type ChapterRow } from '@/domains/rag/chapters';
+import { alignTreeToText, type ChapterNode, type ChapterRow } from '@/domains/rag/chapters';
 import {
   matBasicaPages,
   MAT_BASICA_OUTLINE,
@@ -53,14 +53,14 @@ const teacher = { id: 't1', role: Role.TEACHER };
 const admin = { id: 'a1', role: Role.ADMIN };
 
 function depsWith(
-  opts: { outline?: OutlineEntry[]; ai?: string; fallback?: boolean; throws?: boolean } = {},
+  opts: { outline?: OutlineEntry[]; pageLabels?: string[] | null; ai?: string; fallback?: boolean; throws?: boolean } = {},
 ): ChapterExtractionDeps {
   streamChat.mockImplementation(async function* (): AsyncGenerator<StreamChunk> {
     if (opts.throws) throw new Error('rede caiu');
     yield { token: opts.ai ?? '', isComplete: true, fallback: opts.fallback ?? false };
   });
   return {
-    readNavigation: async () => ({ outline: opts.outline ?? [], pageLabels: null }),
+    readNavigation: async () => ({ outline: opts.outline ?? [], pageLabels: opts.pageLabels ?? null }),
     streamChat,
     repo: { listChapters, listChapterLinks, listChapterLinkDetails, replaceChapters },
     materials: { findMaterial },
@@ -133,13 +133,24 @@ describe('extractAndSaveChapters', () => {
       );
     });
 
-    it('IA válida vence HEADINGS', async () => {
+    it('IA válida com títulos achados no texto vence HEADINGS', async () => {
       const r = await extractAndSaveChapters(
         'm1',
         { buffer, pages: withHeadings, totalPages: 20 },
-        depsWith({ outline: garbage, ai: aiJson([{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }]) }),
+        depsWith({ outline: garbage, ai: aiJson([{ title: 'Unidade 1 – Tema', startPage: 3 }, { title: 'Extra', startPage: 11 }]) }),
       );
       expect(r.source).toBe('AI');
+      expect(replaceChapters.mock.calls[0][1].map((x: ChapterRow) => x.startPage)).toEqual([3, 11]);
+    });
+
+    it('árvore realinhada inválida com "Unidade N" no texto cai para HEADINGS', async () => {
+      vi.mocked(alignTreeToText).mockImplementationOnce(() => ({ tree: [node('A', 9, node('a', 5)), node('B', 3)], found: 1, total: 3 }));
+      const r = await extractAndSaveChapters(
+        'm1',
+        { buffer, pages: withHeadings, totalPages: 20 },
+        depsWith({ outline: garbage, ai: JSON.stringify({ chapters: [{ title: 'A', startPage: 3, children: [{ title: 'a', startPage: 5 }] }, { title: 'B', startPage: 9 }] }) }),
+      );
+      expect(r.source).toBe('HEADINGS');
     });
   });
 
@@ -170,8 +181,8 @@ describe('extractAndSaveChapters', () => {
     expect(replaceChapters).not.toHaveBeenCalled();
   });
 
-  it('árvore realinhada inválida cai para a árvore crua da IA', async () => {
-    vi.mocked(alignDraftsToText).mockImplementationOnce(() => [node('A', 9, node('a', 5)), node('B', 3)]);
+  it('árvore realinhada inválida sem títulos no texto cai para a árvore crua da IA', async () => {
+    vi.mocked(alignTreeToText).mockImplementationOnce(() => ({ tree: [node('A', 9, node('a', 5)), node('B', 3)], found: 1, total: 3 }));
     const r = await extractAndSaveChapters(
       'm1',
       { buffer, pages, totalPages: 20 },
@@ -232,7 +243,7 @@ describe('extractAndSaveChapters', () => {
   });
 
   it('falha no realinhamento mantém o resultado da IA com as páginas originais', async () => {
-    vi.mocked(alignDraftsToText).mockImplementationOnce(() => {
+    vi.mocked(alignTreeToText).mockImplementationOnce(() => {
       throw new Error('realinhar falhou');
     });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -258,6 +269,51 @@ describe('extractAndSaveChapters', () => {
     );
     expect(r.source).toBe('AI');
     expect(replaceChapters.mock.calls[0][1].map((c: { startPage: number }) => c.startPage)).toEqual([5, 11]);
+  });
+
+  describe('livro de 80 páginas com deslocamento 10 entre página impressa e física', () => {
+    const book: RawDocumentPage[] = Array.from({ length: 80 }, (_, i) => ({
+      pageNumber: i + 1, chapter: '', section: '', text: `Texto da página ${i + 1} com conteúdo corrido`,
+    }));
+    const starts = [11, 30, 50, 70];
+    const names = ['Alfa', 'Beta', 'Gama', 'Delta'];
+    const withChapters = book.map((p) =>
+      starts.includes(p.pageNumber) ? { ...p, text: `Capítulo ${starts.indexOf(p.pageNumber) + 1} – ${names[starts.indexOf(p.pageNumber)]}\nTexto` } : p,
+    );
+    const printed = (titled: boolean) =>
+      aiJson([1, 20, 40, 60].map((startPage, i) => ({ title: titled ? `Capítulo ${i + 1} – ${names[i]}` : names[i], startPage })));
+    const garbage = [{ title: 'Página em branco', pageNumber: 2, depth: 0 }];
+    const startPages = () => replaceChapters.mock.calls[0][1].map((x: ChapterRow) => x.startPage);
+
+    it('deslocamento 10 sem rótulos: HEADINGS vence a IA', async () => {
+      const r = await extractAndSaveChapters('m1', { buffer, pages: withChapters, totalPages: 80 },
+        depsWith({ outline: garbage, ai: printed(true) }));
+      expect(r.source).toBe('HEADINGS');
+      expect(startPages()).toEqual([11, 30, 50, 70]);
+    });
+
+    it('rótulos de página convertem a árvore da IA', async () => {
+      const pageLabels = [...Array(10).fill('i'), ...Array.from({ length: 70 }, (_, i) => String(i + 1))];
+      const r = await extractAndSaveChapters('m1', { buffer, pages: book, totalPages: 80 },
+        depsWith({ outline: garbage, pageLabels, ai: printed(false) }));
+      expect(r.source).toBe('AI');
+      expect(startPages()).toEqual([11, 30, 50, 70]);
+    });
+
+    it('IA crua só depois do HEADINGS: sem rótulos, achados ou títulos no texto', async () => {
+      const r = await extractAndSaveChapters('m1', { buffer, pages: book, totalPages: 80 },
+        depsWith({ outline: garbage, ai: printed(false) }));
+      expect(r.source).toBe('AI');
+      expect(startPages()).toEqual([1, 20, 40, 60]);
+    });
+  });
+
+  it('páginas sem texto não chamam a IA', async () => {
+    const empty = pages.map((p) => ({ ...p, text: '' }));
+    const r = await extractAndSaveChapters('m1', { buffer, pages: empty, totalPages: 20 },
+      depsWith({ ai: aiJson([{ title: 'A', startPage: 3 }, { title: 'B', startPage: 9 }]) }));
+    expect(streamChat).not.toHaveBeenCalled();
+    expect(r.source).toBeNull();
   });
 
   it.each([

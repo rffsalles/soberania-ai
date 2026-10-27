@@ -7,7 +7,8 @@ import { storageService } from '@/domains/storage/storage-service';
 import type { PdfNavigation, RawDocumentPage } from '@/domains/rag/types';
 import { CHAPTER_TOC_PAGES } from '@/domains/rag/constants';
 import {
-  alignDraftsToText,
+  alignTreeToText,
+  applyPageLabels,
   chunkAssignmentsFromRows,
   findChapterTreeError,
   headingsToTree,
@@ -74,6 +75,8 @@ const defaultDeps: ChapterExtractionDeps = {
 
 const EXTRACTION_TEMPERATURE = 0.1;
 const EXTRACTION_MAX_TOKENS = 4000;
+/** Abaixo disso as páginas selecionadas não têm texto (PDF escaneado sem OCR): não vale chamar a IA. */
+const MIN_TOC_TEXT_CHARS = 200;
 
 async function askModel(
   input: ExtractionInput,
@@ -86,6 +89,7 @@ async function askModel(
       label: nav.pageLabels?.[p.pageNumber - 1] ?? undefined,
       text: p.text,
     }));
+    if (tocPages.reduce((sum, p) => sum + p.text.trim().length, 0) < MIN_TOC_TEXT_CHARS) return null;
     const messages = buildChapterExtractionMessages({ pages: tocPages, totalPages: input.totalPages });
     const { text, fallback } = await collectStream(deps.streamChat, messages, {
       temperature: EXTRACTION_TEMPERATURE,
@@ -98,7 +102,10 @@ async function askModel(
   }
 }
 
-/** Cascata: outline do PDF, IA sobre o sumário, títulos no texto, nada. Nunca lança. */
+/**
+ * Cascata: outline do PDF; IA convertida por rótulos e realinhada ao texto (só se algo a confirmou); títulos no
+ * texto; IA com as páginas como vieram; nada. Nunca lança.
+ */
 export async function extractChapterDrafts(
   input: ExtractionInput,
   deps: ChapterExtractionDeps = defaultDeps,
@@ -117,16 +124,17 @@ export async function extractChapterDrafts(
   if (valid(fromOutline)) return { source: 'OUTLINE', tree: fromOutline };
 
   const answer = await askModel(input, nav, deps);
-  const rawAi = answer && promoteSingleRoot(answer);
-  if (rawAi) {
-    let aligned = rawAi;
+  const promoted = answer && promoteSingleRoot(answer);
+  if (promoted) {
+    const { tree: labeled, converted } = applyPageLabels(promoted, nav.pageLabels);
+    let aligned = labeled;
+    let found = 0;
     try {
-      aligned = alignDraftsToText(rawAi, input.pages);
+      ({ tree: aligned, found } = alignTreeToText(labeled, input.pages));
     } catch (err) {
       console.warn('[chapters] Falha ao realinhar capítulos; usando páginas da IA', err);
     }
-    if (valid(aligned)) return { source: 'AI', tree: aligned };
-    if (valid(rawAi)) return { source: 'AI', tree: rawAi };
+    if (valid(aligned) && (found >= 1 || converted)) return { source: 'AI', tree: aligned };
   }
 
   let fromHeadings: ChapterNode[] | null = null;
@@ -136,6 +144,7 @@ export async function extractChapterDrafts(
     console.warn('[chapters] falha ao detectar títulos no texto', err);
   }
   if (valid(fromHeadings)) return { source: 'HEADINGS', tree: fromHeadings };
+  if (valid(promoted)) return { source: 'AI', tree: promoted };
   return null;
 }
 

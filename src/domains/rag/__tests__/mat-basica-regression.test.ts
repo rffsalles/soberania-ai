@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignDraftsToText, headingsToTree, isValidChapterTree, outlineToTree, selectTocPages } from '../chapters';
+import { alignDraftsToText, alignTreeToText, applyPageLabels, headingsToTree, isValidChapterTree, outlineToTree, selectTocPages } from '../chapters';
 import { MAT_BASICA_OUTLINE, MAT_BASICA_PRINTED_TREE, MAT_BASICA_TOTAL_PAGES, matBasicaPages } from './fixtures/mat-basica';
 
 describe('fixture mat basica', () => {
@@ -37,5 +37,11 @@ describe('fixture mat basica', () => {
     expect(fundamentais.children.map((c) => c.startPage)).toEqual([21, 21, 22, 23, 24]);
     expect(aligned[2].children[3].children[0]).toMatchObject({ title: 'Taxa percentual', startPage: 84 });
     expect(isValidChapterTree(aligned, MAT_BASICA_TOTAL_PAGES, 2)).toBe(true); // naturais e inteiros na 21: irmãos iguais são válidos
+  });
+  it('(e) rótulos triviais não convertem e o realinhamento acha 30 de 41 nós', () => {
+    const labels = Array.from({ length: MAT_BASICA_TOTAL_PAGES }, (_, i) => String(i + 1));
+    expect(applyPageLabels(MAT_BASICA_PRINTED_TREE, labels).converted).toBe(false);
+    const { found, total } = alignTreeToText(MAT_BASICA_PRINTED_TREE, matBasicaPages());
+    expect([found, total]).toEqual([30, 41]);
   });
 });
