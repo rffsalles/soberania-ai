@@ -13,6 +13,7 @@ import {
   isValidChapterSequence,
   outlineToDrafts,
   relinkByOrder,
+  draftsToTree,
   toChapterRows,
   type ChapterDraft,
 } from '@/domains/rag/chapters';
@@ -146,7 +147,7 @@ async function saveDrafts(
 ): Promise<ChapterSaveResult> {
   const oldLinks = await deps.repo.listChapterLinks(materialId);
   const { relinks, lostLessonLinks } = relinkByOrder(oldLinks, drafts.length);
-  const rows = toChapterRows(drafts, totalPages);
+  const rows = toChapterRows(draftsToTree(drafts), totalPages);
   const assignments = buildChunkAssignments(rows, totalPages);
   const beforeWrite =
     opts && !opts.force && drafts.length !== oldLinks.length

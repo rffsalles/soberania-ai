@@ -1,8 +1,17 @@
 import type { OutlineEntry } from '@/domains/rag/types';
 import { MIN_EXTRACTED_CHAPTERS } from '@/domains/rag/constants';
 
+export type ChapterNode = { title: string; startPage: number; children: ChapterNode[] };
+export type ChapterRow = {
+  title: string;
+  order: number;
+  depth: number;
+  parentOrder: number | null;
+  startPage: number;
+  endPage: number;
+};
+/** @deprecated Ponte da fase 1: formato plano dos extratores atuais. A fase 2 remove. */
 export type ChapterDraft = { title: string; startPage: number };
-export type ChapterRow = { title: string; order: number; startPage: number; endPage: number };
 export type ChunkAssignment = { order: number | null; title: string | null; fromPage: number; toPage: number };
 export type ChapterLinks = { order: number; lessonPlanIds: string[] };
 
@@ -193,13 +202,53 @@ export function isValidChapterSequence(drafts: ChapterDraft[], totalPages: numbe
   return true;
 }
 
-export function toChapterRows(drafts: ChapterDraft[], totalPages: number): ChapterRow[] {
-  return drafts.map((d, i) => ({
-    title: d.title,
-    order: i + 1,
-    startPage: d.startPage,
-    endPage: i + 1 < drafts.length ? drafts[i + 1].startPage - 1 : totalPages,
-  }));
+/** Ponte da fase 1: cada rascunho plano vira uma raiz sem filhos. */
+export function draftsToTree(drafts: ChapterDraft[]): ChapterNode[] {
+  return drafts.map((d) => ({ title: d.title, startPage: d.startPage, children: [] }));
+}
+
+/**
+ * Achata a árvore em pré-ordem (order 1..N). O endPage de um nó é o início do próximo irmão - 1
+ * (nunca antes do próprio startPage); o último irmão herda o endPage do pai, e a última raiz vai até totalPages.
+ */
+export function toChapterRows(tree: ChapterNode[], totalPages: number): ChapterRow[] {
+  const rows: ChapterRow[] = [];
+  const walk = (nodes: ChapterNode[], depth: number, parentOrder: number | null, parentEnd: number): void => {
+    nodes.forEach((node, i) => {
+      const next = nodes[i + 1];
+      const endPage = next ? Math.max(node.startPage, next.startPage - 1) : parentEnd;
+      const order = rows.length + 1;
+      rows.push({ title: node.title, order, depth, parentOrder, startPage: node.startPage, endPage });
+      walk(node.children, depth + 1, order, endPage);
+    });
+  };
+  walk(tree, 0, null, totalPages);
+  return rows;
+}
+
+/** Numeração hierárquica ("1", "1.2", "1.2.1") alinhada ao índice de `rows`, que vem em pré-ordem. */
+export function numberNodes(rows: { order: number; parentOrder: number | null }[]): string[] {
+  const numberByOrder = new Map<number, string>();
+  const childCount = new Map<number | null, number>();
+  return rows.map((r) => {
+    const index = (childCount.get(r.parentOrder) ?? 0) + 1;
+    childCount.set(r.parentOrder, index);
+    const parent = r.parentOrder === null ? undefined : numberByOrder.get(r.parentOrder);
+    const num = parent ? `${parent}.${index}` : String(index);
+    numberByOrder.set(r.order, num);
+    return num;
+  });
+}
+
+/** Deriva `number` de linhas do banco (em `order` crescente), resolvendo `parentId` para `parentOrder`. */
+export function numberChapters<T extends { id: string; order: number; parentId: string | null }>(
+  chapters: T[],
+): (T & { number: string })[] {
+  const orderById = new Map(chapters.map((c) => [c.id, c.order]));
+  const numbers = numberNodes(
+    chapters.map((c) => ({ order: c.order, parentOrder: c.parentId === null ? null : (orderById.get(c.parentId) ?? null) })),
+  );
+  return chapters.map((c, i) => ({ ...c, number: numbers[i] }));
 }
 
 export function buildChunkAssignments(rows: ChapterRow[], totalPages: number): ChunkAssignment[] {

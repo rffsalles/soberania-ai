@@ -26,7 +26,7 @@ describe('replaceChapters', () => {
   it('usa timeout de 60 s, cria capítulos em lote e só reescreve chunks alterados', async () => {
     await replaceChapters(
       'm1',
-      [{ order: 1, title: 'Intro', startPage: 1, endPage: 10 }],
+      [{ order: 1, title: 'Intro', depth: 0, parentOrder: null, startPage: 1, endPage: 10 }],
       'AUTO' as never,
       [],
       [{ order: 1, title: 'Intro', fromPage: 1, toPage: 10 }],
@@ -42,7 +42,7 @@ describe('replaceChapters', () => {
     const order: string[] = [];
     tx.materialChapter.deleteMany.mockImplementationOnce(async () => { order.push('delete'); return {}; });
     const beforeWrite = vi.fn(async () => { order.push('before'); });
-    await replaceChapters('m1', [{ order: 1, title: 'Intro', startPage: 1, endPage: 10 }], 'AUTO' as never, [], [], beforeWrite);
+    await replaceChapters('m1', [{ order: 1, title: 'Intro', depth: 0, parentOrder: null, startPage: 1, endPage: 10 }], 'AUTO' as never, [], [], beforeWrite);
     expect(beforeWrite).toHaveBeenCalledWith(tx);
     expect(order).toEqual(['before', 'delete']);
   });
@@ -51,7 +51,7 @@ describe('replaceChapters', () => {
     vi.clearAllMocks();
     const beforeWrite = vi.fn().mockRejectedValue(new Error('conflito'));
     await expect(
-      replaceChapters('m1', [{ order: 1, title: 'Intro', startPage: 1, endPage: 10 }], 'AUTO' as never, [], [], beforeWrite),
+      replaceChapters('m1', [{ order: 1, title: 'Intro', depth: 0, parentOrder: null, startPage: 1, endPage: 10 }], 'AUTO' as never, [], [], beforeWrite),
     ).rejects.toThrow('conflito');
     expect(tx.materialChapter.deleteMany).not.toHaveBeenCalled();
     expect(tx.materialChapter.createManyAndReturn).not.toHaveBeenCalled();

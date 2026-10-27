@@ -6,8 +6,12 @@ import {
   headingsToDrafts,
   isGenericOutlineTitle,
   outlineToDrafts,
+  draftsToTree,
+  numberChapters,
+  numberNodes,
   relinkByOrder,
   toChapterRows,
+  type ChapterNode,
 } from '../chapters';
 
 describe('outlineToDrafts', () => {
@@ -115,25 +119,61 @@ describe('isValidChapterSequence', () => {
   });
 });
 
+const tree3: ChapterNode[] = [
+  { title: 'A', startPage: 3, children: [
+    { title: 'A1', startPage: 3, children: [{ title: 'A1a', startPage: 4, children: [] }] },
+    { title: 'A2', startPage: 7, children: [] },
+  ] },
+  { title: 'B', startPage: 10, children: [] },
+];
+
 describe('toChapterRows', () => {
   it('endPage deriva do próximo capítulo e o último vai até totalPages', () =>
-    expect(toChapterRows([{ title: 'a', startPage: 12 }, { title: 'b', startPage: 25 }], 300)).toEqual([
-      { title: 'a', order: 1, startPage: 12, endPage: 24 },
-      { title: 'b', order: 2, startPage: 25, endPage: 300 },
+    expect(toChapterRows(draftsToTree([{ title: 'a', startPage: 12 }, { title: 'b', startPage: 25 }]), 300)).toEqual([
+      { title: 'a', order: 1, depth: 0, parentOrder: null, startPage: 12, endPage: 24 },
+      { title: 'b', order: 2, depth: 0, parentOrder: null, startPage: 25, endPage: 300 },
     ]));
+  it('toChapterRows achata 3 níveis em pré-ordem com endPage herdado', () =>
+    expect(toChapterRows(tree3, 15)).toEqual([
+      { title: 'A', order: 1, depth: 0, parentOrder: null, startPage: 3, endPage: 9 },
+      { title: 'A1', order: 2, depth: 1, parentOrder: 1, startPage: 3, endPage: 6 },
+      { title: 'A1a', order: 3, depth: 2, parentOrder: 2, startPage: 4, endPage: 6 },
+      { title: 'A2', order: 4, depth: 1, parentOrder: 1, startPage: 7, endPage: 9 },
+      { title: 'B', order: 5, depth: 0, parentOrder: null, startPage: 10, endPage: 15 },
+    ]));
+  it('irmãos na mesma página: endPage do anterior fica no próprio startPage', () =>
+    expect(toChapterRows([
+      { title: 'R', startPage: 20, children: [
+        { title: 'a', startPage: 21, children: [] },
+        { title: 'b', startPage: 21, children: [] },
+      ] },
+      { title: 'S', startPage: 30, children: [] },
+    ], 40).map((r) => [r.title, r.startPage, r.endPage])).toEqual([['R', 20, 29], ['a', 21, 21], ['b', 21, 29], ['S', 30, 40]]));
+  it('numberNodes numera pelo índice entre irmãos', () =>
+    expect(numberNodes(toChapterRows(tree3, 15))).toEqual(['1', '1.1', '1.1.1', '1.2', '2']));
+  it('material plano numera 1, 2, 3', () =>
+    expect(numberChapters([
+      { id: 'x', order: 1, parentId: null }, { id: 'y', order: 2, parentId: null }, { id: 'z', order: 3, parentId: null },
+    ]).map((c) => c.number)).toEqual(['1', '2', '3']));
+  it('numberChapters resolve parentId', () =>
+    expect(numberChapters([
+      { id: 'u', order: 1, parentId: null }, { id: 'f', order: 2, parentId: 'u' }, { id: 'g', order: 3, parentId: 'u' },
+    ]).map((c) => c.number)).toEqual(['1', '1.1', '1.2']));
+  it('draftsToTree põe children vazio', () =>
+    expect(draftsToTree([{ title: 'a', startPage: 2 }])).toEqual([{ title: 'a', startPage: 2, children: [] }]));
 });
 
 describe('buildChunkAssignments', () => {
   it('páginas antes do primeiro capítulo ficam sem capítulo', () =>
     expect(
-      buildChunkAssignments(toChapterRows([{ title: 'a', startPage: 12 }, { title: 'b', startPage: 25 }], 300), 300),
+      buildChunkAssignments(toChapterRows(draftsToTree([{ title: 'a', startPage: 12 }, { title: 'b', startPage: 25 }]), 300), 300),
     ).toEqual([
       { order: null, title: null, fromPage: 1, toPage: 11 },
       { order: 1, title: 'a', fromPage: 12, toPage: 24 },
       { order: 2, title: 'b', fromPage: 25, toPage: 300 },
     ]));
   it('sem faixa nula quando o primeiro capítulo começa na página 1', () =>
-    expect(buildChunkAssignments(toChapterRows([{ title: 'a', startPage: 1 }], 10), 10)).toEqual([
+    expect(buildChunkAssignments(toChapterRows(draftsToTree([{ title: 'a', startPage: 1 }]), 10), 10)).toEqual([
       { order: 1, title: 'a', fromPage: 1, toPage: 10 },
     ]));
   it('lista vazia vira uma faixa nula do documento inteiro', () =>

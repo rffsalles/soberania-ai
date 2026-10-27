@@ -23,3 +23,8 @@ export const CHAPTER_TOC_PAGES = 15;
 export const CHAPTER_TOC_PAGE_CHARS = 1200;
 /** Mínimo de capítulos para considerar uma extração válida. */
 export const MIN_EXTRACTED_CHAPTERS = 2;
+
+/** Máximo de nós (capítulos + subníveis) aceitos por material. */
+export const MAX_CHAPTER_NODES = 500;
+/** Profundidade máxima da árvore de capítulos (raiz = 0). */
+export const MAX_CHAPTER_DEPTH = 6;
