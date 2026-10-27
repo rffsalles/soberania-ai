@@ -7,6 +7,7 @@ import {
   outlineToDrafts,
   draftsToTree,
   numberChapters,
+  normalizeRelinks,
   numberNodes,
   relinkByTitle,
   toChapterRows,
@@ -248,6 +249,24 @@ describe('relinkByTitle', () => {
       toChapterRows([node('U', 1, node('novo', 5))], 20),
       [{ order: 1, lessonPlanIds: ['l1'] }],
     )).toMatchObject({ relinks: [], lostLessonLinks: 1 }));
+});
+
+describe('normalizeRelinks', () => {
+  const rows = toChapterRows([node('U', 1, node('a', 2, node('a1', 3))), node('V', 9)], 20);
+  it('aula ligada à raiz e ao filho fica só na raiz', () =>
+    expect(normalizeRelinks([{ order: 1, lessonPlanId: 'l1' }, { order: 2, lessonPlanId: 'l1' }], rows))
+      .toEqual([{ order: 1, lessonPlanId: 'l1' }]));
+  it('ancestral distante também absorve; aulas diferentes não interferem', () =>
+    expect(normalizeRelinks([
+      { order: 3, lessonPlanId: 'l1' },
+      { order: 1, lessonPlanId: 'l1' },
+      { order: 2, lessonPlanId: 'l2' },
+      { order: 4, lessonPlanId: 'l1' },
+    ], rows)).toEqual([
+      { order: 1, lessonPlanId: 'l1' },
+      { order: 2, lessonPlanId: 'l2' },
+      { order: 4, lessonPlanId: 'l1' },
+    ]));
 });
 
 describe('outlineToDrafts (segundo nível sem promover seções)', () => {

@@ -13,6 +13,7 @@ import {
   findChapterTreeError,
   headingsToDrafts,
   isValidChapterTree,
+  normalizeRelinks,
   outlineToDrafts,
   relinkByTitle,
   toChapterRows,
@@ -153,7 +154,9 @@ async function saveDrafts(
   const oldChapters = await deps.repo.listChapters(materialId);
   const oldLinks = await deps.repo.listChapterLinks(materialId);
   const rows = toChapterRows(tree, totalPages);
-  const { relinks, lostLessonLinks, lostLessonPlanIds } = relinkByTitle(oldChapters, rows, oldLinks);
+  const relinked = relinkByTitle(oldChapters, rows, oldLinks);
+  const { lostLessonLinks, lostLessonPlanIds } = relinked;
+  const relinks = normalizeRelinks(relinked.relinks, rows);
   const assignments = chunkAssignmentsFromRows(rows, totalPages);
   const beforeWrite =
     opts && !opts.force && lostLessonPlanIds.length > 0

@@ -353,6 +353,17 @@ describe('guarda de vínculos', () => {
     ]);
   });
 
+  it('aula re-vinculada a pai e filho fica só no pai', async () => {
+    listChapters.mockResolvedValue([
+      { id: 'o1', order: 1, title: 'U', startPage: 2, endPage: 8, depth: 0 },
+      { id: 'o2', order: 2, title: 'a', startPage: 3, endPage: 8, depth: 1 },
+      { id: 'o3', order: 3, title: 'V', startPage: 9, endPage: 20, depth: 0 },
+    ]);
+    listChapterLinks.mockResolvedValue([{ order: 1, lessonPlanIds: ['l1'] }, { order: 2, lessonPlanIds: ['l1'] }]);
+    await replaceManualChapters('m1', [node('U', 2, node('a', 3)), node('V', 9)], { user: teacher }, depsWith());
+    expect(replaceChapters.mock.calls[0][3]).toEqual([{ order: 1, lessonPlanId: 'l1' }]);
+  });
+
   it('force: TEACHER → 403; ADMIN grava', async () => {
     listChapterLinkDetails.mockResolvedValue([foreign]);
     const next = tree([['A', 2], ['C', 8]]);

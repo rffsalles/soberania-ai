@@ -340,6 +340,21 @@ export function relinkByTitle(
   return { relinks, lostLessonLinks: lost.length, lostLessonPlanIds: lost };
 }
 
+/** Remove o vínculo de uma aula a um nó quando um ancestral do nó (via `parentOrder`) já está vinculado à mesma aula. */
+export function normalizeRelinks(
+  relinks: RelinkResult['relinks'],
+  rows: { order: number; parentOrder: number | null }[],
+): RelinkResult['relinks'] {
+  const parentByOrder = new Map(rows.map((r) => [r.order, r.parentOrder]));
+  const linked = new Set(relinks.map((l) => `${l.order}|${l.lessonPlanId}`));
+  return relinks.filter((l) => {
+    for (let p = parentByOrder.get(l.order) ?? null; p !== null; p = parentByOrder.get(p) ?? null) {
+      if (linked.has(`${p}|${l.lessonPlanId}`)) return false;
+    }
+    return true;
+  });
+}
+
 export type ChapterTreeError = { number: string | null; message: string };
 
 function exceedsNodeLimit(tree: ChapterNode[]): boolean {
