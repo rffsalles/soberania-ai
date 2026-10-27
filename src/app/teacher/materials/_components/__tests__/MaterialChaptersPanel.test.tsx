@@ -204,6 +204,16 @@ describe('MaterialChaptersPanel', () => {
       expect((screen.getByRole('button', { name: 'Salvar capítulos' }) as HTMLButtonElement).disabled).toBe(true);
     });
 
+    it('título com mais de 200 caracteres bloqueia o salvar', async () => {
+      stubFetch({ [`GET ${BASE}`]: { success: true, chapters: TREE } });
+      renderTree();
+      const title = (await screen.findByLabelText('Título do capítulo 2.1')) as HTMLInputElement;
+      expect(title.maxLength).toBe(200);
+      fireEvent.change(title, { target: { value: 'a'.repeat(201) } });
+      expect(screen.getByText('O título admite no máximo 200 caracteres.')).toBeTruthy();
+      expect((screen.getByRole('button', { name: 'Salvar capítulos' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
     it('adiciona subcapítulo e salva a árvore inteira no PUT', async () => {
       stubFetch({
         [`GET ${BASE}`]: { success: true, chapters: TREE },

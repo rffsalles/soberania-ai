@@ -27,7 +27,7 @@ import {
   type EditableChapter,
   type TreeValidation,
 } from '@/components/teaching/chapter-tree-edit';
-import { MAX_CHAPTER_DEPTH } from '@/domains/rag/constants';
+import { CHAPTER_TITLE_MAX, MAX_CHAPTER_DEPTH } from '@/domains/rag/constants';
 import {
   CHAPTER_SOURCE_LABEL,
   extractMaterialChapters,
@@ -98,6 +98,7 @@ function ChapterNodeRow({
         <Input
           className="min-w-40 flex-1"
           aria-label={`Título do capítulo ${number}`}
+          maxLength={CHAPTER_TITLE_MAX}
           aria-describedby={message ? messageId : undefined}
           aria-invalid={message ? true : undefined}
           value={node.title}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { materialChaptersSchema } from '../material-chapters.validator';
-import { MAX_CHAPTER_NODES } from '@/domains/rag/constants';
+import { CHAPTER_TITLE_MAX, MAX_CHAPTER_NODES } from '@/domains/rag/constants';
 
 const many = (n: number) => Array.from({ length: n }, (_, i) => ({ title: `C${i + 1}`, startPage: i + 1 }));
 
@@ -17,4 +17,9 @@ describe('materialChaptersSchema', () => {
   });
   it('árvore dentro dos limites passa', () =>
     expect(materialChaptersSchema.safeParse({ chapters: [{ title: 'U', startPage: 1, children: many(3) }] }).success).toBe(true));
+  it('título acima de CHAPTER_TITLE_MAX é barrado; no limite passa', () => {
+    const at = (len: number) => materialChaptersSchema.safeParse({ chapters: [{ title: 'a'.repeat(len), startPage: 1 }] }).success;
+    expect(at(CHAPTER_TITLE_MAX)).toBe(true);
+    expect(at(CHAPTER_TITLE_MAX + 1)).toBe(false);
+  });
 });

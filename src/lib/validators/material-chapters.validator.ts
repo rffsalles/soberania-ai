@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { ChapterNode } from '@/domains/rag/chapters';
-import { MAX_CHAPTER_DEPTH, MAX_CHAPTER_NODES } from '@/domains/rag/constants';
+import { CHAPTER_TITLE_MAX, MAX_CHAPTER_DEPTH, MAX_CHAPTER_NODES } from '@/domains/rag/constants';
 
 export type ChapterNodeInput = { title: string; startPage: number; children?: ChapterNodeInput[] };
 
 const chapterNodeSchema: z.ZodType<ChapterNode, z.ZodTypeDef, ChapterNodeInput> = z.lazy(() =>
   z.object({
-    title: z.string().trim().min(1).max(200),
+    title: z.string().trim().min(1).max(CHAPTER_TITLE_MAX),
     startPage: z.number().int().min(1),
     children: z.array(chapterNodeSchema).max(MAX_CHAPTER_NODES).default([]),
   }),

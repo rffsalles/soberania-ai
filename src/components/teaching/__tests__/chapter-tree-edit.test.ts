@@ -69,4 +69,9 @@ describe('chapter-tree-edit', () => {
     const many = Array.from({ length: 501 }, (_, i) => n(`r${i}`, 1));
     expect(t.validateEditable(many, 174).global).toBe('Máximo de 500 capítulos por material.');
   });
+  it('título acima de CHAPTER_TITLE_MAX caracteres é inválido (o servidor rejeitaria)', () => {
+    const longo = 'a'.repeat(201);
+    expect(t.validateEditable([n('u1', 1, [], longo)], 174).byKey.get('u1')).toBe('O título admite no máximo 200 caracteres.');
+    expect(t.validateEditable([n('u1', 1, [], 'a'.repeat(200))], 174).byKey.size).toBe(0);
+  });
 });

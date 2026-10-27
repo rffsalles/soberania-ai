@@ -1,4 +1,4 @@
-import { MAX_CHAPTER_DEPTH, MAX_CHAPTER_NODES } from '@/domains/rag/constants';
+import { CHAPTER_TITLE_MAX, MAX_CHAPTER_DEPTH, MAX_CHAPTER_NODES } from '@/domains/rag/constants';
 
 /** Nó editável da árvore de capítulos (startPage como texto do input). */
 export type EditableChapter = { key: string; title: string; startPage: string; children: EditableChapter[] };
@@ -200,6 +200,7 @@ export function validateEditable(nodes: EditableChapter[], totalPages: number): 
 
   const check = (node: EditableChapter, depth: number, parent: EditableChapter | null, prev: EditableChapter | null) => {
     if (!node.title.trim()) return 'Informe o título.';
+    if (node.title.trim().length > CHAPTER_TITLE_MAX) return `O título admite no máximo ${CHAPTER_TITLE_MAX} caracteres.`;
     const start = parsePage(node.startPage);
     if (start === null || start < 1 || start > totalPages) return `A página deve estar entre 1 e ${totalPages}.`;
     const parentStart = parent ? parsePage(parent.startPage) : null;
