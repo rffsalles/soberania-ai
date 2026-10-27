@@ -25,7 +25,7 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-import { listChapterLinkDetails, listChapters, listDescendantIds, replaceChapters } from '../chapter-repository';
+import { chapterNumbersFor, listChapterLinkDetails, listChapters, listDescendantIds, replaceChapters } from '../chapter-repository';
 
 const node = (title: string, startPage: number, ...children: ChapterNode[]): ChapterNode => ({ title, startPage, children });
 const tree3: ChapterNode[] = [
@@ -131,5 +131,27 @@ describe('listChapterLinkDetails', () => {
     expect(r).toHaveLength(2);
     expect(r.find((x) => x.lessonPlanId === 'l9')).toMatchObject({ teacherId: 't2', professor: 'Ana', disciplina: 'BD', turma: 'A', classNumber: 4, topicTitle: 'Joins' });
     expect(r.find((x) => x.lessonPlanId === 'l1')?.professor).toBe('—');
+  });
+});
+
+describe('chapterNumbersFor', () => {
+  it('lista vazia não consulta o banco', async () => {
+    expect((await chapterNumbersFor([])).size).toBe(0);
+    expect(dbFindMany).not.toHaveBeenCalled();
+  });
+  it('numera cada material separadamente', async () => {
+    dbFindMany.mockResolvedValueOnce([
+      { id: 'u1', order: 1, parentId: null, materialId: 'm1' }, { id: 'u2', order: 2, parentId: null, materialId: 'm1' },
+      { id: 's21', order: 3, parentId: 'u2', materialId: 'm1' }, { id: 's22', order: 4, parentId: 'u2', materialId: 'm1' },
+      { id: 'x1', order: 1, parentId: null, materialId: 'm2' }, { id: 'x2', order: 2, parentId: 'x1', materialId: 'm2' },
+    ]);
+    const map = await chapterNumbersFor(['s22', 'x2']);
+    expect(map.get('s22')).toBe('2.2');
+    expect(map.get('x2')).toBe('1.1');
+    expect(dbFindMany).toHaveBeenCalledTimes(1);
+    expect(dbFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { material: { chapters: { some: { id: { in: ['s22', 'x2'] } } } } },
+      orderBy: [{ materialId: 'asc' }, { order: 'asc' }],
+    }));
   });
 });

@@ -11,7 +11,7 @@ const chunk: DidacticChunk = {
   pageNumber: 41, content: 'Entidades e relacionamentos.',
 };
 const chapters = [
-  { chapter: { id: 'ch3', order: 3, title: 'Modelagem', startPage: 40, endPage: 60, material: { title: 'Sistemas de Banco de Dados', author: 'Elmasri' } } },
+  { chapter: { id: 'ch3', order: 3, number: '3', title: 'Modelagem', startPage: 40, endPage: 60, material: { title: 'Sistemas de Banco de Dados', author: 'Elmasri' } } },
 ];
 
 describe('buildLessonGenerationMessages', () => {

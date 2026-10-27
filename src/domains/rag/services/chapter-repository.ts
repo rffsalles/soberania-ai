@@ -152,3 +152,24 @@ export async function listDescendantIds(chapterIds: string[]): Promise<string[]>
     SELECT id FROM t`;
   return found.map((r) => r.id);
 }
+
+/** id → número hierárquico ("2.3") dos capítulos informados; numera cada material inteiro, em uma única consulta. */
+export async function chapterNumbersFor(chapterIds: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (chapterIds.length === 0) return result;
+  const found = await db.materialChapter.findMany({
+    where: { material: { chapters: { some: { id: { in: chapterIds } } } } },
+    orderBy: [{ materialId: 'asc' }, { order: 'asc' }],
+    select: { id: true, order: true, parentId: true, materialId: true },
+  });
+  const byMaterial = new Map<string, typeof found>();
+  for (const c of found) {
+    const group = byMaterial.get(c.materialId);
+    if (group) group.push(c);
+    else byMaterial.set(c.materialId, [c]);
+  }
+  for (const group of byMaterial.values()) {
+    for (const c of numberChapters(group)) result.set(c.id, c.number);
+  }
+  return result;
+}

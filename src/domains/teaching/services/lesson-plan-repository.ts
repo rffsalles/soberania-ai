@@ -1,8 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
+import { chapterNumbersFor } from '@/domains/rag/services/chapter-repository';
 
-export function listLessonsBySchedule(filter: { scheduleId?: string; teacherId?: string }) {
-  return db.lessonPlan.findMany({
+export async function listLessonsBySchedule(filter: { scheduleId?: string; teacherId?: string }) {
+  const lessons = await db.lessonPlan.findMany({
     where: {
       ...(filter.scheduleId ? { courseScheduleId: filter.scheduleId } : {}),
       ...(filter.teacherId ? { courseSchedule: { teachingPlan: { teacherId: filter.teacherId } } } : {}),
@@ -13,6 +14,14 @@ export function listLessonsBySchedule(filter: { scheduleId?: string; teacherId?:
     },
     orderBy: { classNumber: 'asc' },
   });
+  const numbers = await chapterNumbersFor(lessons.flatMap((l) => l.chapters.map((c) => c.chapterId)));
+  return lessons.map((l) => ({
+    ...l,
+    chapters: l.chapters.map((c) => ({
+      chapterId: c.chapterId,
+      chapter: { order: c.chapter.order, number: numbers.get(c.chapterId) ?? String(c.chapter.order) },
+    })),
+  }));
 }
 
 export function createLesson(data: Prisma.LessonPlanUncheckedCreateInput) {
@@ -110,6 +119,7 @@ export type GenerationLesson = {
     chapter: {
       id: string;
       order: number;
+      number: string;
       title: string;
       startPage: number;
       endPage: number | null;
@@ -118,15 +128,23 @@ export type GenerationLesson = {
   }[];
 };
 
-export function findLessonForGeneration(id: string): Promise<GenerationLesson | null> {
-  return db.lessonPlan.findUnique({
+export async function findLessonForGeneration(id: string): Promise<GenerationLesson | null> {
+  const lesson = await db.lessonPlan.findUnique({
     where: { id },
     select: { id: true, classNumber: true, topicTitle: true, ...generationInclude },
   });
+  if (!lesson) return null;
+  const numbers = await chapterNumbersFor(lesson.chapters.map((c) => c.chapter.id));
+  return {
+    ...lesson,
+    chapters: lesson.chapters.map((c) => ({
+      chapter: { ...c.chapter, number: numbers.get(c.chapter.id) ?? String(c.chapter.order) },
+    })),
+  };
 }
 
 export async function findLessonTutorScope(lessonPlanId: string): Promise<{
-  chapters: { id: string; order: number; title: string; material: { title: string } }[];
+  chapters: { id: string; order: number; number: string; title: string; material: { title: string } }[];
   planMaterialIds: string[];
 } | null> {
   const lesson = await db.lessonPlan.findUnique({
@@ -139,8 +157,11 @@ export async function findLessonTutorScope(lessonPlanId: string): Promise<{
     },
   });
   if (!lesson) return null;
+  const numbers = await chapterNumbersFor(lesson.chapters.map((c) => c.chapter.id));
   return {
-    chapters: lesson.chapters.map((c) => c.chapter).sort((a, b) => a.order - b.order),
+    chapters: lesson.chapters
+      .map((c) => ({ ...c.chapter, number: numbers.get(c.chapter.id) ?? String(c.chapter.order) }))
+      .sort((a, b) => a.order - b.order),
     planMaterialIds: lesson.courseSchedule.teachingPlan.references.map((r) => r.materialId),
   };
 }

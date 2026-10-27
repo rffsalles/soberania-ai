@@ -321,7 +321,7 @@ describe('escopo do tutor', () => {
   it('toTutorScope: capítulos > materiais do plano > nada', () => {
     expect(
       toTutorScope({
-        chapters: [{ id: 'ch3', order: 3, title: 'Modelo ER', material: { title: 'Sistemas de Banco de Dados' } }],
+        chapters: [{ id: 'ch3', order: 3, number: '3', title: 'Modelo ER', material: { title: 'Sistemas de Banco de Dados' } }],
         planMaterialIds: ['m1'],
       })
     ).toEqual({ allowedChapterIds: ['ch3'], chapterLabels: ['Cap. 3: Modelo ER (Sistemas de Banco de Dados)'] });
