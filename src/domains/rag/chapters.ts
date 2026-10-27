@@ -198,20 +198,29 @@ function pageTopWords(text: string): Set<string> {
   return new Set([...normalizedWords(top), ...normalizedWords(collapseSmallCaps(top))]);
 }
 
-function titleWords(title: string): string[] {
-  return normalizedWords(title).filter((w) => w.length >= ALIGN_MIN_WORD_LENGTH);
+/** Palavras-chave de HEADING_PATTERN, normalizadas: não contam como palavras do título. */
+const HEADING_KEYWORDS = new Set(['unidade', 'capitulo', 'cap', 'parte', 'modulo']);
+
+/** Palavras significativas do título (sem as palavras-chave) e, se ele casa HEADING_PATTERN, o número exigido no topo. */
+type TitleKey = { words: string[]; number: string | null };
+
+function titleKey(title: string): TitleKey {
+  const words = normalizedWords(title).filter((w) => w.length >= ALIGN_MIN_WORD_LENGTH && !HEADING_KEYWORDS.has(w));
+  const m = HEADING_PATTERN.exec(title.trim().replace(/\s+/g, ' '));
+  return { words, number: m ? m[2] : null };
 }
 
-function topHasTitle(top: Set<string> | undefined, words: string[]): boolean {
-  if (!top || words.length === 0) return false;
-  return words.filter((w) => top.has(w)).length / words.length >= ALIGN_MIN_WORD_RATIO;
+function topHasTitle(top: Set<string> | undefined, key: TitleKey): boolean {
+  if (!top || key.words.length === 0) return false;
+  if (key.number !== null && !top.has(key.number)) return false;
+  return key.words.filter((w) => top.has(w)).length / key.words.length >= ALIGN_MIN_WORD_RATIO;
 }
 
 /** Deslocamento da primeira página da janela cujo topo traz o título, ou null. */
 function findOffset(node: ChapterNode, tops: Map<number, Set<string>>): number | null {
-  const words = titleWords(node.title);
+  const key = titleKey(node.title);
   for (let page = node.startPage - ALIGN_PAGES_BEFORE; page <= node.startPage + ALIGN_PAGES_AFTER; page++) {
-    if (topHasTitle(tops.get(page), words)) return page - node.startPage;
+    if (topHasTitle(tops.get(page), key)) return page - node.startPage;
   }
   return null;
 }
@@ -241,13 +250,13 @@ function dividerPage(
   pagesByNumber: Map<number, string>,
   tops: Map<number, Set<string>>,
 ): number | null {
-  const words = titleWords(root.title);
+  const key = titleKey(root.title);
   const m = HEADING_PATTERN.exec(root.title.trim().replace(/\s+/g, ' '));
   const bare = m ? new RegExp('^' + m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+' + m[2] + '$', 'i') : null;
   for (let page = startPage - 1; page >= startPage - HEADING_TITLE_LOOKAHEAD && page > floor; page--) {
     const text = pagesByNumber.get(page);
     if (text === undefined) continue;
-    if (topHasTitle(tops.get(page), words)) return page;
+    if (topHasTitle(tops.get(page), key)) return page;
     if (bare && topLines(text).some((l) => bare.test(l.replace(/\s+/g, ' ')))) return page;
   }
   return null;

@@ -483,6 +483,18 @@ describe('alignDraftsToText', () => {
     expect(alignDraftsToText([node('Unidade 2 – Frações', 43, [node('Frações', 43)])], book)[0].startPage).toBe(45);
   });
 
+  it('palavra-chave e número de outro capítulo não casam o título', () => {
+    const book = blank(60);
+    book[10] = page(11, 'Capítulo 2: Álgebra vetorial');
+    expect(alignDraftsToText([node('Capítulo 3: Álgebra linear', 10)], book)[0].startPage).toBe(10);
+  });
+
+  it('título "Capítulo N: ..." casa topo com o mesmo número e as palavras do título', () => {
+    const book = blank(60);
+    book[10] = page(11, 'Capítulo 3\nÁlgebra linear');
+    expect(alignDraftsToText([node('Capítulo 3: Álgebra linear', 10)], book)[0].startPage).toBe(11);
+  });
+
   it('raiz com página própria no sumário (diferente do primeiro filho) não recua', () => {
     const book = blank(60);
     book[42] = page(43, 'UNIDADE 2');
