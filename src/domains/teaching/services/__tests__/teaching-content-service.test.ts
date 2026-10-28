@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
 import { MAT_BOOK } from '@/components/teaching/__tests__/chapter-tree-fixtures';
 import type { PlanChapterBook } from '../plan-chapters-service';
@@ -124,6 +124,14 @@ describe('teaching-content-service ownership', () => {
       createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', chapterIds: ['zz'] }, deps)
     ).rejects.toMatchObject({ status: 400 });
     expect(calls.createAssessment).toBeUndefined();
+  });
+
+  it('createAssessment com chapterIds vazio não grava capítulos', async () => {
+    const { deps, calls } = makeDeps();
+    deps.repo.listPlanChapters = vi.fn(async () => []);
+    await createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', chapterIds: [] }, deps);
+    expect(calls.createAssessment[0]).not.toHaveProperty('chapters');
+    expect(deps.repo.listPlanChapters).not.toHaveBeenCalled();
   });
 
   it('listAssessments devolve chapterIds', async () => {

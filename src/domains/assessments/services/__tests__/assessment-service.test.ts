@@ -274,6 +274,11 @@ describe('updateAssessment', () => {
     await expect(updateAssessment('as1', teacher, { chapterIds: ['zz'] }, deps)).rejects.toMatchObject({ status: 400 });
     expect(updateAssessmentById).not.toHaveBeenCalled();
   });
+  it('chapterIds vazio limpa a seleção', async () => {
+    const { deps } = makeDeps('x');
+    await updateAssessment('as1', teacher, { chapterIds: [] }, deps);
+    expect(deps.replaceAssessmentChapters).toHaveBeenCalledWith('as1', []);
+  });
   it('sem a chave chapterIds não toca a junção', async () => {
     const { deps } = makeDeps('x');
     await updateAssessment('as1', teacher, { title: 'Nova' }, deps);
