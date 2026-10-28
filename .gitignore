@@ -53,6 +53,7 @@ storage/*
 
 # Claude worktrees / SDD scratch
 .claude/worktrees/
+.claude/tmp/
 .superpowers/
 tsconfig.tsbuildinfo
 scratch/
