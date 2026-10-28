@@ -10,8 +10,9 @@ describe('generateAssessmentSchema', () => {
     expect(generateAssessmentSchema.safeParse(base).success).toBe(false);
   });
 
-  it('unitNumbers não é mais aceito', () => {
-    const r = generateAssessmentSchema.safeParse({ ...base, unitNumbers: [1] });
-    expect(r.success).toBe(false);
+  it('unitNumbers é descartado e não chega ao dado validado', () => {
+    const r = generateAssessmentSchema.safeParse({ ...base, chapterIds: ['c1'], unitNumbers: [1] });
+    expect(r.success).toBe(true);
+    if (r.success) expect('unitNumbers' in r.data).toBe(false);
   });
 });
