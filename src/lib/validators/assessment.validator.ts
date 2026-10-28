@@ -7,7 +7,7 @@ export const MAX_DURATION_MINUTES = 300;
 
 export const generateAssessmentSchema = z.object({
   teachingPlanId: z.string().min(1),
-  unitNumbers: z.array(z.number().int()).min(1),
+  chapterIds: z.array(z.string().min(1)).min(1),
   questionCount: z.number().int().min(1).max(MAX_QUESTION_COUNT),
   type: z.string().min(1),
 });

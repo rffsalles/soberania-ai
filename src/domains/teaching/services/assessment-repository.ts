@@ -60,3 +60,10 @@ export async function listAgendaIdsByAssessment(assessmentId: string): Promise<s
 export function findAssessmentRubrics(id: string) {
   return db.assessment.findUnique({ where: { id }, select: { rubrics: true } });
 }
+
+export async function replaceAssessmentChapters(assessmentId: string, chapterIds: string[]): Promise<void> {
+  await db.$transaction([
+    db.assessmentChapter.deleteMany({ where: { assessmentId } }),
+    db.assessmentChapter.createMany({ data: chapterIds.map((chapterId) => ({ assessmentId, chapterId })) }),
+  ]);
+}

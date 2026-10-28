@@ -5,7 +5,10 @@ import type { DidacticChunk } from '@/domains/rag/types';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import { OPTION_KEYS } from '@/lib/constants/assessments';
 import { questionSchema, type Question } from '../../question-schema';
+import { MAT_BOOK } from '@/components/teaching/__tests__/chapter-tree-fixtures';
+import { CHAPTER_OUTSIDE_PLAN, NO_INDEXED_CHAPTER_CONTENT } from '@/lib/constants/teaching';
 import {
+  assessmentMaxTokens,
   generateQuestions,
   publishAssessment,
   updateAssessment,
@@ -38,7 +41,6 @@ function makeDeps(aiText: string, fallback = false) {
             teacherId: 't1',
             subjectId: 's1',
             syllabus: 'Ementa',
-            unitsContent: [{ unitNumber: 1, title: 'Unidade um', topics: ['a'] }],
             subject: { discipline: { name: 'Banco de Dados' } },
           }
         : null,
@@ -67,6 +69,10 @@ function makeDeps(aiText: string, fallback = false) {
       yield { token: aiText, isComplete: true, fallback };
     },
     createAgenda,
+    listPlanChapters: async () => [MAT_BOOK],
+    listDescendantIds: vi.fn(async (ids: string[]) => (ids[0] === 'u2' ? ['u2', 's21', 's22', 's221', 's222'] : ids)),
+    sampleByChapter: vi.fn(async () => []),
+    replaceAssessmentChapters: vi.fn(async () => {}),
   };
   return { deps, createAgenda, updateAssessmentById };
 }
@@ -81,13 +87,61 @@ const validQuestion = (id: string): Question => ({
 });
 
 describe('generateQuestions', () => {
-  const input = { teachingPlanId: 'plan1', unitNumbers: [1], questionCount: 5, type: 'EXAM' };
+  const input = { teachingPlanId: 'plan1', chapterIds: ['u2', 'u3'], questionCount: 5, type: 'EXAM' };
 
-  it('busca trechos pelo nome da disciplina da matriz', async () => {
-    const { deps } = makeDeps('isto não é json');
+  it('uma busca por capítulo, com allowedChapterIds expandidos e topK 4', async () => {
+    const { deps } = makeDeps('não é json');
     const search = vi.spyOn(deps, 'search');
     await generateQuestions(teacher, input, deps);
-    expect(search).toHaveBeenCalledWith(expect.objectContaining({ subjectName: 'Banco de Dados' }));
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(search).toHaveBeenCalledWith({ query: 'Unidade 2', allowedChapterIds: ['u2', 's21', 's22', 's221', 's222'], topK: 4 });
+    expect(search).toHaveBeenCalledWith({ query: 'Unidade 3', allowedChapterIds: ['u3'], topK: 4 });
+  });
+
+  it('duplicata e pai+filho viram uma única busca', async () => {
+    const { deps } = makeDeps('não é json');
+    const search = vi.spyOn(deps, 'search');
+    await generateQuestions(teacher, { ...input, chapterIds: ['u2', 's22', 'u2'] }, deps);
+    expect(search).toHaveBeenCalledTimes(1);
+  });
+
+  it('capítulo fora do plano dá 400', async () => {
+    const { deps } = makeDeps('x');
+    await expect(generateQuestions(teacher, { ...input, chapterIds: ['zz'] }, deps)).rejects.toMatchObject({
+      status: 400,
+      message: CHAPTER_OUTSIDE_PLAN,
+    });
+  });
+
+  it('busca vazia cai em sampleByChapter(expandidos, 4, 12); amostra vazia dá 422', async () => {
+    const { deps } = makeDeps('x');
+    deps.search = async () => ({ chunks: [] });
+    await expect(generateQuestions(teacher, input, deps)).rejects.toMatchObject({ status: 422, message: NO_INDEXED_CHAPTER_CONTENT });
+    expect(deps.sampleByChapter).toHaveBeenCalledWith(['u2', 's21', 's22', 's221', 's222', 'u3'], 4, 12);
+  });
+
+  it('chapterId fora da seleção é descartado e a questão mantida', async () => {
+    const text = JSON.stringify({ questions: [{ ...validQuestion('a'), chapterId: 'u2' }, { ...validQuestion('b'), chapterId: 's22' }] });
+    const { deps } = makeDeps(text);
+    const out = await generateQuestions(teacher, { ...input, questionCount: 2 }, deps);
+    expect(out.fallback).toBe(false);
+    expect(out.questions.map((q) => q.chapterId)).toEqual(['u2', undefined]);
+  });
+
+  it('rate_limit dá 429 mesmo com JSON válido', async () => {
+    const { deps } = makeDeps(JSON.stringify({ questions: [validQuestion('a')] }));
+    deps.streamChat = async function* () {
+      yield { token: JSON.stringify({ questions: [validQuestion('a')] }), isComplete: true, fallback: true, fallbackReason: 'rate_limit' };
+    };
+    await expect(generateQuestions(teacher, { ...input, questionCount: 1 }, deps)).rejects.toMatchObject({ status: 429 });
+  });
+
+  it('maxTokens segue assessmentMaxTokens e temperatura 0.4', async () => {
+    const { deps } = makeDeps('x');
+    const spy = vi.spyOn(deps, 'streamChat');
+    await generateQuestions(teacher, input, deps);
+    expect(spy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ temperature: 0.4, maxTokens: 2050 }));
+    expect(assessmentMaxTokens(40)).toBe(8000);
   });
 
   it('falls back to chunk-based questions when the AI returns invalid JSON', async () => {

@@ -5,14 +5,17 @@ import { DomainError } from '@/lib/api/domain-error';
 import type { AICompletionOptions, AIMessage, StreamChunk } from '@/lib/ai-provider';
 import { collectStream } from '@/domains/agents/collect-stream';
 import { createLoggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
-import { ASSESSMENT_STATUS } from '@/lib/constants/teaching';
+import { ASSESSMENT_STATUS, LESSON_AI_RATE_LIMITED_MESSAGE, NO_INDEXED_CHAPTER_CONTENT } from '@/lib/constants/teaching';
 import { executeHybridSearch } from '@/domains/rag/hybrid-search';
+import { sampleChunksByChapter } from '@/domains/rag/services/chunk-repository';
+import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
+import { expandChapterScope, formatChapterLabel } from '@/domains/rag/services/chapter-scope';
+import { resolveChapterSelection, type PlanChapterBook } from '@/domains/teaching/services/plan-chapters-service';
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
 import { createAgenda, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import {
   buildAssessmentMessages,
   parseAssessmentText,
-  type AssessmentUnit,
 } from '@/domains/agents/prompts/assessment-prompt';
 import * as planRepo from '@/domains/teaching/services/teaching-plan-repository';
 import * as assessmentRepo from '@/domains/teaching/services/assessment-repository';
@@ -31,7 +34,6 @@ type PlanForAssessment = {
   teacherId: string;
   subjectId: string;
   syllabus: string;
-  unitsContent: unknown;
   subject: { discipline: { name: string } };
 };
 
@@ -51,6 +53,10 @@ export type AssessmentDeps = {
   search(query: RAGSearchQuery): Promise<Pick<RAGSearchResult, 'chunks'>>;
   streamChat(messages: AIMessage[], options?: AICompletionOptions): AsyncGenerator<StreamChunk>;
   createAgenda(user: AgendaActor, input: Parameters<typeof createAgenda>[1]): Promise<AgendaDTO>;
+  listPlanChapters(planId: string): Promise<PlanChapterBook[]>;
+  listDescendantIds(chapterIds: string[]): Promise<string[]>;
+  sampleByChapter: typeof sampleChunksByChapter;
+  replaceAssessmentChapters(assessmentId: string, chapterIds: string[]): Promise<void>;
 };
 
 const defaultDeps: AssessmentDeps = {
@@ -61,11 +67,22 @@ const defaultDeps: AssessmentDeps = {
   search: executeHybridSearch,
   streamChat: createLoggedStreamChat(undefined, 'EXAM'),
   createAgenda: (user, input) => createAgenda(user, input),
+  listPlanChapters: planRepo.listPlanChapters,
+  listDescendantIds,
+  sampleByChapter: sampleChunksByChapter,
+  replaceAssessmentChapters: assessmentRepo.replaceAssessmentChapters,
 };
 
+/** Orçamento de tokens proporcional ao número de questões, com teto. */
+export const assessmentMaxTokens = (n: number) => Math.min(MAX_ASSESSMENT_TOKENS, BASE_TOKENS + TOKENS_PER_QUESTION * n);
+
 const ASSESSMENT_TEMPERATURE = 0.4;
-const ASSESSMENT_MAX_TOKENS = 4000;
-const CHUNKS_PER_UNIT = 3;
+const SEARCH_TOP_K = 4;
+const SAMPLE_PER_CHAPTER = 4;
+const SAMPLE_MAX = 12;
+const BASE_TOKENS = 800;
+const TOKENS_PER_QUESTION = 250;
+const MAX_ASSESSMENT_TOKENS = 8000;
 const MS_PER_MINUTE = 60_000;
 const DISTRACTOR_COUNT = OPTION_KEYS.length - 1;
 const SNIPPET_MAX_CHARS = 160;
@@ -112,23 +129,16 @@ export function buildFallbackQuestions(chunks: DidacticChunk[], count: number): 
   });
 }
 
-function selectUnits(plan: PlanForAssessment, unitNumbers: number[]): AssessmentUnit[] {
-  const parsed = z
-    .array(z.object({ unitNumber: z.number(), title: z.string(), topics: z.array(z.string()).default([]) }))
-    .safeParse(plan.unitsContent);
-  const units = parsed.success ? parsed.data.filter((u) => unitNumbers.includes(u.unitNumber)) : [];
-  if (units.length === 0) throw new DomainError(400, 'Nenhuma das unidades informadas existe no plano de ensino.');
-  return units;
-}
-
-async function askModel(messages: AIMessage[], deps: AssessmentDeps) {
+async function askModel(messages: AIMessage[], maxTokens: number, deps: AssessmentDeps) {
   try {
-    const { text, fallback } = await collectStream(deps.streamChat, messages, {
+    const { text, fallback, fallbackReason } = await collectStream(deps.streamChat, messages, {
       temperature: ASSESSMENT_TEMPERATURE,
-      maxTokens: ASSESSMENT_MAX_TOKENS,
+      maxTokens,
     });
+    if (fallbackReason === 'rate_limit') throw new DomainError(429, LESSON_AI_RATE_LIMITED_MESSAGE);
     return fallback ? null : parseAssessmentText(text);
   } catch (err) {
+    if (err instanceof DomainError) throw err;
     console.warn('[assessments] falha ao gerar questões com a IA, usando fallback', err);
     return null;
   }
@@ -143,49 +153,46 @@ export async function generateQuestions(
   if (!plan) throw new DomainError(404, 'Plano de ensino não encontrado.');
   assertOwner(user, plan.teacherId);
 
-  const units = selectUnits(plan, input.unitNumbers);
+  const books = await deps.listPlanChapters(plan.id);
+  const chosen = resolveChapterSelection(input.chapterIds, books);
+  const info = new Map<string, { title: string; label: string }>();
+  for (const book of books) {
+    for (const c of book.chapters) info.set(c.id, { title: c.title, label: formatChapterLabel({ ...c, book }) });
+  }
+
+  const scopes = await Promise.all(chosen.map((id) => expandChapterScope([id], deps)));
   const results = await Promise.all(
-    units.map((u) =>
-      deps.search({ query: `${u.title} ${u.topics.join(' ')}`, subjectName: plan.subject.discipline.name, topK: CHUNKS_PER_UNIT })
-    )
+    chosen.map((id, i) => deps.search({ query: info.get(id)!.title, allowedChapterIds: scopes[i], topK: SEARCH_TOP_K }))
   );
   const seen = new Set<string>();
-  const chunks = results
-    .flatMap((r) => r.chunks)
-    .filter((c) => !seen.has(c.id) && seen.add(c.id));
+  let chunks = results.flatMap((r) => r.chunks).filter((c) => !seen.has(c.id) && seen.add(c.id));
+  if (chunks.length === 0) chunks = await deps.sampleByChapter([...new Set(scopes.flat())], SAMPLE_PER_CHAPTER, SAMPLE_MAX);
+  if (chunks.length === 0) throw new DomainError(422, NO_INDEXED_CHAPTER_CONTENT);
 
   const messages = buildAssessmentMessages({
-    syllabus: plan.syllabus,
-    units,
+    subjectName: plan.subject.discipline.name,
+    chapters: chosen.map((id) => ({ id, label: info.get(id)!.label })),
     chunks,
     questionCount: input.questionCount,
     type: input.type,
   });
-  const ai = await askModel(messages, deps);
+  const ai = await askModel(messages, assessmentMaxTokens(input.questionCount), deps);
   const aiQuestions = ai && z.array(questionSchema).length(input.questionCount).safeParse(ai.questions).success;
 
   if (ai && aiQuestions) {
+    const allowed = new Set(chosen);
     return {
-      questions: ai.questions.map((q, i) => ({ ...q, id: `q${i + 1}` })),
+      questions: ai.questions.map((q, i) => ({
+        ...q,
+        id: `q${i + 1}`,
+        chapterId: q.chapterId && allowed.has(q.chapterId) ? q.chapterId : undefined,
+      })),
       rubrics: ai.rubrics.length ? ai.rubrics : DEFAULT_RUBRICS,
       fallback: false,
     };
   }
 
-  const base: DidacticChunk[] = chunks.length
-    ? chunks
-    : [
-        {
-          id: plan.id,
-          materialId: plan.id,
-          bookTitle: plan.subject.discipline.name,
-          author: '',
-          chapter: units[0].title,
-          pageNumber: 0,
-          content: plan.syllabus,
-        },
-      ];
-  const questions = buildFallbackQuestions(base, input.questionCount);
+  const questions = buildFallbackQuestions(chunks, input.questionCount);
   if (!z.array(questionSchema).length(input.questionCount).safeParse(questions).success) {
     throw new DomainError(500, 'Falha ao montar as questões de contingência.');
   }
