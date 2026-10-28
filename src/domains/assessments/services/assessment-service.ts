@@ -5,7 +5,7 @@ import { DomainError } from '@/lib/api/domain-error';
 import type { AICompletionOptions, AIMessage, StreamChunk } from '@/lib/ai-provider';
 import { collectStream } from '@/domains/agents/collect-stream';
 import { createLoggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
-import { ASSESSMENT_STATUS, LESSON_AI_RATE_LIMITED_MESSAGE, NO_INDEXED_CHAPTER_CONTENT } from '@/lib/constants/teaching';
+import { ASSESSMENT_PUBLISHED, ASSESSMENT_STATUS, LESSON_AI_RATE_LIMITED_MESSAGE, NO_INDEXED_CHAPTER_CONTENT } from '@/lib/constants/teaching';
 import { executeHybridSearch } from '@/domains/rag/hybrid-search';
 import { sampleChunksByChapter } from '@/domains/rag/services/chunk-repository';
 import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
@@ -33,7 +33,6 @@ type PlanForAssessment = {
   id: string;
   teacherId: string;
   subjectId: string;
-  syllabus: string;
   subject: { discipline: { name: string } };
 };
 
@@ -42,7 +41,7 @@ type AssessmentWithPlan = {
   title: string;
   durationMinutes: number;
   status: string;
-  teachingPlan: { teacherId: string; subjectId: string };
+  teachingPlan: { id: string; teacherId: string; subjectId: string };
 };
 
 export type AssessmentDeps = {
@@ -212,7 +211,8 @@ export async function updateAssessment(
   input: UpdateAssessmentInput,
   deps: AssessmentDeps = defaultDeps
 ) {
-  await loadOwnedAssessment(id, user, deps);
+  const assessment = await loadOwnedAssessment(id, user, deps);
+  if (assessment.status === ASSESSMENT_STATUS.PUBLISHED) throw new DomainError(409, ASSESSMENT_PUBLISHED);
   if (input.questions !== undefined) {
     const parsed = z.array(questionSchema).safeParse(input.questions);
     if (!parsed.success) throw new DomainError(400, 'Questões inválidas: cada questão exige 4 alternativas (A a D).');
@@ -226,7 +226,13 @@ export async function updateAssessment(
   if (input.rubrics !== undefined) data.rubrics = input.rubrics;
   if (input.durationMinutes !== undefined) data.durationMinutes = input.durationMinutes;
   if (input.maxScore !== undefined) data.maxScore = input.maxScore;
-  return deps.updateAssessmentById(id, data);
+  const chapterIds =
+    input.chapterIds !== undefined
+      ? resolveChapterSelection(input.chapterIds, await deps.listPlanChapters(assessment.teachingPlan.id))
+      : undefined;
+  const updated = await deps.updateAssessmentById(id, data);
+  if (chapterIds !== undefined) await deps.replaceAssessmentChapters(id, chapterIds);
+  return updated;
 }
 
 export async function publishAssessment(

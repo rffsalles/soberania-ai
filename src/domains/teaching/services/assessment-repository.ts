@@ -11,6 +11,7 @@ export function listAssessmentsByPlan(filter: { planId?: string; teacherId?: str
     include: {
       teachingPlan: { include: { subject: { include: { discipline: true } } } },
       agendas: { select: { id: true, classId: true, startTime: true, endTime: true } },
+      chapters: { select: { chapterId: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -28,7 +29,7 @@ export function findAssessmentWithPlan(id: string) {
       title: true,
       durationMinutes: true,
       status: true,
-      teachingPlan: { select: { teacherId: true, subjectId: true } },
+      teachingPlan: { select: { id: true, teacherId: true, subjectId: true } },
     },
   });
 }

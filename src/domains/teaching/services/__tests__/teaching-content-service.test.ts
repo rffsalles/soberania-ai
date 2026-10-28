@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Role } from '@prisma/client';
+import { MAT_BOOK } from '@/components/teaching/__tests__/chapter-tree-fixtures';
+import type { PlanChapterBook } from '../plan-chapters-service';
 import {
   createAssessment,
   createLesson,
@@ -25,7 +27,8 @@ function makeDeps() {
       listSchedulesByPlan: async (f) => (rec('listSchedules', f), []),
       listLessonsBySchedule: async (f) => (rec('listLessons', f), []),
       createLesson: async (d) => (rec('createLesson', d), d),
-      listAssessmentsByPlan: async (f) => (rec('listAssessments', f), []),
+      listPlanChapters: async () => [MAT_BOOK as unknown as PlanChapterBook],
+      listAssessmentsByPlan: async (f) => (rec('listAssessments', f), [{ id: 'a1', chapters: [{ chapterId: 'u2' }] }]),
       createAssessment: async (d) => (rec('createAssessment', d), d),
     },
   };
@@ -92,5 +95,39 @@ describe('teaching-content-service ownership', () => {
     expect(calls.listAssessments).toEqual([{ planId: 'p1', teacherId: 't1' }]);
     await listSchedules(admin, undefined, deps);
     expect(calls.listSchedules[1]).toEqual({ planId: undefined });
+  });
+
+  it('createAssessment rejeita questão inválida (id numérico, sem rationale, 3 alternativas)', async () => {
+    const { deps, calls } = makeDeps();
+    const bad = { id: 1, enunciation: 'Enunciado longo', options: ['A', 'B', 'C'].map((key) => ({ key, text: key })), correctKey: 'A', topic: 't' };
+    await expect(createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', questions: [bad] }, deps)).rejects.toMatchObject({ status: 400 });
+    expect(calls.createAssessment).toBeUndefined();
+  });
+
+  it('createAssessment rejeita rubrica inválida', async () => {
+    const { deps, calls } = makeDeps();
+    await expect(
+      createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', rubrics: [{ criterion: '' }] }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+    expect(calls.createAssessment).toBeUndefined();
+  });
+
+  it('createAssessment grava chapterIds normalizados na mesma criação', async () => {
+    const { deps, calls } = makeDeps();
+    await createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', chapterIds: ['u2', 's22'] }, deps);
+    expect(calls.createAssessment[0]).toMatchObject({ rubrics: [], chapters: { create: [{ chapterId: 'u2' }] } });
+  });
+
+  it('createAssessment com capítulo fora do plano dá 400', async () => {
+    const { deps, calls } = makeDeps();
+    await expect(
+      createAssessment(teacher, { teachingPlanId: 'own', title: 'Prova', chapterIds: ['zz'] }, deps)
+    ).rejects.toMatchObject({ status: 400 });
+    expect(calls.createAssessment).toBeUndefined();
+  });
+
+  it('listAssessments devolve chapterIds', async () => {
+    const { deps } = makeDeps();
+    expect(await listAssessments(teacher, 'p1', deps)).toEqual([{ id: 'a1', chapterIds: ['u2'] }]);
   });
 });

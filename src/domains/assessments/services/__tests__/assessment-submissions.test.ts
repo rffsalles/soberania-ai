@@ -8,7 +8,7 @@ const other = { id: 't2', role: Role.TEACHER, classId: null };
 const deps: SubmissionsDeps = {
   findAssessment: async (id) =>
     id === 'as1'
-      ? { id, title: 'Prova', durationMinutes: 60, status: 'PUBLISHED', teachingPlan: { teacherId: 't1', subjectId: 's1' } }
+      ? { id, title: 'Prova', durationMinutes: 60, status: 'PUBLISHED', teachingPlan: { id: 'plan1', teacherId: 't1', subjectId: 's1' } }
       : null,
   listAgendaIds: async () => ['ag1'],
   listSubmissions: async () => [

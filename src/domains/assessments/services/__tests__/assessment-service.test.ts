@@ -6,7 +6,7 @@ import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import { OPTION_KEYS } from '@/lib/constants/assessments';
 import { questionSchema, type Question } from '../../question-schema';
 import { MAT_BOOK } from '@/components/teaching/__tests__/chapter-tree-fixtures';
-import { CHAPTER_OUTSIDE_PLAN, NO_INDEXED_CHAPTER_CONTENT } from '@/lib/constants/teaching';
+import { ASSESSMENT_PUBLISHED, CHAPTER_OUTSIDE_PLAN, NO_INDEXED_CHAPTER_CONTENT } from '@/lib/constants/teaching';
 import {
   assessmentMaxTokens,
   generateQuestions,
@@ -40,7 +40,6 @@ function makeDeps(aiText: string, fallback = false) {
             id: 'plan1',
             teacherId: 't1',
             subjectId: 's1',
-            syllabus: 'Ementa',
             subject: { discipline: { name: 'Banco de Dados' } },
           }
         : null,
@@ -51,7 +50,7 @@ function makeDeps(aiText: string, fallback = false) {
             title: 'Prova 1',
             durationMinutes: 60,
             status: 'DRAFT',
-            teachingPlan: { teacherId: 't1', subjectId: 's1' },
+            teachingPlan: { id: 'plan1', teacherId: 't1', subjectId: 's1' },
           }
         : id === 'pub1'
           ? {
@@ -59,7 +58,7 @@ function makeDeps(aiText: string, fallback = false) {
               title: 'Prova 2',
               durationMinutes: 60,
               status: 'PUBLISHED',
-              teachingPlan: { teacherId: 't1', subjectId: 's1' },
+              teachingPlan: { id: 'plan1', teacherId: 't1', subjectId: 's1' },
             }
           : null,
     updateAssessmentById,
@@ -260,6 +259,26 @@ describe('publishAssessment', () => {
 });
 
 describe('updateAssessment', () => {
+  it('PUBLISHED dá 409 sem gravar', async () => {
+    const { deps, updateAssessmentById } = makeDeps('x');
+    await expect(updateAssessment('pub1', teacher, { title: 'Nova' }, deps)).rejects.toMatchObject({ status: 409, message: ASSESSMENT_PUBLISHED });
+    expect(updateAssessmentById).not.toHaveBeenCalled();
+  });
+  it('grava chapterIds normalizados', async () => {
+    const { deps } = makeDeps('x');
+    await updateAssessment('as1', teacher, { chapterIds: ['u2', 's22', 'u2'] }, deps);
+    expect(deps.replaceAssessmentChapters).toHaveBeenCalledWith('as1', ['u2']);
+  });
+  it('capítulo fora do plano dá 400 antes de gravar', async () => {
+    const { deps, updateAssessmentById } = makeDeps('x');
+    await expect(updateAssessment('as1', teacher, { chapterIds: ['zz'] }, deps)).rejects.toMatchObject({ status: 400 });
+    expect(updateAssessmentById).not.toHaveBeenCalled();
+  });
+  it('sem a chave chapterIds não toca a junção', async () => {
+    const { deps } = makeDeps('x');
+    await updateAssessment('as1', teacher, { title: 'Nova' }, deps);
+    expect(deps.replaceAssessmentChapters).not.toHaveBeenCalled();
+  });
   it('rejects a question with 3 options', async () => {
     const { deps, updateAssessmentById } = makeDeps('x');
     const bad = { ...validQuestion('q1'), options: validQuestion('q1').options.slice(0, 3) } as unknown as Question;

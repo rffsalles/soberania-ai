@@ -1,4 +1,5 @@
 import { Prisma, Role } from '@prisma/client';
+import { z } from 'zod';
 import { DomainError } from '@/lib/api/domain-error';
 import { ASSESSMENT_TYPE, LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
 import { parseLessonInput, type LessonInput } from '@/lib/validators/lesson.validator';
@@ -8,6 +9,8 @@ import * as planRepo from './teaching-plan-repository';
 import * as scheduleRepo from './course-schedule-repository';
 import * as lessonRepo from './lesson-plan-repository';
 import * as assessmentRepo from './assessment-repository';
+import { resolveChapterSelection, type PlanChapterBook } from './plan-chapters-service';
+import { questionSchema, rubricSchema } from '@/domains/assessments/question-schema';
 import type { PlanActor } from './teaching-plan-service';
 
 type OwnerLookup<T> = (id: string) => Promise<T | null>;
@@ -19,7 +22,11 @@ export type TeachingContentDeps = {
     listSchedulesByPlan(filter: { planId?: string; teacherId?: string }): Promise<unknown[]>;
     listLessonsBySchedule(filter: { scheduleId?: string; teacherId?: string }): Promise<unknown[]>;
     createLesson(data: Prisma.LessonPlanUncheckedCreateInput): Promise<unknown>;
-    listAssessmentsByPlan(filter: { planId?: string; teacherId?: string }): Promise<unknown[]>;
+    listPlanChapters(planId: string): Promise<PlanChapterBook[]>;
+    listAssessmentsByPlan(filter: {
+      planId?: string;
+      teacherId?: string;
+    }): Promise<Array<{ chapters: { chapterId: string }[] } & Record<string, unknown>>>;
     createAssessment(data: Prisma.AssessmentUncheckedCreateInput): Promise<unknown>;
   };
 };
@@ -31,6 +38,7 @@ const defaultDeps: TeachingContentDeps = {
     listSchedulesByPlan: scheduleRepo.listSchedulesByPlan,
     listLessonsBySchedule: lessonRepo.listLessonsBySchedule,
     createLesson: lessonRepo.createLesson,
+    listPlanChapters: planRepo.listPlanChapters,
     listAssessmentsByPlan: assessmentRepo.listAssessmentsByPlan,
     createAssessment: assessmentRepo.createAssessment,
   },
@@ -81,8 +89,9 @@ export async function createLesson(user: PlanActor, raw: unknown, deps: Teaching
   });
 }
 
-export function listAssessments(user: PlanActor, planId?: string, deps: TeachingContentDeps = defaultDeps) {
-  return deps.repo.listAssessmentsByPlan({ planId, ...ownerFilter(user) });
+export async function listAssessments(user: PlanActor, planId?: string, deps: TeachingContentDeps = defaultDeps) {
+  const rows = await deps.repo.listAssessmentsByPlan({ planId, ...ownerFilter(user) });
+  return rows.map(({ chapters, ...rest }) => ({ ...rest, chapterIds: chapters.map((c) => c.chapterId) }));
 }
 
 export async function createAssessment(
@@ -91,8 +100,9 @@ export async function createAssessment(
     teachingPlanId?: string;
     title?: string;
     type?: string;
-    questions?: Prisma.InputJsonValue;
-    rubrics?: Prisma.InputJsonValue;
+    questions?: unknown;
+    rubrics?: unknown;
+    chapterIds?: unknown;
     maxScore?: number | string;
     durationMinutes?: number;
   },
@@ -109,14 +119,24 @@ export async function createAssessment(
   ) {
     throw new DomainError(400, `A duração deve estar entre ${MIN_DURATION_MINUTES} e ${MAX_DURATION_MINUTES} minutos.`);
   }
+  const questions = z.array(questionSchema).optional().safeParse(input.questions);
+  if (!questions.success) throw new DomainError(400, 'Questões inválidas: cada questão exige 4 alternativas (A a D).');
+  const rubrics = z.array(rubricSchema).optional().safeParse(input.rubrics);
+  if (!rubrics.success) throw new DomainError(400, 'Rubricas inválidas.');
+  const chapterIdsInput = z.array(z.string()).optional().safeParse(input.chapterIds);
+  if (!chapterIdsInput.success) throw new DomainError(400, 'Capítulos inválidos.');
   await assertOwnsPlanId(user, input.teachingPlanId, deps);
+  const chapterIds = chapterIdsInput.data?.length
+    ? resolveChapterSelection(chapterIdsInput.data, await deps.repo.listPlanChapters(input.teachingPlanId))
+    : [];
   return deps.repo.createAssessment({
     teachingPlanId: input.teachingPlanId,
     title: input.title,
     type: input.type || ASSESSMENT_TYPE.EXAM,
-    questions: input.questions || [],
-    rubrics: input.rubrics || {},
+    questions: questions.data ?? [],
+    rubrics: rubrics.data ?? [],
     maxScore: Number(input.maxScore) || 10.0,
     ...(input.durationMinutes ? { durationMinutes: input.durationMinutes } : {}),
+    ...(chapterIds.length ? { chapters: { create: chapterIds.map((chapterId) => ({ chapterId })) } } : {}),
   });
 }

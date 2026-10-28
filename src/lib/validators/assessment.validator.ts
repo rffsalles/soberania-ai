@@ -19,6 +19,7 @@ export const updateAssessmentSchema = z.object({
   rubrics: z.array(rubricSchema).optional(),
   durationMinutes: z.number().int().min(MIN_DURATION_MINUTES).max(MAX_DURATION_MINUTES).optional(),
   maxScore: z.number().positive().optional(),
+  chapterIds: z.array(z.string().min(1)).optional(),
 });
 
 export const publishAssessmentSchema = z.object({
