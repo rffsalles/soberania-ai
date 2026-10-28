@@ -95,7 +95,7 @@ export const DEMO_ASSESSMENT = {
   rubrics: {},
   questions: [
     {
-      id: 1,
+      id: 'q1',
       enunciation:
         'Considere duas relações: Estudantes(id, nome) e Matriculas(id, estudante_id, disciplina). Qual consulta SQL retorna todos os estudantes, independentemente de estarem ou não matriculados em alguma disciplina?',
       options: [
@@ -106,9 +106,10 @@ export const DEMO_ASSESSMENT = {
       ],
       correctKey: 'B',
       topic: 'LEFT OUTER JOIN',
+      rationale: 'A junção externa à esquerda preserva todas as linhas de Estudantes, mesmo sem correspondência em Matriculas.',
     },
     {
-      id: 2,
+      id: 'q2',
       enunciation: 'Uma relação está na 3ª Forma Normal (3FN) quando:',
       options: [
         { key: 'A', text: 'Não possui atributos multivalorados e está na 1FN.' },
@@ -118,9 +119,10 @@ export const DEMO_ASSESSMENT = {
       ],
       correctKey: 'B',
       topic: 'Terceira Forma Normal (3FN)',
+      rationale: 'A 3FN exige a 2FN e a ausência de dependências transitivas entre atributos não-chave e a chave primária.',
     },
     {
-      id: 3,
+      id: 'q3',
       enunciation:
         'Qual propriedade ACID assegura que, em caso de falha de energia durante uma transação financeira, nenhuma alteração parcial permaneça no banco de dados?',
       options: [
@@ -131,6 +133,7 @@ export const DEMO_ASSESSMENT = {
       ],
       correctKey: 'A',
       topic: 'Propriedades ACID',
+      rationale: 'A atomicidade garante que a transação seja executada por inteiro ou desfeita, sem alterações parciais.',
     },
   ],
 };

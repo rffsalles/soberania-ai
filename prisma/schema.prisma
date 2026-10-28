@@ -368,10 +368,22 @@ model Assessment {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  teachingPlan TeachingPlan @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  teachingPlan TeachingPlan        @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
   agendas      Agenda[]
+  chapters     AssessmentChapter[]
 
   @@map("assessments")
+}
+
+model AssessmentChapter {
+  assessmentId String
+  chapterId    String
+
+  assessment Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  chapter    MaterialChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@id([assessmentId, chapterId])
+  @@map("assessment_chapters")
 }
 
 // Tabela Base para Categorias do Acervo Bibliográfico & Documentos
@@ -425,11 +437,12 @@ model MaterialChapter {
   depth      Int           @default(0)
   createdAt  DateTime      @default(now())
 
-  material    DidacticMaterial    @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  parent      MaterialChapter?    @relation("ChapterTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children    MaterialChapter[]   @relation("ChapterTree")
-  chunks      MaterialChunk[]
-  lessonLinks LessonPlanChapter[]
+  material        DidacticMaterial    @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  parent          MaterialChapter?    @relation("ChapterTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children        MaterialChapter[]   @relation("ChapterTree")
+  chunks          MaterialChunk[]
+  lessonLinks     LessonPlanChapter[]
+  assessmentLinks AssessmentChapter[]
 
   @@unique([materialId, order])
   @@index([parentId])
