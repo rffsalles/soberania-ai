@@ -13,15 +13,30 @@ import { useAgendaFaqs, useAgendaLesson } from '@/components/classroom/use-agend
 import { resolveMediaType } from '@/domains/teaching/media-type';
 import { Skeleton } from '@/components/ui/skeleton';
 import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
+import { formatRemaining } from '@/lib/format/duration';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 
 const AGENDA_STATUS_LIVE = 'LIVE';
+
+const STATUS_BADGE: Record<string, { label: string; variant: 'teal' | 'secondary' }> = {
+  LIVE: { label: 'AO VIVO', variant: 'teal' },
+  SCHEDULED: { label: 'AGENDADA', variant: 'secondary' },
+  COMPLETED: { label: 'ENCERRADA', variant: 'secondary' },
+  CANCELLED: { label: 'CANCELADA', variant: 'secondary' },
+};
+
+const CHAT_COLUMN_CLASSES = 'lg:col-span-5 h-[70vh] lg:h-[calc(100vh-7.5rem)] lg:sticky lg:top-[6.5rem]';
 
 interface ClassroomPageProps {
   sessionId: string;
 }
 
 export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [minutesModalOpen, setMinutesModalOpen] = React.useState(false);
 
   const [activeCheckpoint, setActiveCheckpoint] = React.useState<SocraticCheckpoint | null>(null);
@@ -47,7 +62,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           {isLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-28 w-full rounded-2xl" />
-              <Skeleton className="h-[680px] w-full rounded-2xl" />
+              <Skeleton className={`${CHAT_COLUMN_CLASSES.replace("lg:col-span-5 ", "")} w-full rounded-2xl`} />
             </div>
           ) : (
             <AgendaNotFound message={notFound ? undefined : (error ?? undefined)} />
@@ -57,19 +72,22 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
     );
   }
 
-  const timeValidation = validateAgendaTimeWindow(toAgendaSession(session));
+  const statusBadge = STATUS_BADGE[session.status] ?? STATUS_BADGE.SCHEDULED;
+  const timeValidation = validateAgendaTimeWindow(toAgendaSession(session), now);
 
   return (
     <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
 
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Session Top Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="teal" className="gap-1 px-2.5 py-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                AO VIVO
+              <Badge variant={statusBadge.variant} className="gap-1 px-2.5 py-0.5">
+                {session.status === AGENDA_STATUS_LIVE && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                )}
+                {statusBadge.label}
               </Badge>
               <span className="text-xs font-semibold text-slate-500">
                 {session.className}
@@ -79,7 +97,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
                 {session.subject}
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold font-heading text-slate-900 dark:text-white">
+            <h1 className="text-lg sm:text-xl font-bold font-heading text-slate-900 dark:text-white">
               {session.title}
             </h1>
             <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 pt-0.5 flex-wrap">
@@ -92,7 +110,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
               <Clock className="h-4 w-4 text-brand-orange" />
-              <span>{timeValidation.minutesRemaining} min restantes</span>
+              <span>{formatRemaining(timeValidation.minutesRemaining)} restantes</span>
             </div>
           </div>
         </div>
@@ -120,7 +138,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           </div>
 
           {/* Right Column: Socratic Chat Panel with Tutora Lucy (5 cols) */}
-          <div className="lg:col-span-5 h-[680px]">
+          <div className={CHAT_COLUMN_CLASSES}>
             <SocraticChatPanel
               agendaType="CLASSROOM"
               agendaId={session.id}

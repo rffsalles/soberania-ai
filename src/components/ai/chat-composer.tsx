@@ -119,7 +119,7 @@ export function ChatComposer({ onSend, disabled, placeholder, suggestions }: Cha
   return (
     <>
       {suggestions && suggestions.length > 0 && (
-        <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2">
           <span className="text-[11px] text-slate-400 shrink-0 flex items-center gap-1">
             <Sparkles className="h-3 w-3 text-brand-orange" />
             Sugestões:
@@ -130,7 +130,7 @@ export function ChatComposer({ onSend, disabled, placeholder, suggestions }: Cha
               type="button"
               disabled={disabled}
               onClick={() => onSend(sug)}
-              className="text-xs shrink-0 rounded-lg px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand-teal hover:text-brand-teal transition-colors cursor-pointer disabled:opacity-50"
+              className="text-xs text-left line-clamp-2 max-w-full rounded-lg px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand-teal hover:text-brand-teal transition-colors cursor-pointer disabled:opacity-50"
             >
               {sug}
             </button>

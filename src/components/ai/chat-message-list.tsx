@@ -11,17 +11,25 @@ interface ChatMessageListProps {
 }
 
 export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps) {
-  const endRef = React.useRef<HTMLDivElement>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const nearBottomRef = React.useRef(true);
+
+  const handleScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  };
 
   React.useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = listRef.current;
+    if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages, isStreaming]);
 
   const lastMessage = messages[messages.length - 1];
   const waitingFirstToken = isStreaming && lastMessage?.sender === 'teacher' && !lastMessage.text;
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div ref={listRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
       {messages
         .filter((msg) => msg.text || msg.attachment)
         .map((msg) => {
@@ -98,8 +106,6 @@ export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps)
           <span>Tutora Lucy está formulando uma reflexão...</span>
         </div>
       )}
-
-      <div ref={endRef} />
     </div>
   );
 }
