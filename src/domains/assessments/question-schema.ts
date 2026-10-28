@@ -9,6 +9,7 @@ export const questionSchema = z.object({
   correctKey: z.enum(OPTION_KEYS),
   rationale: z.string(),
   topic: z.string(),
+  chapterId: z.string().optional(),
 });
 
 export const rubricSchema = z.object({

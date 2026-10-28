@@ -65,6 +65,14 @@ describe('getExamForStudent', () => {
     expect(exam.serverNow).toBe('2026-10-20T10:10:00.000Z');
   });
 
+  it('questão com chapterId passa pela projeção pública sem gabarito', async () => {
+    const { deps } = makeDeps({ now: new Date('2026-10-20T10:10:00Z') });
+    deps.findAssessment = async () => ({ id: 'as1', questions: questions.map((q) => ({ ...q, chapterId: 's22' })), maxScore: 10, durationMinutes: 60 });
+    const exam = await getExamForStudent(student, 'ag1', deps);
+    expect(exam.questions[0]).toMatchObject({ id: 'q1', chapterId: 's22' });
+    expect(JSON.stringify(exam.questions)).not.toMatch(/correctKey|rationale/);
+  });
+
   it('retorna 422 fora da janela', async () => {
     const { deps } = makeDeps({ now: at(1000) });
     await expect(getExamForStudent(student, 'ag1', deps)).rejects.toMatchObject({ status: 422 });

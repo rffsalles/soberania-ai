@@ -66,11 +66,12 @@ export async function getExamForStudent(user: AgendaActor, agendaId: string, dep
     if (!window.isWithinWindow) throw new DomainError(422, window.message);
   }
 
-  const publicQuestions: PublicQuestion[] = questions.map(({ id, enunciation, options, topic }) => ({
+  const publicQuestions: PublicQuestion[] = questions.map(({ id, enunciation, options, topic, chapterId }) => ({
     id,
     enunciation,
     options,
     topic,
+    ...(chapterId ? { chapterId } : {}),
   }));
 
   return {
