@@ -40,7 +40,7 @@ export function AssessmentsPage() {
   const backToList = () => setView({ kind: 'list' });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="mx-auto space-y-6 p-6">
       <header>
         <h1 className="flex items-center gap-2 text-2xl font-bold font-heading">
           <ClipboardList className="h-6 w-6 text-brand-teal" /> Avaliações

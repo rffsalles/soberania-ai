@@ -19,7 +19,7 @@ export default function OfficeHoursPage({ agendaId }: OfficeHoursPageProps) {
   return (
     <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
 
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {isLoading ? (
           <div className="space-y-4">
             <Skeleton className="h-28 w-full rounded-2xl" />

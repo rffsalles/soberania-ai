@@ -219,7 +219,7 @@ function ExamRunner({ examId, exam }: { examId: string; exam: ExamPayload }) {
   return (
     <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
 
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Top Exam Status Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="space-y-1">

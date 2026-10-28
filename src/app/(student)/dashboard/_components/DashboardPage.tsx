@@ -152,7 +152,7 @@ export default function DashboardPage() {
   return (
     <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
 
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Welcome Header with Multi-Agendas Summary */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-brand-teal via-brand-teal-dark to-slate-900 text-white shadow-md">
           <div className="space-y-1.5">

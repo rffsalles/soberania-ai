@@ -26,7 +26,7 @@ export function AppHeader() {
 
   return (
     <header className="print-hidden sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md">
-      <div className="mx-auto flex h-12 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-12 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand Logo & Title */}
         <div className="flex items-center gap-3">
           <Link href={homeHref} className="flex items-center gap-2.5 group cursor-pointer">
@@ -62,7 +62,7 @@ export function AppHeader() {
 
       {/* Navigation Sub-Bar */}
       <div className="border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto py-1 no-scrollbar">
+        <div className="mx-auto flex items-center gap-1 overflow-x-auto py-1 no-scrollbar">
           {navLinks.map((link) => {
             const Icon = link.icon;
             const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);

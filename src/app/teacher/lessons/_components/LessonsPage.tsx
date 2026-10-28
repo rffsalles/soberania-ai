@@ -38,7 +38,7 @@ export function LessonsPage() {
   const lesson: LessonItem | null = lessons.find((l) => l.id === lessonId) ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="mx-auto space-y-6 p-6">
       <header>
         <h1 className="flex items-center gap-2 font-heading text-2xl font-bold">
           <BookOpen className="h-6 w-6 text-brand-teal" /> Planos de aula
