@@ -329,6 +329,33 @@ describe('requestMinutes', () => {
     expect(upsertMinute).not.toHaveBeenCalled();
   });
 
+  it('conversa nova e IA indisponível: devolve a ata anterior com stale true', async () => {
+    const { deps, listMinutesRepo } = makeDeps({ newInteractions: 1, interactions: [interaction()], fallback: true });
+    listMinutesRepo.mockResolvedValue([storedMinute] as never);
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res.kind === 'minute' && res.minute).toMatchObject({ id: 'm-old', stale: true });
+  });
+
+  it('conversa nova e IA ok: ata regenerada com stale false', async () => {
+    const { deps, listMinutesRepo } = makeDeps({
+      newInteractions: 1,
+      interactions: [interaction()],
+      ai: '{"rawSummary":"Resumo atualizado","actionableAdvice":"Conselho novo"}',
+      fallback: false,
+    });
+    const older = new Date(NOW.getTime() - 3_600_000);
+    listMinutesRepo.mockResolvedValue([{ ...storedMinute, updatedAt: older }] as never);
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res.kind === 'minute' && res.minute.stale).toBe(false);
+  });
+
+  it('ata em cache: stale false', async () => {
+    const { deps, listMinutesRepo } = makeDeps({ newInteractions: 0 });
+    listMinutesRepo.mockResolvedValue([storedMinute] as never);
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res.kind === 'minute' && res.minute.stale).toBe(false);
+  });
+
   it('aluno não pede a ata de outro aluno (403)', async () => {
     const { deps } = makeDeps();
     await expect(requestMinutes(student, { agendaId: 'ag1', studentId: 'stu2' }, deps)).rejects.toMatchObject({

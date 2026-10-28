@@ -175,6 +175,13 @@ export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: Pedago
           </div>
         </div>
 
+        {minute.stale && (
+          <p className="print-hidden text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+            Este parecer não cobre as interações mais recentes: a Tutora está indisponível no momento. Feche e reabra
+            a ata mais tarde para atualizar.
+          </p>
+        )}
+
         {/* Parecer Narrativo & Recomendações */}
         <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
           <span className="text-xs font-semibold text-brand-teal flex items-center gap-1.5">

@@ -18,6 +18,8 @@ export interface ClassMinuteData {
   createdAt: string;
   /** Última geração/regeneração da ata; interações posteriores a ela tornam a ata desatualizada. */
   updatedAt: string;
+  /** true = há interações do aluno mais novas que o parecer (a regeneração não aconteceu). Ausente equivale a false. */
+  stale?: boolean;
 }
 
 export interface TeacherStruggleHeatmap {

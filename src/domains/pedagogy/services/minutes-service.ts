@@ -60,7 +60,7 @@ const MINUTE_TEMPERATURE = 0.3;
 const MINUTE_MAX_TOKENS = 400;
 const MINUTES_BATCH_SIZE = 4;
 
-function toDTO(r: MinuteRecord): MinuteDTO {
+function toDTO(r: MinuteRecord, stale = false): MinuteDTO {
   return {
     id: r.id,
     agendaId: r.agendaId,
@@ -78,6 +78,7 @@ function toDTO(r: MinuteRecord): MinuteDTO {
     aiGenerated: !r.aiFallback,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
+    stale,
     subjectName: r.agenda.subjectRef?.discipline.name ?? r.agenda.subject,
     className: r.agenda.class.name,
   };
@@ -224,10 +225,15 @@ export async function requestMinutes(
   const [existing] = await deps.listMinutes({ agendaId: input.agendaId, studentId: user.id });
   if (existing && !existing.aiFallback) {
     const newer = await deps.countInteractionsSince(input.agendaId, user.id, existing.updatedAt);
-    if (newer === 0) return { kind: 'minute', minute: toDTO(existing) };
+    if (newer === 0) return { kind: 'minute', minute: toDTO(existing, false) };
   }
   // Sem ata, ata sem parecer ou conversa posterior à ata: gera de novo; se a IA seguir indisponível, mantém a anterior.
   const minute = await generateMinute(user, { agendaId: input.agendaId }, deps, { keepExistingOnFallback: true });
+  // IA fora do ar: a ata anterior voltou sem regravar; avisa se a conversa é posterior a ela.
+  const kept = existing !== undefined && minute.updatedAt === existing.updatedAt.toISOString();
+  if (kept && (await deps.countInteractionsSince(input.agendaId, user.id, existing.updatedAt)) > 0) {
+    return { kind: 'minute', minute: { ...minute, stale: true } };
+  }
   return { kind: 'minute', minute };
 }
 
@@ -262,5 +268,5 @@ export async function listMinutes(
       },
     });
   }
-  return (await deps.listMinutes({ AND: conditions })).map(toDTO);
+  return (await deps.listMinutes({ AND: conditions })).map((r) => toDTO(r));
 }
