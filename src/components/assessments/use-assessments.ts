@@ -42,6 +42,7 @@ export type AssessmentItem = {
   durationMinutes: number;
   status: string;
   agendas: AssessmentAgenda[];
+  chapterIds: string[];
 };
 
 export type SubmissionItem = {
@@ -62,9 +63,10 @@ export type AssessmentDraft = {
   rubrics: Rubric[];
   maxScore: number;
   durationMinutes: number;
+  chapterIds: string[];
 };
 
-export type GenerateInput = { teachingPlanId: string; unitNumbers: number[]; questionCount: number; type: string };
+export type GenerateInput = { teachingPlanId: string; chapterIds: string[]; questionCount: number; type: string };
 export type GeneratedAssessment = { questions: Question[]; rubrics: Rubric[]; fallback: boolean };
 
 export const HTTP_CONFLICT = 409;

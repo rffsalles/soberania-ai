@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Lock, Plus, Save, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, Lock, Plus, Save, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +11,9 @@ import { OPTION_KEYS } from '@/lib/constants/assessments';
 import type { Question, Rubric } from '@/domains/assessments/question-schema';
 import { ASSESSMENT_TYPE, type AssessmentType } from '@/lib/constants/teaching';
 import { MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from '@/lib/validators/assessment.validator';
+import { ChapterTreeSelect } from '@/components/teaching/ChapterTreeSelect';
+import { usePlanChapters } from '@/components/teaching/use-plan-chapters';
+import { formatChapterLabel } from '@/domains/rag/chapter-label';
 import { validateAssessmentDraft } from '@/components/assessments/assessment-draft';
 import {
   generateAssessment,
@@ -43,13 +45,6 @@ const blankQuestion = (n: number): Question => ({
   topic: '',
 });
 
-function planUnits(plan: PlanOption): { unitNumber: number; title: string }[] {
-  if (!Array.isArray(plan.unitsContent)) return [];
-  return plan.unitsContent.filter(
-    (u): u is { unitNumber: number; title: string } => typeof u?.unitNumber === 'number' && typeof u?.title === 'string'
-  );
-}
-
 export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
   const [draft, setDraft] = React.useState<AssessmentDraft>({
     title: initial?.title ?? '',
@@ -58,22 +53,28 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
     rubrics: initial?.rubrics ?? [],
     maxScore: initial?.maxScore ?? DEFAULT_MAX_SCORE,
     durationMinutes: initial?.durationMinutes ?? DEFAULT_DURATION_MINUTES,
+    chapterIds: initial?.chapterIds ?? [],
   });
-  const [units, setUnits] = React.useState<number[]>([]);
+  const [chapterIds, setChapterIds] = React.useState<string[]>(initial?.chapterIds ?? []);
   const [count, setCount] = React.useState(DEFAULT_QUESTION_COUNT);
   const [offline, setOffline] = React.useState(false);
   const [busy, setBusy] = React.useState<'generate' | 'save' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const unitOptions = planUnits(plan);
+  const { books, isLoading: chaptersLoading } = usePlanChapters(plan.id);
+  const chapterLabels = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const book of books) for (const c of book.chapters) map.set(c.id, formatChapterLabel({ ...c, book }));
+    return map;
+  }, [books]);
   const problems = validateAssessmentDraft(draft);
   const lockReason = React.useMemo(() => {
-    if (unitOptions.length === 0) return 'O plano não possui unidades cadastradas.';
-    if (units.length === 0) return 'Selecione ao menos uma unidade.';
+    if (chaptersLoading) return 'Carregando capítulos...';
+    if (chapterIds.length === 0) return 'Selecione ao menos um capítulo.';
     if (!Number.isInteger(count) || count < 1 || count > MAX_QUESTION_COUNT) {
       return `Informe entre 1 e ${MAX_QUESTION_COUNT} questões.`;
     }
     return undefined;
-  }, [unitOptions.length, units.length, count]);
+  }, [chaptersLoading, chapterIds.length, count]);
 
   const run = async (kind: 'generate' | 'save', action: () => Promise<void>) => {
     setBusy(kind);
@@ -89,14 +90,14 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
 
   const generate = () =>
     run('generate', async () => {
-      const out = await generateAssessment({ teachingPlanId: plan.id, unitNumbers: units, questionCount: count, type: draft.type });
+      const out = await generateAssessment({ teachingPlanId: plan.id, chapterIds, questionCount: count, type: draft.type });
       setDraft((d) => ({ ...d, questions: out.questions, rubrics: out.rubrics }));
       setOffline(out.fallback);
     });
 
   const save = () =>
     run('save', async () => {
-      await saveAssessment(plan.id, initial?.id ?? null, draft);
+      await saveAssessment(plan.id, initial?.id ?? null, { ...draft, chapterIds });
       onSaved();
     });
 
@@ -164,24 +165,19 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">Gerar com IA</CardTitle>
-          {offline && <Badge variant="outline">Gerado em modo offline</Badge>}
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-3">
-            {unitOptions.map((u) => (
-              <label key={u.unitNumber} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={units.includes(u.unitNumber)}
-                  onChange={(e) =>
-                    setUnits((cur) => (e.target.checked ? [...cur, u.unitNumber] : cur.filter((n) => n !== u.unitNumber)))
-                  }
-                />
-                Unidade {u.unitNumber}: {u.title}
-              </label>
-            ))}
-            {unitOptions.length === 0 && <p className="text-sm text-slate-500">O plano não possui unidades cadastradas.</p>}
-          </div>
+          {chaptersLoading && books.length === 0 ? (
+            <p className="text-sm text-slate-500">Carregando capítulos...</p>
+          ) : (
+            <ChapterTreeSelect
+              id="assessment-chapters"
+              label="Capítulos desta avaliação"
+              books={books}
+              selectedIds={chapterIds}
+              onSelectionChange={setChapterIds}
+            />
+          )}
           <div className="flex items-end gap-3">
             <div className="space-y-1">
               <Label htmlFor="as-count">Nº de questões</Label>
@@ -205,6 +201,15 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
               <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
               <span>{lockReason}</span>
             </span>
+          )}
+          {offline && (
+            <div
+              role="status"
+              className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Questões geradas sem IA (modo offline). Revise antes de publicar.</span>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -235,6 +240,9 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
+              {q.chapterId && chapterLabels.get(q.chapterId) && (
+                <p className="text-xs text-slate-500">{chapterLabels.get(q.chapterId)}</p>
+              )}
               <Textarea
                 aria-label={`Enunciado da questão ${i + 1}`}
                 value={q.enunciation}
