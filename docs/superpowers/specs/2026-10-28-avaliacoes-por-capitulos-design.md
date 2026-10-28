@@ -54,7 +54,7 @@ model AssessmentChapter {
 Novo `src/domains/rag/services/chapter-scope.ts`:
 
 - `expandChapterScope(chapterIds: string[], deps?): Promise<string[]>` — chama `listDescendantIds` e devolve escolhidos + descendentes; se a expansão vier vazia, devolve os escolhidos (lista vazia nunca abre o escopo).
-- `formatChapterLabel(chapter: { number: string; title: string; book: { title: string; author: string }; startPage: number; endPage: number | null }): string` — gera `Cap. 2.3: Título — Livro (Autor), p. a-b` (sem `-b` quando `endPage` é nulo).
+- `formatChapterLabel(chapter: { number: string; title: string; book: { title: string; author: string }; startPage: number; endPage: number | null }): string` — gera `Cap. 2.3: Título — Livro (Autor), p. 48 a 66` (só `p. 48` quando `endPage` é nulo), o mesmo formato que a aula já usa.
 - `lesson-generation-service.ts` (`expandChapterIds`) e `chat-service.ts` (`loadTutorScope`) passam a usar o helper; o comportamento deles não muda. `buildLessonGenerationMessages` usa `formatChapterLabel` para o rótulo que já monta hoje.
 
 ## 2. API e geração
@@ -78,7 +78,7 @@ generateAssessmentSchema = z.object({
   teachingPlanId: z.string().min(1),
   chapterIds: z.array(z.string().min(1)).min(1),
   questionCount: z.number().int().min(1).max(20),
-  type: z.enum([...]) // como hoje
+  type: z.string().min(1) // como hoje
 })
 ```
 
