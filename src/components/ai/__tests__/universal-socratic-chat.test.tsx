@@ -35,4 +35,13 @@ describe('UniversalSocraticChat histórico', () => {
     await waitFor(() => expect(screen.getByText(/Sou a Tutora Lucy/)).toBeTruthy());
     expect(screen.queryByText('O que é SQL?')).toBeNull();
   });
+
+  it('item de ontem mostra o timestamp com dd/MM', async () => {
+    const createdAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const old = [{ ...items[0], id: 'old', question: 'Pergunta antiga', createdAt }];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: old }), { status: 200 })));
+    const { container } = render(<UniversalSocraticChat agendaId="ag1" agendaType="CLASSROOM" />);
+    await screen.findByText('Pergunta antiga');
+    expect(container.textContent ?? '').toMatch(/\d{2}\/\d{2} \d{2}:\d{2}/);
+  });
 });

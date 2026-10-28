@@ -11,6 +11,7 @@ import { ChatMessageList } from './chat-message-list';
 import { ChatComposer } from './chat-composer';
 import { useTutorChat, type ChatMessage } from './use-tutor-chat';
 import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
+import { formatChatTimestamp } from '@/lib/format/chat-timestamp';
 import { API_ROUTES } from '@/lib/constants/routes';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ChatHistoryItem } from '@/domains/agents/services/chat-history-service';
@@ -42,7 +43,7 @@ const formatTime = (date: Date) =>
 
 function historyToMessages(items: ChatHistoryItem[]): ChatMessage[] {
   return items.flatMap((item) => {
-    const timestamp = formatTime(new Date(item.createdAt));
+    const timestamp = formatChatTimestamp(item.createdAt);
     return [
       { id: `${item.id}-q`, sender: 'student', text: item.question, timestamp },
       {
