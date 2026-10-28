@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { AgendaNotFound } from '@/components/agendas/agenda-not-found';
 import { toAgendaSession } from '@/components/agendas/agenda-session';
 import { useAgenda } from '@/components/agendas/use-agenda';
+import { useFillViewportHeight } from '@/components/classroom/use-fill-viewport-height';
 import { useAgendaFaqs, useAgendaLesson } from '@/components/classroom/use-agenda-lesson';
 import { resolveMediaType } from '@/domains/teaching/media-type';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,7 +26,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: 'teal' | 'secondary
   CANCELLED: { label: 'CANCELADA', variant: 'secondary' },
 };
 
-const CHAT_COLUMN_CLASSES = 'lg:col-span-5 h-[70vh] lg:h-[calc(100vh-7.5rem)] lg:sticky lg:top-[6.5rem]';
+const CHAT_COLUMN_CLASSES = 'lg:col-span-5 h-[70vh] lg:sticky lg:top-[6.5rem]';
 
 interface ClassroomPageProps {
   sessionId: string;
@@ -45,6 +46,9 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   const { lesson, isLoading: lessonLoading } = useAgendaLesson(sessionId);
   const { faqs, isLoading: faqsLoading } = useAgendaFaqs(sessionId, session?.status === AGENDA_STATUS_LIVE);
 
+  const chatColumnRef = React.useRef<HTMLDivElement>(null);
+  useFillViewportHeight(chatColumnRef, 16, 360, Boolean(session));
+
   const checkpoints = React.useMemo<SocraticCheckpoint[]>(
     () =>
       (lesson?.timeScript ?? []).flatMap((item) =>
@@ -62,7 +66,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           {isLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-28 w-full rounded-2xl" />
-              <Skeleton className={`${CHAT_COLUMN_CLASSES.replace("lg:col-span-5 ", "")} w-full rounded-2xl`} />
+              <Skeleton className={`${CHAT_COLUMN_CLASSES.replace("lg:col-span-5 ", "")} lg:h-[calc(100vh-7.5rem)] w-full rounded-2xl`} />
             </div>
           ) : (
             <AgendaNotFound message={notFound ? undefined : (error ?? undefined)} />
@@ -138,7 +142,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           </div>
 
           {/* Right Column: Socratic Chat Panel with Tutora Lucy (5 cols) */}
-          <div className={CHAT_COLUMN_CLASSES}>
+          <div ref={chatColumnRef} className={CHAT_COLUMN_CLASSES}>
             <SocraticChatPanel
               agendaType="CLASSROOM"
               agendaId={session.id}
