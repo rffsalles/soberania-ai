@@ -39,3 +39,6 @@ export const JUDGE_SYSTEM_PROMPT =
 
 /** O veredito é uma única palavra: poucos tokens bastam. */
 export const JUDGE_MAX_TOKENS = 8;
+
+/** Respostas do chat da tutora; o padrão do provedor, 512, cortava respostas no meio. */
+export const TUTOR_MAX_TOKENS = 1200;

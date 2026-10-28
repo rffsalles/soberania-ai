@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { AIMessage, StreamChunk } from '@/lib/ai-provider';
 import type { DidacticChunk } from '@/domains/rag/types';
 import { startTutorPipeline } from '../tutor-pipeline';
+import { TUTOR_MAX_TOKENS } from '@/lib/constants/tutor';
 
 const chunk = (over: Partial<DidacticChunk>): DidacticChunk => ({
   id: 'c1',
@@ -82,5 +83,24 @@ describe('startTutorPipeline (escopo da aula)', () => {
     const { search, prompt } = await run(undefined);
     expect(search).toHaveBeenCalledWith({ query: 'o que é entidade?', topK: 2 });
     expect(prompt).not.toContain('Esta aula cobre');
+  });
+});
+
+describe('startTutorPipeline (opções do provedor)', () => {
+  it('passa TUTOR_MAX_TOKENS ao streamChat', async () => {
+    const calls: unknown[][] = [];
+    const streamChat = vi.fn(async function* (...args: unknown[]): AsyncGenerator<StreamChunk> {
+      calls.push(args);
+      yield { token: '', isComplete: true };
+    });
+    const c = chunk({});
+    const start = await startTutorPipeline(
+      { message: 'o que é entidade?', agendaType: 'CLASSROOM' },
+      { search: async () => ({ query: 'q', chunks: [c], primaryCitation: '[Apostila · Cap. 2, pág. 31]', latencyMs: 1 }), streamChat }
+    );
+    if (start.kind !== 'stream') throw new Error('esperava stream');
+    for await (const _ of start.stream) { /* consome */ }
+    expect(TUTOR_MAX_TOKENS).toBe(1200);
+    expect(calls[0][1]).toEqual({ citation: '[Apostila · Cap. 2, pág. 31]', maxTokens: TUTOR_MAX_TOKENS });
   });
 });

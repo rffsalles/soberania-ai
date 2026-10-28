@@ -2,6 +2,7 @@ import { formatCitation, executeHybridSearch } from '@/domains/rag/hybrid-search
 import type { DidacticChunk, RAGSearchQuery, RAGSearchResult } from '@/domains/rag/types';
 import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
 import type { AgendaType } from '@/domains/agendas/types';
+import { TUTOR_MAX_TOKENS } from '@/lib/constants/tutor';
 import {
   CLASSROOM_SOCRATIC_SYSTEM_PROMPT,
   STUDY_GROUP_SYSTEM_PROMPT,
@@ -92,7 +93,7 @@ export async function startTutorPipeline(
   const streamChat = deps.streamChat ?? ((m, o) => aiProvider.streamChat(m, o));
   const stream = streamChat(
     [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: message }],
-    { citation: rag.primaryCitation }
+    { citation: rag.primaryCitation, maxTokens: TUTOR_MAX_TOKENS }
   );
   return { kind: 'stream', stream, citation: rag.primaryCitation, topChunk: rag.chunks[0] };
 }
