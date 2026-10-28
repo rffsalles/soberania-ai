@@ -55,7 +55,7 @@ export type AssessmentDeps = {
   listPlanChapters(planId: string): Promise<PlanChapterBook[]>;
   listDescendantIds(chapterIds: string[]): Promise<string[]>;
   sampleByChapter: typeof sampleChunksByChapter;
-  replaceAssessmentChapters(assessmentId: string, chapterIds: string[]): Promise<void>;
+  updateDraftAssessment(id: string, data: Prisma.AssessmentUncheckedUpdateInput, chapterIds?: string[]): Promise<boolean>;
 };
 
 const defaultDeps: AssessmentDeps = {
@@ -69,7 +69,7 @@ const defaultDeps: AssessmentDeps = {
   listPlanChapters: planRepo.listPlanChapters,
   listDescendantIds,
   sampleByChapter: sampleChunksByChapter,
-  replaceAssessmentChapters: assessmentRepo.replaceAssessmentChapters,
+  updateDraftAssessment: assessmentRepo.updateDraftAssessment,
 };
 
 /** Orçamento de tokens proporcional ao número de questões, com teto. */
@@ -103,7 +103,7 @@ const sentences = (text: string) =>
 const clip = (text: string) => (text.length > SNIPPET_MAX_CHARS ? `${text.slice(0, SNIPPET_MAX_CHARS)}...` : text);
 
 /** Monta questões determinísticas a partir dos trechos recuperados (sem IA real). */
-export function buildFallbackQuestions(chunks: DidacticChunk[], count: number): Question[] {
+export function buildFallbackQuestions(chunks: DidacticChunk[], count: number, allowedChapterIds?: Set<string>): Question[] {
   return Array.from({ length: count }, (_, i) => {
     const chunk = chunks[i % chunks.length];
     const snippet = (c: DidacticChunk) => clip(sentences(c.content)[0] ?? c.content) || c.chapter || c.bookTitle;
@@ -124,6 +124,7 @@ export function buildFallbackQuestions(chunks: DidacticChunk[], count: number): 
       correctKey,
       rationale: `A alternativa correta reproduz o conteúdo de ${chunk.bookTitle}, ${chunk.chapter}.`,
       topic: chunk.chapter,
+      chapterId: chunk.chapterId && allowedChapterIds?.has(chunk.chapterId) ? chunk.chapterId : undefined,
     };
   });
 }
@@ -191,7 +192,7 @@ export async function generateQuestions(
     };
   }
 
-  const questions = buildFallbackQuestions(chunks, input.questionCount);
+  const questions = buildFallbackQuestions(chunks, input.questionCount, new Set(scopes.flat()));
   if (!z.array(questionSchema).length(input.questionCount).safeParse(questions).success) {
     throw new DomainError(500, 'Falha ao montar as questões de contingência.');
   }
@@ -230,9 +231,8 @@ export async function updateAssessment(
     input.chapterIds !== undefined
       ? resolveChapterSelection(input.chapterIds, await deps.listPlanChapters(assessment.teachingPlan.id))
       : undefined;
-  const updated = await deps.updateAssessmentById(id, data);
-  if (chapterIds !== undefined) await deps.replaceAssessmentChapters(id, chapterIds);
-  return updated;
+  if (!(await deps.updateDraftAssessment(id, data, chapterIds))) throw new DomainError(409, ASSESSMENT_PUBLISHED);
+  return { id, ...data };
 }
 
 export async function publishAssessment(

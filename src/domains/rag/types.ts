@@ -4,6 +4,7 @@ export interface DidacticChunk {
   bookTitle: string;
   author: string;
   chapter: string;
+  chapterId?: string;
   section?: string;
   pageNumber: number;
   content: string;

@@ -66,6 +66,7 @@ function toDidacticChunk(r: SampleRow): DidacticChunk {
     bookTitle: r.material.title,
     author: r.material.author,
     chapter: r.chapter,
+    chapterId: r.chapterId ?? undefined,
     section: r.section ?? undefined,
     pageNumber: r.pageNumber,
     content: r.content,
@@ -126,6 +127,7 @@ interface HybridRow {
   bookTitle: string;
   author: string;
   chapter: string;
+  chapterId: string | null;
   section: string | null;
   pageNumber: number;
   content: string;
@@ -194,6 +196,7 @@ export async function searchHybrid(params: HybridSearchParams): Promise<Didactic
            m.title AS "bookTitle",
            m.author,
            ch.chapter,
+           ch."chapterId",
            ch.section,
            ch."pageNumber",
            ch.content,
@@ -219,6 +222,7 @@ export async function searchHybrid(params: HybridSearchParams): Promise<Didactic
     bookTitle: r.bookTitle,
     author: r.author,
     chapter: r.chapter,
+    chapterId: r.chapterId ?? undefined,
     section: r.section ?? undefined,
     pageNumber: r.pageNumber,
     content: r.content,

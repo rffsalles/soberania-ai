@@ -62,9 +62,19 @@ export function findAssessmentRubrics(id: string) {
   return db.assessment.findUnique({ where: { id }, select: { rubrics: true } });
 }
 
-export async function replaceAssessmentChapters(assessmentId: string, chapterIds: string[]): Promise<void> {
-  await db.$transaction([
-    db.assessmentChapter.deleteMany({ where: { assessmentId } }),
-    db.assessmentChapter.createMany({ data: chapterIds.map((chapterId) => ({ assessmentId, chapterId })) }),
-  ]);
+/** Edita só uma prova em rascunho, numa transação: falso se ela já foi publicada (nada é gravado). */
+export function updateDraftAssessment(
+  id: string,
+  data: Prisma.AssessmentUncheckedUpdateInput,
+  chapterIds?: string[]
+): Promise<boolean> {
+  return db.$transaction(async (tx) => {
+    const { count } = await tx.assessment.updateMany({ where: { id, status: ASSESSMENT_STATUS.DRAFT }, data });
+    if (count === 0) return false;
+    if (chapterIds !== undefined) {
+      await tx.assessmentChapter.deleteMany({ where: { assessmentId: id } });
+      await tx.assessmentChapter.createMany({ data: chapterIds.map((chapterId) => ({ assessmentId: id, chapterId })) });
+    }
+    return true;
+  });
 }

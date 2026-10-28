@@ -71,7 +71,7 @@ function makeDeps(aiText: string, fallback = false) {
     listPlanChapters: async () => [MAT_BOOK],
     listDescendantIds: vi.fn(async (ids: string[]) => (ids[0] === 'u2' ? ['u2', 's21', 's22', 's221', 's222'] : ids)),
     sampleByChapter: vi.fn(async () => []),
-    replaceAssessmentChapters: vi.fn(async () => {}),
+    updateDraftAssessment: vi.fn(async () => true),
   };
   return { deps, createAgenda, updateAssessmentById };
 }
@@ -174,6 +174,15 @@ describe('generateQuestions', () => {
     }
   });
 
+  it('fallback grava chapterId só quando o chunk está no escopo expandido', async () => {
+    const { deps } = makeDeps('não é json');
+    deps.search = async () => ({ chunks: [{ ...chunk(1), chapterId: 's22' }, { ...chunk(2), chapterId: 'fora' }] });
+    const out = await generateQuestions(teacher, { ...input, chapterIds: ['u2'], questionCount: 2 }, deps);
+    expect(out.fallback).toBe(true);
+    expect(out.questions[0].chapterId).toBe('s22');
+    expect(out.questions[1].chapterId).toBeUndefined();
+  });
+
   it('falls back when the provider chunks are flagged as fallback', async () => {
     const { deps } = makeDeps(JSON.stringify({ questions: [validQuestion('x')] }), true);
     const out = await generateQuestions(teacher, { ...input, questionCount: 1 }, deps);
@@ -260,41 +269,46 @@ describe('publishAssessment', () => {
 
 describe('updateAssessment', () => {
   it('PUBLISHED dá 409 sem gravar', async () => {
-    const { deps, updateAssessmentById } = makeDeps('x');
+    const { deps } = makeDeps('x');
     await expect(updateAssessment('pub1', teacher, { title: 'Nova' }, deps)).rejects.toMatchObject({ status: 409, message: ASSESSMENT_PUBLISHED });
-    expect(updateAssessmentById).not.toHaveBeenCalled();
+    expect(deps.updateDraftAssessment).not.toHaveBeenCalled();
   });
   it('grava chapterIds normalizados', async () => {
     const { deps } = makeDeps('x');
     await updateAssessment('as1', teacher, { chapterIds: ['u2', 's22', 'u2'] }, deps);
-    expect(deps.replaceAssessmentChapters).toHaveBeenCalledWith('as1', ['u2']);
+    expect(deps.updateDraftAssessment).toHaveBeenCalledWith('as1', {}, ['u2']);
   });
   it('capítulo fora do plano dá 400 antes de gravar', async () => {
-    const { deps, updateAssessmentById } = makeDeps('x');
+    const { deps } = makeDeps('x');
     await expect(updateAssessment('as1', teacher, { chapterIds: ['zz'] }, deps)).rejects.toMatchObject({ status: 400 });
-    expect(updateAssessmentById).not.toHaveBeenCalled();
+    expect(deps.updateDraftAssessment).not.toHaveBeenCalled();
   });
   it('chapterIds vazio limpa a seleção', async () => {
     const { deps } = makeDeps('x');
     await updateAssessment('as1', teacher, { chapterIds: [] }, deps);
-    expect(deps.replaceAssessmentChapters).toHaveBeenCalledWith('as1', []);
+    expect(deps.updateDraftAssessment).toHaveBeenCalledWith('as1', {}, []);
   });
   it('sem a chave chapterIds não toca a junção', async () => {
     const { deps } = makeDeps('x');
     await updateAssessment('as1', teacher, { title: 'Nova' }, deps);
-    expect(deps.replaceAssessmentChapters).not.toHaveBeenCalled();
+    expect(deps.updateDraftAssessment).toHaveBeenCalledWith('as1', { title: 'Nova' }, undefined);
+  });
+  it('guarda de status perdida na gravação dá 409', async () => {
+    const { deps } = makeDeps('x');
+    deps.updateDraftAssessment = vi.fn(async () => false);
+    await expect(updateAssessment('as1', teacher, { title: 'Nova' }, deps)).rejects.toMatchObject({ status: 409, message: ASSESSMENT_PUBLISHED });
   });
   it('rejects a question with 3 options', async () => {
-    const { deps, updateAssessmentById } = makeDeps('x');
+    const { deps } = makeDeps('x');
     const bad = { ...validQuestion('q1'), options: validQuestion('q1').options.slice(0, 3) } as unknown as Question;
     await expect(updateAssessment('as1', teacher, { questions: [bad] }, deps)).rejects.toMatchObject({ status: 400 });
-    expect(updateAssessmentById).not.toHaveBeenCalled();
+    expect(deps.updateDraftAssessment).not.toHaveBeenCalled();
   });
 
   it('updates with valid data and blocks foreign teachers', async () => {
-    const { deps, updateAssessmentById } = makeDeps('x');
+    const { deps } = makeDeps('x');
     await updateAssessment('as1', teacher, { title: 'Novo título', questions: [validQuestion('q1')] }, deps);
-    expect(updateAssessmentById).toHaveBeenCalled();
+    expect(deps.updateDraftAssessment).toHaveBeenCalled();
     await expect(updateAssessment('as1', other, { title: 'Outro' }, deps)).rejects.toMatchObject({ status: 403 });
   });
 });
