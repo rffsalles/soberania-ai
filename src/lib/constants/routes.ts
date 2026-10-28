@@ -42,6 +42,7 @@ export const API_ROUTES = {
   AGENT: '/api/v1/agent',
   AGENT_CHAT_STREAM: '/api/v1/agent/chat/stream',
   AGENDAS: '/api/v1/agendas',
+  AGENDA_INTERACTIONS: (agendaId: string) => `/api/v1/agendas/${agendaId}/interactions`,
   PEDAGOGY: '/api/v1/pedagogy',
   PEDAGOGY_MINUTES: '/api/v1/pedagogy/minutes',
   PEDAGOGY_HEATMAP: '/api/v1/pedagogy/reports/heatmap',

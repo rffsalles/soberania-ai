@@ -26,6 +26,10 @@ export function listInteractionsByAgendaAndStudent(agendaId: string, studentId: 
   });
 }
 
+export function countInteractionsSince(agendaId: string, studentId: string, since: Date): Promise<number> {
+  return db.studentInteraction.count({ where: { agendaId, studentId, createdAt: { gt: since } } });
+}
+
 export async function listStudentIdsWithInteractions(agendaId: string): Promise<string[]> {
   const rows = await db.studentInteraction.findMany({
     where: { agendaId },
@@ -39,5 +43,28 @@ export function listInteractionsByAgenda(agendaId: string): Promise<InteractionR
   return db.studentInteraction.findMany({
     where: { agendaId },
     orderBy: { createdAt: 'asc' },
+  });
+}
+
+export type ChatHistoryRecord = Pick<
+  InteractionRecord,
+  'id' | 'questionText' | 'responseText' | 'ragSourceBook' | 'ragSourcePage' | 'guardrailBlocked' | 'createdAt'
+>;
+
+/** Últimas `limit` interações do aluno na agenda, da mais recente para a mais antiga. */
+export function listRecentInteractions(agendaId: string, studentId: string, limit: number): Promise<ChatHistoryRecord[]> {
+  return db.studentInteraction.findMany({
+    where: { agendaId, studentId },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      questionText: true,
+      responseText: true,
+      ragSourceBook: true,
+      ragSourcePage: true,
+      guardrailBlocked: true,
+      createdAt: true,
+    },
   });
 }

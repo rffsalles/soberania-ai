@@ -3,3 +3,6 @@ export const SSE_EVENT = { TOKEN: 'token', DONE: 'done', ERROR: 'error' } as con
 
 /** Quantidade máxima de mensagens anteriores enviadas como contexto ao tutor. */
 export const CHAT_HISTORY_LIMIT = 10;
+
+/** Quantidade de interações anteriores restauradas ao reabrir o chat. */
+export const CHAT_HISTORY_PAGE = 50;
