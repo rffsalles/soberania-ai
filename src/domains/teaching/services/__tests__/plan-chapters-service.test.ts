@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Role } from '@prisma/client';
-import { listPlanChapters, planChapterIds, normalizeChapterSelection, type PlanChapterBook } from '../plan-chapters-service';
+import { listPlanChapters, planChapterIds, normalizeChapterSelection, resolveChapterSelection, type PlanChapterBook } from '../plan-chapters-service';
+import { MAT_BOOK } from '@/components/teaching/__tests__/chapter-tree-fixtures';
+import { CHAPTER_OUTSIDE_PLAN } from '@/lib/constants/teaching';
 
 const books: PlanChapterBook[] = [
   {
@@ -60,4 +62,13 @@ describe('plan-chapters-service', () => {
   });
   it('planChapterIds inclui nós de qualquer profundidade', () =>
     expect(planChapterIds(tree)).toEqual(new Set(['u1', 'f', 'f1', 'u2'])));
+});
+
+describe('resolveChapterSelection', () => {
+  it('deduplica e normaliza pai+filho', () => {
+    expect(resolveChapterSelection(['u2', 's22', 'u2'], [MAT_BOOK as unknown as PlanChapterBook])).toEqual(['u2']);
+  });
+  it('rejeita id fora do plano', () => {
+    expect(() => resolveChapterSelection(['zz'], [MAT_BOOK as unknown as PlanChapterBook])).toThrow(CHAPTER_OUTSIDE_PLAN);
+  });
 });

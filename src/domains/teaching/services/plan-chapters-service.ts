@@ -1,4 +1,5 @@
 import { DomainError } from '@/lib/api/domain-error';
+import { CHAPTER_OUTSIDE_PLAN } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
 import * as repo from './teaching-plan-repository';
 import type { PlanActor } from './teaching-plan-service';
@@ -54,4 +55,12 @@ export function normalizeChapterSelection(ids: string[], books: PlanChapterBook[
     return false;
   };
   return [...selected].filter((id) => !hasSelectedAncestor(id));
+}
+
+/** Dedup, valida que todos pertencem ao plano e remove filhos cujo ancestral também foi escolhido. */
+export function resolveChapterSelection(ids: string[], books: PlanChapterBook[]): string[] {
+  const unique = [...new Set(ids)];
+  const allowed = planChapterIds(books);
+  if (unique.some((id) => !allowed.has(id))) throw new DomainError(400, CHAPTER_OUTSIDE_PLAN);
+  return normalizeChapterSelection(unique, books);
 }

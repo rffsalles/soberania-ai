@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { AIMessage } from '@/lib/ai-provider';
 import type { DidacticChunk } from '@/domains/rag/types';
+import { formatChapterLabel } from '@/domains/rag/chapter-label';
 import { formatCitation } from '@/domains/rag/hybrid-search';
 import type { TimeScriptItem } from '@/domains/teaching/time-script';
 import { LESSON_TITLE_MAX_LENGTH } from '@/lib/constants/teaching';
@@ -45,10 +46,7 @@ export type LessonGenerationPromptInput = {
 
 export function buildLessonGenerationMessages(input: LessonGenerationPromptInput): AIMessage[] {
   const chapters = input.chapters
-    .map(({ chapter: c }) => {
-      const pages = c.endPage ? `p. ${c.startPage} a ${c.endPage}` : `p. ${c.startPage}`;
-      return `Cap. ${c.number}: ${c.title} — ${c.material.title} (${c.material.author}), ${pages}`;
-    })
+    .map(({ chapter: c }) => formatChapterLabel({ ...c, book: c.material }))
     .join('\n');
   const chunks = input.chunks.map((c) => `${formatCitation(c)}\n${c.content}`).join('\n\n');
   const content = [

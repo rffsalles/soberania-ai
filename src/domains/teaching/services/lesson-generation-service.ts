@@ -10,16 +10,17 @@ import {
   type GeneratedLessonText,
 } from '@/domains/agents/prompts/lesson-generation-prompt';
 import type { RefineLessonInput } from '@/lib/validators/lesson.validator';
-import { LESSON_AI_RATE_LIMITED_MESSAGE, LESSON_AI_UNAVAILABLE_MESSAGE, LESSON_DEFAULT_DURATION_MINUTES, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
+import { LESSON_AI_RATE_LIMITED_MESSAGE, LESSON_AI_UNAVAILABLE_MESSAGE, LESSON_DEFAULT_DURATION_MINUTES, NO_INDEXED_CHAPTER_CONTENT, NO_LESSON_CHAPTERS } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
 import { timeScriptSchema, type TimeScriptItem } from '../time-script';
 import { sampleChunksByChapter } from '@/domains/rag/services/chunk-repository';
 import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
+import { expandChapterScope } from '@/domains/rag/services/chapter-scope';
 import { findLessonForGeneration } from './lesson-plan-repository';
 import type { PlanActor } from './teaching-plan-service';
 import { collectStream } from '@/domains/agents/collect-stream';
 
-export const NO_INDEXED_CHAPTER_CONTENT = 'Os capítulos selecionados não têm conteúdo indexado';
+export { NO_INDEXED_CHAPTER_CONTENT };
 /** Soma das etapas aceita dentro de duração ± 10%. */
 export const TIME_SCRIPT_TOLERANCE = 0.1;
 
@@ -69,12 +70,6 @@ async function askModel(
  * Gera objetivo, metodologia, recursos, exercício e roteiro da aula a partir dos trechos dos capítulos vinculados.
  * Não grava nada; o professor revisa e salva. Saída inválida, fora da tolerância de tempo ou fallback → 503.
  */
-/** Escolhidos + descendentes; uma expansão vazia volta aos escolhidos (lista vazia nunca abre o escopo). */
-async function expandChapterIds(chosenIds: string[], deps: Pick<LessonGenerationDeps, 'listDescendantIds'>) {
-  const expanded = await deps.listDescendantIds(chosenIds);
-  return expanded.length ? expanded : chosenIds;
-}
-
 export async function generateLessonContent(
   lessonId: string,
   user: PlanActor,
@@ -86,7 +81,7 @@ export async function generateLessonContent(
   assertOwner(user, plan.teacherId);
   if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
 
-  const allowedChapterIds = await expandChapterIds(lesson.chapters.map((c) => c.chapter.id), deps);
+  const allowedChapterIds = await expandChapterScope(lesson.chapters.map((c) => c.chapter.id), deps);
   const queries = [lesson.topicTitle, plan.generalObjectives, `exemplos e exercícios de ${lesson.topicTitle}`];
   const results = await Promise.all(
     queries.map((query) => deps.search({ query, allowedChapterIds, topK: SEARCH_TOP_K }))
@@ -161,7 +156,7 @@ export async function refineLessonField(
   assertOwner(user, plan.teacherId);
   if (lesson.chapters.length === 0) throw new DomainError(400, NO_LESSON_CHAPTERS);
 
-  const allowedChapterIds = await expandChapterIds(lesson.chapters.map((c) => c.chapter.id), deps);
+  const allowedChapterIds = await expandChapterScope(lesson.chapters.map((c) => c.chapter.id), deps);
   const found = await deps.search({
     query: `${input.instruction} ${lesson.topicTitle}`,
     allowedChapterIds,

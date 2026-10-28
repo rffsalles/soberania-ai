@@ -13,6 +13,7 @@ import { TUTOR_UNAVAILABLE_MESSAGE } from '@/lib/constants/tutor';
 import { isSyntheticChapter } from '@/domains/rag/constants';
 import { findLessonTutorScope } from '@/domains/teaching/services/lesson-plan-repository';
 import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
+import { expandChapterScope } from '@/domains/rag/services/chapter-scope';
 import { startTutorPipeline, type TutorScope } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
 
@@ -88,9 +89,7 @@ export async function loadTutorScope(
     return toTutorScope(raw, []);
   }
   const chosenIds = raw.chapters.map((c) => c.id);
-  const expanded = await deps.listDescendantIds(chosenIds);
-  // Uma lista expandida vazia nunca abre o escopo: volta aos capítulos escolhidos.
-  return toTutorScope(raw, expanded.length ? expanded : chosenIds);
+  return toTutorScope(raw, await expandChapterScope(chosenIds, deps));
 }
 
 const defaultDeps: ChatDeps = {

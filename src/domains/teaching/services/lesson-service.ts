@@ -20,7 +20,8 @@ import {
 import * as agendaRepo from '@/domains/agendas/services/agenda-repository';
 import * as lessonRepo from './lesson-plan-repository';
 import * as planRepo from './teaching-plan-repository';
-import { normalizeChapterSelection, planChapterIds, type PlanChapterBook } from './plan-chapters-service';
+import { resolveChapterSelection, type PlanChapterBook } from './plan-chapters-service';
+import { CHAPTER_OUTSIDE_PLAN } from '@/lib/constants/teaching';
 import { assertOwner } from '../ownership';
 import { publishBlockReason } from '../lesson-publish';
 
@@ -28,7 +29,7 @@ const BYTES_PER_MB = 1024 * 1024;
 const MS_PER_MINUTE = 60 * 1000;
 const MEDIA_PREFIX: StoragePrefix = 'media';
 
-export const CHAPTER_OUTSIDE_PLAN = 'Há capítulos que não pertencem à bibliografia do plano.';
+export { CHAPTER_OUTSIDE_PLAN };
 
 export type LessonActor = { id: string; role: Role; classId: string | null };
 
@@ -147,9 +148,7 @@ export async function updateLesson(id: string, user: LessonActor, raw: unknown, 
   let chapterIds = input.chapterIds === undefined ? undefined : [...new Set(input.chapterIds)];
   if (chapterIds !== undefined) {
     const books = await deps.repo.listPlanChapters(existing.courseSchedule.teachingPlan.id);
-    const allowed = planChapterIds(books);
-    if (chapterIds.some((cid) => !allowed.has(cid))) throw new DomainError(400, CHAPTER_OUTSIDE_PLAN);
-    chapterIds = normalizeChapterSelection(chapterIds, books);
+    chapterIds = resolveChapterSelection(chapterIds, books);
   }
 
   // Explicit whitelist: the parent schedule can never be changed through an update.

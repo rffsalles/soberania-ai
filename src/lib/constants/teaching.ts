@@ -104,3 +104,7 @@ export const DISTRIBUTION_AI_UNAVAILABLE_MESSAGE =
 export const NO_DISTRIBUTED_CHAPTERS = 'Distribua os capítulos antes de gerar as unidades.';
 export const PLAN_UNITS_AI_UNAVAILABLE_MESSAGE =
   'IA indisponível no momento. Tente novamente mais tarde ou cadastre as unidades manualmente no plano.';
+
+export const CHAPTER_OUTSIDE_PLAN = 'Há capítulos que não pertencem à bibliografia do plano.';
+export const NO_INDEXED_CHAPTER_CONTENT = 'Os capítulos selecionados não têm conteúdo indexado';
+export const ASSESSMENT_PUBLISHED = 'Avaliação publicada não pode ser editada.';
