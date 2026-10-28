@@ -130,4 +130,18 @@ describe('AssessmentEditor - capítulos', () => {
       expect(saveAssessment).toHaveBeenCalledWith('plan-1', 'a1', expect.objectContaining({ chapterIds: ['u2'] })),
     );
   });
+  it('rubricas antigas gravadas como {} não quebram o editor', () => {
+    renderEditor({ ...existing, rubrics: {} as never });
+    expect(screen.getByText('Rubricas (0)')).toBeTruthy();
+    expect(screen.queryByLabelText(/remover rubrica/i)).toBeNull();
+  });
+
+  it('descarta capítulos que saíram do plano antes de salvar', async () => {
+    vi.mocked(saveAssessment).mockResolvedValue(undefined as never);
+    renderEditor({ ...existing, chapterIds: ['u2', 'zz'] });
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }));
+    await waitFor(() =>
+      expect(saveAssessment).toHaveBeenCalledWith('plan-1', 'a1', expect.objectContaining({ chapterIds: ['u2'] })),
+    );
+  });
 });

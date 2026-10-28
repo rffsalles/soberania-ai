@@ -50,7 +50,7 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
     title: initial?.title ?? '',
     type: initial?.type ?? ASSESSMENT_TYPE.EXAM,
     questions: initial?.questions ?? [],
-    rubrics: initial?.rubrics ?? [],
+    rubrics: Array.isArray(initial?.rubrics) ? initial.rubrics : [],
     maxScore: initial?.maxScore ?? DEFAULT_MAX_SCORE,
     durationMinutes: initial?.durationMinutes ?? DEFAULT_DURATION_MINUTES,
     chapterIds: initial?.chapterIds ?? [],
@@ -61,6 +61,11 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
   const [busy, setBusy] = React.useState<'generate' | 'save' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const { books, isLoading: chaptersLoading } = usePlanChapters(plan.id);
+  React.useEffect(() => {
+    if (chaptersLoading || books.length === 0) return;
+    const known = new Set(books.flatMap((b) => b.chapters.map((c) => c.id)));
+    setChapterIds((ids) => (ids.every((id) => known.has(id)) ? ids : ids.filter((id) => known.has(id))));
+  }, [books, chaptersLoading]);
   const chapterLabels = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const book of books) for (const c of book.chapters) map.set(c.id, formatChapterLabel({ ...c, book }));
