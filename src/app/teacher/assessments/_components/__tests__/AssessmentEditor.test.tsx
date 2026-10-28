@@ -3,14 +3,16 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import * as React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
-const chaptersState = vi.hoisted(() => ({ loading: false }));
+const chaptersState = vi.hoisted(() => ({ loading: false, error: null as string | null, reload: vi.fn() }));
 vi.mock('@/components/teaching/use-plan-chapters', async () => {
   const { MAT_BOOK } = await import('@/components/teaching/__tests__/chapter-tree-fixtures');
   return {
     usePlanChapters: () =>
-      chaptersState.loading
-        ? { books: [], isLoading: true, error: null, reload: vi.fn() }
-        : { books: [MAT_BOOK], isLoading: false, error: null, reload: vi.fn() },
+      chaptersState.error
+        ? { books: [], isLoading: false, error: chaptersState.error, reload: chaptersState.reload }
+        : chaptersState.loading
+          ? { books: [], isLoading: true, error: null, reload: chaptersState.reload }
+          : { books: [MAT_BOOK], isLoading: false, error: null, reload: chaptersState.reload },
   };
 });
 vi.mock('@/components/assessments/use-assessments', () => ({
@@ -66,6 +68,8 @@ const genButton = () => screen.getByRole('button', { name: /gerar com ia/i }) as
 
 beforeEach(() => {
   chaptersState.loading = false;
+  chaptersState.error = null;
+  chaptersState.reload.mockReset();
   vi.mocked(generateAssessment).mockReset();
   vi.mocked(saveAssessment).mockReset();
 });
@@ -143,5 +147,17 @@ describe('AssessmentEditor - capítulos', () => {
     await waitFor(() =>
       expect(saveAssessment).toHaveBeenCalledWith('plan-1', 'a1', expect.objectContaining({ chapterIds: ['u2'] })),
     );
+  });
+
+  it('erro ao carregar capítulos mostra alerta, trava a geração e "Tentar de novo" recarrega', () => {
+    chaptersState.error = 'falhou';
+    renderEditor();
+    const msg = 'Não foi possível carregar os capítulos do plano.';
+    expect(screen.getAllByText(msg)[0].getAttribute('role')).toBe('alert');
+    expect(screen.queryByRole('tree')).toBeNull();
+    expect(genButton().disabled).toBe(true);
+    expect(screen.queryByText('Selecione ao menos um capítulo.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(chaptersState.reload).toHaveBeenCalledTimes(1);
   });
 });

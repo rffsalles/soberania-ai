@@ -3,14 +3,16 @@ import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const chaptersState = vi.hoisted(() => ({ loading: false }));
+const chaptersState = vi.hoisted(() => ({ loading: false, error: null as string | null, reload: vi.fn() }));
 vi.mock('@/components/teaching/use-plan-chapters', async () => {
   const { MAT_BOOK } = await import('@/components/teaching/__tests__/chapter-tree-fixtures');
   return {
     usePlanChapters: () =>
-      chaptersState.loading
-        ? { books: [], isLoading: true, error: null, reload: vi.fn() }
-        : { books: [MAT_BOOK], isLoading: false, error: null, reload: vi.fn() },
+      chaptersState.error
+        ? { books: [], isLoading: false, error: chaptersState.error, reload: chaptersState.reload }
+        : chaptersState.loading
+          ? { books: [], isLoading: true, error: null, reload: chaptersState.reload }
+          : { books: [MAT_BOOK], isLoading: false, error: null, reload: chaptersState.reload },
   };
 });
 vi.mock('../MediaTabs', () => ({ MediaTabs: () => null }));
@@ -59,6 +61,8 @@ const GENERATED = {
 
 afterEach(() => {
   chaptersState.loading = false;
+  chaptersState.error = null;
+  chaptersState.reload.mockReset();
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -217,6 +221,30 @@ describe('LessonEditor', () => {
     expect(screen.getByText('Publicada')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Despublicar' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Publicar' })).toBeNull();
+  });
+
+  it('descarta capítulos que saíram do plano antes de salvar', async () => {
+    const fetchMock = routeFetch({ [`PUT ${BASE}`]: { success: true, lesson: makeLesson() } });
+    vi.stubGlobal('fetch', fetchMock);
+    const onSaved = vi.fn();
+    const chapters = [
+      { chapterId: 'u2', chapter: { order: 2, number: '2' } },
+      { chapterId: 'zz', chapter: { order: 9, number: '9' } },
+    ];
+    render(<LessonEditor lesson={makeLesson({ topicTitle: 'Modelagem', chapters })} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar aula' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init!.body as string).chapterIds).toEqual(['u2']);
+  });
+
+  it('erro ao carregar capítulos mostra alerta e "Tentar de novo" recarrega', () => {
+    chaptersState.error = 'falhou';
+    render(<LessonEditor lesson={makeLesson()} onSaved={() => {}} />);
+    expect(screen.getByText('Não foi possível carregar os capítulos do plano.').getAttribute('role')).toBe('alert');
+    expect(screen.queryByRole('tree')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(chaptersState.reload).toHaveBeenCalledTimes(1);
   });
 
   it('salvar envia chapterIds selecionados', async () => {

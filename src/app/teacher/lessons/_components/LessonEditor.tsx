@@ -59,7 +59,17 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   React.useEffect(() => {
     setChapterIds(savedKey ? savedKey.split(',') : []);
   }, [savedKey]);
-  const { books, isLoading: chaptersLoading } = usePlanChapters(lesson.courseSchedule.teachingPlanId);
+  const {
+    books,
+    isLoading: chaptersLoading,
+    error: chaptersError,
+    reload: reloadChapters,
+  } = usePlanChapters(lesson.courseSchedule.teachingPlanId);
+  React.useEffect(() => {
+    if (chaptersLoading || books.length === 0) return;
+    const known = new Set(books.flatMap((b) => b.chapters.map((c) => c.id)));
+    setChapterIds((ids) => (ids.every((id) => known.has(id)) ? ids : ids.filter((id) => known.has(id))));
+  }, [books, chaptersLoading, savedKey]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -174,7 +184,16 @@ export function LessonEditor({ lesson, onSaved }: Props) {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          {chaptersLoading && books.length === 0 ? (
+          {chaptersError ? (
+            <div className="space-y-2">
+              <p role="alert" className="text-sm text-red-600">
+                Não foi possível carregar os capítulos do plano.
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={reloadChapters}>
+                Tentar de novo
+              </Button>
+            </div>
+          ) : chaptersLoading && books.length === 0 ? (
             <p className="text-sm text-slate-500">Carregando capítulos...</p>
           ) : (
             <ChapterTreeSelect

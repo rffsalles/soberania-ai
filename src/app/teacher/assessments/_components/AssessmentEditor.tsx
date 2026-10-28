@@ -28,6 +28,7 @@ const DEFAULT_DURATION_MINUTES = 60;
 const DEFAULT_MAX_SCORE = 10;
 const DEFAULT_QUESTION_COUNT = 5;
 const MAX_QUESTION_COUNT = 20;
+const CHAPTERS_ERROR = 'Não foi possível carregar os capítulos do plano.';
 
 type Props = {
   plan: PlanOption;
@@ -60,7 +61,7 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
   const [offline, setOffline] = React.useState(false);
   const [busy, setBusy] = React.useState<'generate' | 'save' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const { books, isLoading: chaptersLoading } = usePlanChapters(plan.id);
+  const { books, isLoading: chaptersLoading, error: chaptersError, reload: reloadChapters } = usePlanChapters(plan.id);
   React.useEffect(() => {
     if (chaptersLoading || books.length === 0) return;
     const known = new Set(books.flatMap((b) => b.chapters.map((c) => c.id)));
@@ -73,13 +74,14 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
   }, [books]);
   const problems = validateAssessmentDraft(draft);
   const lockReason = React.useMemo(() => {
+    if (chaptersError) return CHAPTERS_ERROR;
     if (chaptersLoading) return 'Carregando capítulos...';
     if (chapterIds.length === 0) return 'Selecione ao menos um capítulo.';
     if (!Number.isInteger(count) || count < 1 || count > MAX_QUESTION_COUNT) {
       return `Informe entre 1 e ${MAX_QUESTION_COUNT} questões.`;
     }
     return undefined;
-  }, [chaptersLoading, chapterIds.length, count]);
+  }, [chaptersError, chaptersLoading, chapterIds.length, count]);
 
   const run = async (kind: 'generate' | 'save', action: () => Promise<void>) => {
     setBusy(kind);
@@ -172,7 +174,16 @@ export function AssessmentEditor({ plan, initial, onSaved, onCancel }: Props) {
           <CardTitle className="text-base">Gerar com IA</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {chaptersLoading && books.length === 0 ? (
+          {chaptersError ? (
+            <div className="space-y-2">
+              <p role="alert" className="text-sm text-red-600">
+                {CHAPTERS_ERROR}
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={reloadChapters}>
+                Tentar de novo
+              </Button>
+            </div>
+          ) : chaptersLoading && books.length === 0 ? (
             <p className="text-sm text-slate-500">Carregando capítulos...</p>
           ) : (
             <ChapterTreeSelect
