@@ -23,21 +23,18 @@ const baseMinute = {
   actionableAdvice: '',
   aiGenerated: false,
   createdAt: '2026-10-20T10:00:00.000Z',
+  updatedAt: '2026-10-20T10:00:00.000Z',
   subjectName: 'BD',
   className: 'Turma A',
 };
 
-function stubFetch(existing: typeof baseMinute | null) {
-  const calls: { method: string }[] = [];
+function stubFetch(minute: typeof baseMinute) {
+  const calls: { method: string; body?: string }[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (_url: string, init?: RequestInit) => {
-      const method = init?.method ?? 'GET';
-      calls.push({ method });
-      if (method === 'GET') return new Response(JSON.stringify({ success: true, minutes: existing ? [existing] : [] }));
-      return new Response(
-        JSON.stringify({ success: true, minute: { ...baseMinute, id: 'new', rawSummary: 'Resumo IA', aiGenerated: true } })
-      );
+      calls.push({ method: init?.method ?? 'GET', body: init?.body as string | undefined });
+      return new Response(JSON.stringify({ success: true, minute }));
     })
   );
   return calls;
@@ -46,20 +43,20 @@ function stubFetch(existing: typeof baseMinute | null) {
 describe('useGeneratedMinute', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('ata existente sem parecer (aiGenerated false) dispara nova geração', async () => {
-    const calls = stubFetch(baseMinute);
+  it('sempre faz POST com a agenda e usa a ata devolvida pelo servidor', async () => {
+    const calls = stubFetch({ ...baseMinute, id: 'new', rawSummary: 'Resumo IA', aiGenerated: true });
     const { result } = renderHook(() => useGeneratedMinute('ag1', true));
+    expect(result.current.isLoading).toBe(true);
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(calls.map((c) => c.method)).toEqual(['GET', 'POST']);
+    expect(calls).toEqual([{ method: 'POST', body: JSON.stringify({ agendaId: 'ag1' }) }]);
     expect(result.current.minute?.id).toBe('new');
-    expect(result.current.minute?.aiGenerated).toBe(true);
   });
 
-  it('ata existente com parecer não dispara nova geração', async () => {
-    const calls = stubFetch({ ...baseMinute, rawSummary: 'ok', aiGenerated: true });
+  it('erro do servidor vira mensagem de erro', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: false, error: 'falhou' }), { status: 500 })));
     const { result } = renderHook(() => useGeneratedMinute('ag1', true));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(calls.map((c) => c.method)).toEqual(['GET']);
-    expect(result.current.minute?.id).toBe('old');
+    expect(result.current.error).toBe('falhou');
+    expect(result.current.minute).toBeNull();
   });
 });

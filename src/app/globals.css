@@ -149,6 +149,10 @@ h1, h2, h3, h4, .font-heading {
   display: none;
 }
 
+@page {
+  margin: 16mm;
+}
+
 @media print {
   .print-hidden {
     display: none !important;
@@ -167,20 +171,40 @@ h1, h2, h3, h4, .font-heading {
     display: none !important;
   }
 
-  html.print-modal [data-print-root] {
-    position: static !important;
-    transform: none !important;
-    max-width: none !important;
-    max-height: none !important;
+  html.print-modal,
+  html.print-modal body {
+    height: auto !important;
+    min-height: 0 !important;
     overflow: visible !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    animation: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   html.print-modal [data-print-root] {
-    width: 100% !important;
-    margin: 0 !important;
+    position: static !important;
+    display: block !important;
+    /* Tailwind v4 usa as propriedades `translate`/`scale`/`rotate`, não `transform`. */
+    transform: none !important;
+    translate: none !important;
+    scale: none !important;
+    rotate: none !important;
     inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  html.print-modal [data-print-root] * {
+    max-height: none !important;
+    overflow: visible !important;
   }
 }

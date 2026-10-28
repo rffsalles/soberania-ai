@@ -16,6 +16,8 @@ export interface ClassMinuteData {
   /** false = métricas reais, mas o parecer textual não foi redigido pela IA. */
   aiGenerated: boolean;
   createdAt: string;
+  /** Última geração/regeneração da ata; interações posteriores a ela tornam a ata desatualizada. */
+  updatedAt: string;
 }
 
 export interface TeacherStruggleHeatmap {

@@ -47,12 +47,14 @@ function makeDeps(
     interactions?: MetricInteraction[];
     ai?: string;
     fallback?: boolean;
+    newInteractions?: number;
   } = {}
 ) {
   const upsertMinute = vi.fn(async (data: Record<string, unknown>) => ({
     id: 'm1',
     ...data,
     createdAt: NOW,
+    updatedAt: NOW,
     student: { name: 'Lucas' },
     agenda: {
       subject: 'BD',
@@ -69,6 +71,7 @@ function makeDeps(
       classId: 'c1',
     })),
     listInteractions: vi.fn(async () => opts.interactions ?? []),
+    countInteractionsSince: vi.fn(async () => opts.newInteractions ?? 0),
     listStudentIds: vi.fn(async () => ['stu1', 'stu2']),
     findTeacherSubjectIds: vi.fn(async () => ['sub1']),
     upsertMinute,
@@ -172,6 +175,7 @@ describe('generateMinute com IA indisponível', () => {
     actionableAdvice: 'conselho real',
     aiFallback: false,
     createdAt: NOW,
+    updatedAt: NOW,
     student: { name: 'Lucas' },
     agenda: { subject: 'BD', subjectRef: { discipline: { name: 'Banco de Dados' } }, class: { name: 'Turma A' } },
   };
@@ -231,6 +235,7 @@ describe('requestMinutes', () => {
     actionableAdvice: 'conselho antigo',
     aiFallback: false,
     createdAt: NOW,
+    updatedAt: NOW,
     student: { name: 'Lucas' },
     agenda: { subject: 'BD', subjectRef: { discipline: { name: 'Banco de Dados' } }, class: { name: 'Turma A' } },
   };
@@ -292,6 +297,35 @@ describe('requestMinutes', () => {
     const { deps, upsertMinute, listMinutesRepo } = makeDeps();
     listMinutesRepo.mockResolvedValue([storedMinute] as never);
     await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(upsertMinute).not.toHaveBeenCalled();
+  });
+
+  it('aluno com ata válida e sem interações novas não regenera', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps({ newInteractions: 0 });
+    listMinutesRepo.mockResolvedValue([storedMinute] as never);
+    await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(deps.countInteractionsSince).toHaveBeenCalledWith('ag1', 'stu1', NOW);
+    expect(deps.streamChat).not.toHaveBeenCalled();
+    expect(upsertMinute).not.toHaveBeenCalled();
+  });
+
+  it('aluno com ata válida e interação mais nova que a ata regenera', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps({
+      newInteractions: 2,
+      interactions: [interaction()],
+      ai: '{"rawSummary":"Resumo atualizado","actionableAdvice":"Conselho novo"}',
+      fallback: false,
+    });
+    listMinutesRepo.mockResolvedValue([storedMinute] as never);
+    await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(upsertMinute).toHaveBeenCalledWith(expect.objectContaining({ studentId: 'stu1', rawSummary: 'Resumo atualizado' }));
+  });
+
+  it('aluno com conversa nova e IA indisponível mantém a ata anterior', async () => {
+    const { deps, upsertMinute, listMinutesRepo } = makeDeps({ newInteractions: 1, interactions: [interaction()], fallback: true });
+    listMinutesRepo.mockResolvedValue([storedMinute] as never);
+    const res = await requestMinutes(student, { agendaId: 'ag1' }, deps);
+    expect(res.kind === 'minute' && res.minute.id).toBe('m-old');
     expect(upsertMinute).not.toHaveBeenCalled();
   });
 

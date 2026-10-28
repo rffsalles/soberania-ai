@@ -78,8 +78,8 @@ async function readMinute(res: Response): Promise<MinuteDTO | null> {
 }
 
 /**
- * Ata do aluno autenticado para a agenda: lê a existente e só pede a geração quando ainda não houver
- * ou quando a existente ficou sem parecer da IA (cada geração custa uma chamada à IA). Professores e administradores recebem um aviso em vez da ata.
+ * Ata do aluno autenticado para a agenda: sempre pede ao servidor, que devolve a ata em cache ou a regenera
+ * quando não há ata, ela ficou sem parecer da IA ou há conversa posterior a ela. Professores e administradores recebem um aviso em vez da ata.
  */
 export function useGeneratedMinute(agendaId: string, enabled: boolean): {
   minute: MinuteDTO | null;
@@ -101,20 +101,14 @@ export function useGeneratedMinute(agendaId: string, enabled: boolean): {
     }
     const controller = new AbortController();
     setState({ minute: null, isLoading: true, error: null });
-    const query = buildMinuteQuery({ agendaId });
-    fetch(`${API_ROUTES.PEDAGOGY_MINUTES}${query}`, { signal: controller.signal })
+    // O serviço decide: devolve a ata em cache ou regenera quando há conversa nova.
+    fetch(API_ROUTES.PEDAGOGY_MINUTES, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agendaId }),
+      signal: controller.signal,
+    })
       .then(readMinute)
-      .then((existing) =>
-        // Ata sem parecer (IA indisponível na hora): pede nova geração; o serviço mantém a atual se a IA seguir fora.
-        existing && existing.aiGenerated
-          ? existing
-          : fetch(API_ROUTES.PEDAGOGY_MINUTES, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ agendaId }),
-            signal: controller.signal,
-          }).then(readMinute)
-      )
       .then((minute) => {
         if (!minute) throw new Error(GENERATE_ERROR);
         setState({ minute, isLoading: false, error: null });

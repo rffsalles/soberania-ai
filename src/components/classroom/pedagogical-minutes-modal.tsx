@@ -66,6 +66,7 @@ export function PedagogicalMinutesModal({ open, onOpenChange, agendaId }: Pedago
               className="gap-1.5 bg-brand-teal hover:bg-brand-teal-dark text-white cursor-pointer"
               onClick={() => window.print()}
               disabled={!minute}
+              title="Use 'Salvar como PDF' na janela de impressão"
             >
               <Download className="h-4 w-4" />
               <span>Salvar PDF</span>

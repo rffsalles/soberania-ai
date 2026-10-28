@@ -34,6 +34,7 @@ export type MinutesDeps = {
   getAgenda(id: string, user: AgendaActor): Promise<AgendaDTO>;
   findStudent: typeof minuteRepo.findStudent;
   listInteractions(agendaId: string, studentId: string): Promise<MetricInteraction[]>;
+  countInteractionsSince(agendaId: string, studentId: string, since: Date): Promise<number>;
   listStudentIds(agendaId: string): Promise<string[]>;
   findTeacherSubjectIds(teacherId: string): Promise<string[]>;
   upsertMinute: typeof minuteRepo.upsertMinute;
@@ -46,6 +47,7 @@ const defaultDeps: MinutesDeps = {
   getAgenda: (id, user) => getAgendaForUser(id, user),
   findStudent: minuteRepo.findStudent,
   listInteractions: interactionRepo.listInteractionsByAgendaAndStudent,
+  countInteractionsSince: interactionRepo.countInteractionsSince,
   listStudentIds: interactionRepo.listStudentIdsWithInteractions,
   findTeacherSubjectIds,
   upsertMinute: minuteRepo.upsertMinute,
@@ -75,6 +77,7 @@ function toDTO(r: MinuteRecord): MinuteDTO {
     actionableAdvice: r.actionableAdvice,
     aiGenerated: !r.aiFallback,
     createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
     subjectName: r.agenda.subjectRef?.discipline.name ?? r.agenda.subject,
     className: r.agenda.class.name,
   };
@@ -200,7 +203,8 @@ export type MinuteRequestResult =
  * POST /pedagogy/minutes.
  * - Professor/admin sem `studentId`: gera (ou regenera) as atas da turma inteira.
  * - Professor/admin com `studentId`: regenera a ata daquele aluno.
- * - Aluno: devolve a própria ata se já existir; só gera quando não houver (evita nova chamada à IA a cada abertura).
+ * - Aluno: devolve a própria ata em cache; regenera quando não há ata, quando ficou sem parecer da IA
+ *   ou quando há interações mais novas que a ata (evita chamar a IA a cada abertura).
  */
 export async function requestMinutes(
   user: AgendaActor,
@@ -218,8 +222,11 @@ export async function requestMinutes(
   }
   await deps.getAgenda(input.agendaId, user);
   const [existing] = await deps.listMinutes({ agendaId: input.agendaId, studentId: user.id });
-  if (existing && !existing.aiFallback) return { kind: 'minute', minute: toDTO(existing) };
-  // Sem ata, ou ata anterior sem parecer: tenta de novo; se a IA seguir indisponível, mantém a anterior.
+  if (existing && !existing.aiFallback) {
+    const newer = await deps.countInteractionsSince(input.agendaId, user.id, existing.updatedAt);
+    if (newer === 0) return { kind: 'minute', minute: toDTO(existing) };
+  }
+  // Sem ata, ata sem parecer ou conversa posterior à ata: gera de novo; se a IA seguir indisponível, mantém a anterior.
   const minute = await generateMinute(user, { agendaId: input.agendaId }, deps, { keepExistingOnFallback: true });
   return { kind: 'minute', minute };
 }
