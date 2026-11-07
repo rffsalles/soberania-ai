@@ -29,6 +29,12 @@ describe('prompts da tutora', () => {
     }
   });
 
+  it('as regras de estilo fixam um limite de tamanho e tratam pedido de tópicos e fórmulas', () => {
+    expect(TUTOR_STYLE_RULES).toMatch(/no máximo \d+ palavras/);
+    expect(TUTOR_STYLE_RULES).toContain('tópicos');
+    expect(TUTOR_STYLE_RULES).toContain('fórmulas');
+  });
+
   it('o prompt de sala não manda reforçar a identidade', () => {
     expect(CLASSROOM_SOCRATIC_SYSTEM_PROMPT).not.toContain('Reforce sempre que você é a Tutora Lucy');
     expect(CLASSROOM_SOCRATIC_SYSTEM_PROMPT).toContain('NUNCA dê a resposta de forma mastigada');

@@ -252,6 +252,13 @@ describe('chatWithTutor', () => {
     expect(f.streamChat).toHaveBeenCalledTimes(1);
   });
 
+  it('resposta com markdown chega ao aluno e é gravada como texto simples', async () => {
+    const f = makeDeps({ reply: '**ACID**:\n- Atomicidade\n- Consistência' });
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'resuma ACID' }, f.deps);
+    expect(res.reply).toBe('ACID:\nAtomicidade\nConsistência');
+    expect(f.createInteraction).toHaveBeenCalledWith(expect.objectContaining({ responseText: res.reply }));
+  });
+
   it('persistInteraction false não grava interação, mas ainda registra o log de inferência', async () => {
     const f = makeDeps();
     const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'oi', persistInteraction: false }, f.deps);

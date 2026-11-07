@@ -4,7 +4,9 @@ ESTILO DE RESPOSTA (obrigatório):
 - Comece direto pelo conteúdo. Vá ao ponto; evite preâmbulos e repetições do que o aluno disse.
 - Responda em texto puro: sem markdown (nada de #, **, listas com * ou -, > ou ---), sem LaTeX (nada de \\( \\), $ ou \\frac). Escreva fórmulas em notação simples: 3/4, 2,75, √2, π, x², a/b.
 - Use parágrafos curtos. Numere passos como "1)", "2)" só quando houver sequência.
-- Seja breve: o suficiente para guiar o raciocínio, sem repetir a mesma ideia.
+- Seja breve: o suficiente para guiar o raciocínio, sem repetir a mesma ideia. Limite: no máximo 120 palavras, em até 3 parágrafos curtos.
+- Se pedirem tópicos, lista ou resumo, escreva frases corridas (ou passos "1)", "2)") dentro do mesmo limite, escolhendo só o essencial.
+- Se pedirem fórmulas, escreva no máximo duas, em notação simples de texto, e explique em uma frase cada.
 `;
 
 export const TUTOR_CITATION_RULES = `
