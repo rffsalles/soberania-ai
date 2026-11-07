@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { toVectorLiteral } from '@/lib/embeddings';
 import { FULL_TEXT_LANGUAGE, HYBRID_CANDIDATE_LIMIT, RRF_K } from '../constants';
 import type { DidacticChunk } from '../types';
+import { buildLexicalOrQuery } from '../lexical-query';
 
 export interface NewChunk {
   chapter: string;
@@ -155,7 +156,7 @@ function chunkFilters(params: HybridSearchParams): Prisma.Sql {
 
 /**
  * Hybrid retrieval in a single query: pgvector cosine KNN (HNSW) + Portuguese full-text
- * (`ts_rank_cd` over the GIN-indexed `content_tsv`), fused with Reciprocal Rank Fusion.
+ * (`ts_rank_cd` over the GIN-indexed `content_tsv`, terms ORed), fused with Reciprocal Rank Fusion.
  * Without an embedding only the lexical branch contributes. All values are bound parameters.
  */
 export async function searchHybrid(params: HybridSearchParams): Promise<DidacticChunk[]> {
@@ -173,17 +174,23 @@ export async function searchHybrid(params: HybridSearchParams): Promise<Didactic
       ) v`
     : Prisma.sql`SELECT NULL::text AS id, NULL::float8 AS distance, NULL::bigint AS rnk WHERE false`;
 
-  const rows = await db.$queryRaw<HybridRow[]>`
-    WITH vec AS (${vec}),
-    lex AS (
+  // Termos unidos por OR (ver buildLexicalOrQuery): o trecho que casa mais termos sobe no ts_rank_cd,
+  // e a configuração portuguese descarta stopwords e reduz as palavras ao radical.
+  const lexQuery = buildLexicalOrQuery(params.query);
+  const lex = lexQuery
+    ? Prisma.sql`
       SELECT id, lex_score, ROW_NUMBER() OVER (ORDER BY lex_score DESC) AS rnk FROM (
         SELECT id, ts_rank_cd(content_tsv, q) AS lex_score
-        FROM material_chunks, websearch_to_tsquery(${FULL_TEXT_LANGUAGE}::regconfig, ${params.query}) AS q
+        FROM material_chunks, to_tsquery(${FULL_TEXT_LANGUAGE}::regconfig, ${lexQuery}) AS q
         WHERE content_tsv @@ q ${filters}
         ORDER BY lex_score DESC
         LIMIT ${limit}
-      ) l
-    ),
+      ) l`
+    : Prisma.sql`SELECT NULL::text AS id, NULL::float4 AS lex_score, NULL::bigint AS rnk WHERE false`;
+
+  const rows = await db.$queryRaw<HybridRow[]>`
+    WITH vec AS (${vec}),
+    lex AS (${lex}),
     fused AS (
       SELECT COALESCE(vec.id, lex.id) AS id,
              COALESCE(1.0 / (${RRF_K}::int + vec.rnk), 0) + COALESCE(1.0 / (${RRF_K}::int + lex.rnk), 0) AS rrf,
