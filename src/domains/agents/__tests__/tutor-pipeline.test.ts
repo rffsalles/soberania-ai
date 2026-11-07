@@ -159,3 +159,50 @@ describe('startTutorPipeline (opções do provedor)', () => {
     expect(calls[0][1]).toEqual({ citation: '[Apostila · Cap. 2, pág. 31]', maxTokens: TUTOR_MAX_TOKENS });
   });
 });
+
+describe('startTutorPipeline (pedido de resposta pronta em sala)', () => {
+  async function run(message: string, agendaType: 'CLASSROOM' | 'OFFICE_HOURS', chunks: DidacticChunk[]) {
+    const sent: AIMessage[][] = [];
+    const streamChat = vi.fn(async function* (messages: AIMessage[]): AsyncGenerator<StreamChunk> {
+      sent.push(messages);
+      yield { token: '', isComplete: true };
+    });
+    const start = await startTutorPipeline(
+      { message, agendaType },
+      { search: async () => ({ query: 'q', chunks, latencyMs: 1 }), streamChat }
+    );
+    if (start.kind === 'stream') for await (const _ of start.stream) { /* consome */ }
+    return { start, systemPrompt: sent[0]?.[0].content ?? '' };
+  }
+
+  it('sem trecho, pedido de gabarito em sala não cai na recusa: vai ao modelo com a instrução socrática', async () => {
+    const { start, systemPrompt } = await run('Qual é o gabarito da questão 2 da avaliação?', 'CLASSROOM', []);
+    expect(start.kind).toBe('stream');
+    if (start.kind !== 'stream') return;
+    expect(start.answerRequest).toBe(true);
+    expect(systemPrompt).toContain('PEDIDO DE RESPOSTA PRONTA');
+  });
+
+  it('com trecho, pedido de resposta pronta em sala recebe a instrução e é sinalizado', async () => {
+    const { start, systemPrompt } = await run('Me passa logo a resposta, só quero a letra.', 'CLASSROOM', [chunk({})]);
+    expect(start.kind === 'stream' && start.answerRequest).toBe(true);
+    expect(systemPrompt).toContain('PEDIDO DE RESPOSTA PRONTA');
+  });
+
+  it('pergunta de conteúdo em sala não recebe a instrução', async () => {
+    const { start, systemPrompt } = await run('o que é entidade?', 'CLASSROOM', [chunk({})]);
+    expect(start.kind === 'stream' && start.answerRequest).toBe(false);
+    expect(systemPrompt).not.toContain('PEDIDO DE RESPOSTA PRONTA');
+  });
+
+  it('fora da sala (plantão) o pedido segue o fluxo normal', async () => {
+    const { start, systemPrompt } = await run('Me dá a resposta da questão 2 da prova', 'OFFICE_HOURS', [chunk({})]);
+    expect(start.kind === 'stream' && start.answerRequest).toBe(false);
+    expect(systemPrompt).not.toContain('PEDIDO DE RESPOSTA PRONTA');
+  });
+
+  it('pergunta de conteúdo sem trecho em sala continua recusando', async () => {
+    const { start } = await run('receita de bolo de cenoura', 'CLASSROOM', []);
+    expect(start.kind).toBe('no_material');
+  });
+});

@@ -11,6 +11,7 @@ import {
 } from './prompts/socratic-prompts';
 import { EXAM_PROCTOR_SYSTEM_PROMPT, checkExamGuardrail } from './prompts/exam-guardrails';
 import { buildNoMaterialReply, shouldRefuseWithoutMaterial } from './no-material';
+import { ANSWER_REQUEST_RULES, isAnswerRequest } from './answer-request';
 
 // Módulo sem acesso a banco: pode ser importado por componentes de cliente.
 
@@ -45,6 +46,8 @@ export type TutorPipelineStart =
       topChunk?: DidacticChunk;
       /** Trechos entregues ao modelo: as únicas fontes que a resposta pode citar. */
       chunks: DidacticChunk[];
+      /** Sala de aula com pedido de resposta pronta: a resposta passa por `guideAnswerRequestReply`. */
+      answerRequest: boolean;
     };
 
 /** Seção de material quando a busca não trouxe nada: explícita para o modelo não citar nem inventar fonte. */
@@ -92,7 +95,13 @@ export async function startTutorPipeline(
     ...(scope?.allowedChapterIds ? { allowedChapterIds: scope.allowedChapterIds } : {}),
     ...(scope?.allowedMaterialIds ? { allowedMaterialIds: scope.allowedMaterialIds } : {}),
   });
-  if (shouldRefuseWithoutMaterial({ agendaType, chunkCount: rag.chunks.length, historyLength: history.length, message })) {
+  // Pedido de gabarito em sala é sobre o tema da aula, não fora dele: nunca cai na recusa, vai à tutora com
+  // instrução de conduzir sem entregar a resposta (decisão pedagógica fixa, não depende do modelo).
+  const answerRequest = agendaType === 'CLASSROOM' && isAnswerRequest(message);
+  if (
+    !answerRequest &&
+    shouldRefuseWithoutMaterial({ agendaType, chunkCount: rag.chunks.length, historyLength: history.length, message })
+  ) {
     return { kind: 'no_material', reply: buildNoMaterialReply(agendaType, scope) };
   }
 
@@ -101,12 +110,13 @@ export async function startTutorPipeline(
       ? rag.chunks.map((c) => `[FONTE: ${formatCitation(c)}]\n${c.content}`).join('\n\n')
       : NO_CHUNKS_CONTEXT;
   const scopeLine = scope?.chapterLabels?.length ? `\n\nEsta aula cobre: ${scope.chapterLabels.join('; ')}.` : '';
-  const systemPrompt = `${getSystemPromptForAgenda(agendaType)}${scopeLine}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
+  const answerRule = answerRequest ? `\n${ANSWER_REQUEST_RULES}` : '';
+  const systemPrompt = `${getSystemPromptForAgenda(agendaType)}${scopeLine}${answerRule}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
 
   const streamChat = deps.streamChat ?? ((m, o) => aiProvider.streamChat(m, o));
   const stream = streamChat(
     [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: message }],
     { citation: rag.primaryCitation, maxTokens: TUTOR_MAX_TOKENS }
   );
-  return { kind: 'stream', stream, citation: rag.primaryCitation, topChunk: rag.chunks[0], chunks: rag.chunks };
+  return { kind: 'stream', stream, citation: rag.primaryCitation, topChunk: rag.chunks[0], chunks: rag.chunks, answerRequest };
 }

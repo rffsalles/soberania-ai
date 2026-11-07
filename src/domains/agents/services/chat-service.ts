@@ -18,6 +18,7 @@ import { startTutorPipeline, type TutorScope } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
 import { stripUnsupportedReferences } from '../citation-guard';
 import { toPlainText } from '../plain-text';
+import { guideAnswerRequestReply } from '../answer-request';
 
 export const MAX_HISTORY_MESSAGES = 10;
 export const MAX_HISTORY_CHARS = 4000;
@@ -281,6 +282,8 @@ async function runChat(
     console.info('[chat] referências sem fonte removidas da resposta:', checked.removed);
   }
   reply = checked.text;
+  // Pedido de gabarito em sala: a regra é fixa no código, não depende de o modelo obedecer ao prompt.
+  if (start.answerRequest) reply = guideAnswerRequestReply(reply, start.chunks);
 
   const isSocraticChallenge = isSocraticChallengeText(reply);
   const wasCorrect = previous?.isSocraticChallenge
