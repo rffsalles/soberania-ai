@@ -80,4 +80,9 @@ describe('stripUnsupportedReferences', () => {
     const r = stripUnsupportedReferences('Veja a pág. 2.', [{ chapter: 'Trecho 2', pageNumber: 2 }]);
     expect(r.text).toBe('Veja o material.');
   });
+
+  it('tira o marcador interno [FONTE: ...] que o modelo copia do prompt, mantendo a citação', () => {
+    const r = stripUnsupportedReferences('Veja [FONTE: [Sistemas · Capítulo 4, pág. 58]].', [cap4]);
+    expect(r.text).toBe('Veja [Sistemas · Capítulo 4, pág. 58].');
+  });
 });

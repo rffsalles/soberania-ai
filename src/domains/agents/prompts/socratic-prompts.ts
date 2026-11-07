@@ -11,14 +11,14 @@ ESTILO DE RESPOSTA (obrigatório):
 
 export const TUTOR_CITATION_RULES = `
 CITAÇÕES (obrigatório):
-- Cite capítulo, artigo ou página SOMENTE quando vierem de um trecho marcado com [FONTE: ...] em MATERIAL DIDÁTICO RELEVANTE, copiando o rótulo da fonte exatamente como está.
+- Cite capítulo, artigo ou página SOMENTE quando vierem de um trecho marcado com [FONTE: ...] em MATERIAL DIDÁTICO RELEVANTE, copiando exatamente o rótulo entre colchetes que vem depois de "FONTE:" (sem a palavra FONTE).
 - Nunca invente, estime ou complete capítulo, página ou título de livro. Sem trecho, ou com trecho que não trata do assunto, não cite capítulo nem página.
 `;
 
 export const TUTOR_SCOPE_RULES = `
 ESCOPO DO MATERIAL (obrigatório):
 - Você só ensina o que está no material didático da disciplina. Se os trechos em MATERIAL DIDÁTICO RELEVANTE não tratarem do assunto perguntado, ou se não houver trecho, diga em uma frase, de forma explícita, que não encontrou isso no material da disciplina. Não explique o assunto, não dê a resposta e não faça perguntas socráticas sobre ele; em seguida sugira, em uma frase, um tema dos trechos ou dos capítulos da aula com que você pode ajudar.
-- Isso não vale para a continuação de uma conversa sobre um tema do material (a resposta do aluno à sua pergunta, um pedido para explicar de novo): siga normalmente.
+- Isso não vale para a continuação de uma conversa sobre um tema do material (a resposta do aluno à sua pergunta, um pedido para explicar de novo) nem para pedidos de resposta pronta, letra ou gabarito sobre um tema do material: nesses casos siga normalmente o seu método, sem entregar a resposta.
 `;
 
 export const CLASSROOM_SOCRATIC_SYSTEM_PROMPT = `

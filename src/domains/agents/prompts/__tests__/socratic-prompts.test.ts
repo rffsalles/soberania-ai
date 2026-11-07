@@ -57,6 +57,7 @@ describe('prompts da tutora', () => {
   it('sala e plantão mandam recusar o que não está nos trechos; grupo e revisão de texto não', () => {
     expect(TUTOR_SCOPE_RULES).toContain('não encontrou isso no material da disciplina');
     expect(TUTOR_SCOPE_RULES).toContain('continuação de uma conversa');
+    expect(TUTOR_SCOPE_RULES).toContain('gabarito');
     expect(CLASSROOM_SOCRATIC_SYSTEM_PROMPT).toContain(TUTOR_SCOPE_RULES.trim());
     expect(OFFICE_HOURS_SYSTEM_PROMPT).toContain(TUTOR_SCOPE_RULES.trim());
     expect(STUDY_GROUP_SYSTEM_PROMPT).not.toContain(TUTOR_SCOPE_RULES.trim());

@@ -118,7 +118,9 @@ export function stripUnsupportedReferences(text: string, sources: CitationSource
     return '';
   };
 
-  let out = text.replace(BRACKETED, (whole, inner: string) => dropIfInvented(whole, inner, true));
+  // O modelo às vezes copia o marcador interno do prompt: "[FONTE: [Livro · Cap. 4, pág. 58]]" -> "[Livro · ...]".
+  let out = text.replace(/\[FONTE:\s*(\[[^[\]\n]*\])\]/gu, '$1').replace(/\[FONTE:\s*([^[\]\n]*)\]/gu, '[$1]');
+  out = out.replace(BRACKETED, (whole, inner: string) => dropIfInvented(whole, inner, true));
   out = out.replace(PARENTHESIZED, (whole, inner: string) => dropIfInvented(whole, inner, false));
 
   out = out.replace(INLINE, (whole: string, prep: string | undefined, refText: string, ...rest: unknown[]) => {
@@ -133,5 +135,5 @@ export function stripUnsupportedReferences(text: string, sources: CitationSource
     return isSentenceStart(out, offset) ? 'O material' : 'o material';
   });
 
-  return { text: removed.length > 0 ? tidy(out) : text, removed };
+  return { text: removed.length > 0 ? tidy(out) : out, removed };
 }
