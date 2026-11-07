@@ -104,6 +104,14 @@ Example tests:
 - `src/lib/auth/__tests__/rbac.test.ts`: role matrix.
 - `tests/e2e/full-flow.test.ts`: admin → teacher (upload, plan, lesson, exam) → student (chat, submission) → minutes and reports.
 
+## Evals
+
+[`evals/`](evals/README.md) is a Python 3.11 harness that tests the tutor's behavior over HTTP, the way a student uses it: it logs in with the demo account, asks 40 questions derived from the seed corpus and grades the replies.
+
+- Five categories: grounded facts with the right chapter citation, answer-seeking during class (must stay Socratic), off-corpus questions (must refuse), style limits, and prompt injection.
+- Deterministic graders covered by pytest, plus an optional LLM judge on the same OpenAI-compatible gateway (`temperature=0`, closed rubric, JSON verdict).
+- Each run writes a Markdown and JSON report with per-category pass rates and exits non-zero below the threshold. Example: [`evals/reports/exemplo-2026-11-07.md`](evals/reports/exemplo-2026-11-07.md).
+
 ## Quick start
 
 Requirements: Node.js 20+ and Docker (for Postgres with pgvector).

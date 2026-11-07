@@ -104,6 +104,14 @@ Testes de exemplo:
 - `src/lib/auth/__tests__/rbac.test.ts`: matriz de papéis.
 - `tests/e2e/full-flow.test.ts`: admin → professor (upload, plano, aula, prova) → aluno (chat, envio) → atas e relatórios.
 
+## Evals
+
+[`evals/`](evals/README.md) é um harness em Python 3.11 que testa o comportamento da tutora pela API HTTP, como um aluno a usa: faz login com a conta de demonstração, envia 40 perguntas derivadas do seed e avalia as respostas.
+
+- Cinco categorias: fatos do material com citação do capítulo certo, pedido de resposta pronta em aula (deve seguir socrática), assuntos fora do acervo (deve recusar), limites de estilo e injeção de prompt.
+- Graders determinísticos cobertos por pytest e um juiz LLM opcional no mesmo gateway compatível com OpenAI (`temperature=0`, rubrica fechada, veredito em JSON).
+- Cada execução gera relatório Markdown e JSON com a taxa por categoria e sai com código diferente de zero abaixo do limiar. Exemplo: [`evals/reports/exemplo-2026-11-07.md`](evals/reports/exemplo-2026-11-07.md).
+
 ## Início rápido
 
 Requisitos: Node.js 20+ e Docker (para o Postgres com pgvector).
