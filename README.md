@@ -98,7 +98,7 @@ Numbers measured on the current `main`:
 Example tests:
 
 - `src/domains/rag/__tests__/chapters.test.ts`: chapter tree building, page alignment, relinking.
-- `src/domains/rag/__tests__/mat-basica-regression.test.ts`: regression on a real scanned textbook whose outline is useless.
+- `src/domains/rag/__tests__/livro-sintetico-regression.test.ts`: regression on a synthetic 174-page textbook fixture that mirrors the structure of a scanned book (table of contents, units, chapters) whose outline is useless.
 - `src/domains/rag/__tests__/hybrid-search.test.ts` and `tests/e2e/hybrid-search.test.ts`: RRF fusion, unit and against Postgres.
 - `src/domains/agents/__tests__/exam-guardrails.test.ts` and `tutor-pipeline.test.ts`: guardrail blocks before RAG and model calls.
 - `src/lib/auth/__tests__/rbac.test.ts`: role matrix.

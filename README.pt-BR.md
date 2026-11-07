@@ -98,7 +98,7 @@ Números medidos no `main` atual:
 Testes de exemplo:
 
 - `src/domains/rag/__tests__/chapters.test.ts`: montagem da árvore de capítulos, alinhamento de páginas, revinculação.
-- `src/domains/rag/__tests__/mat-basica-regression.test.ts`: regressão sobre um livro real escaneado cujo outline é inútil.
+- `src/domains/rag/__tests__/livro-sintetico-regression.test.ts`: regressão sobre um fixture sintético de 174 páginas que reproduz a estrutura de um livro escaneado (sumário, unidades, capítulos) cujo outline é inútil.
 - `src/domains/rag/__tests__/hybrid-search.test.ts` e `tests/e2e/hybrid-search.test.ts`: fusão RRF, unitário e contra Postgres.
 - `src/domains/agents/__tests__/exam-guardrails.test.ts` e `tutor-pipeline.test.ts`: o guardrail bloqueia antes da busca e da chamada ao modelo.
 - `src/lib/auth/__tests__/rbac.test.ts`: matriz de papéis.
