@@ -63,3 +63,9 @@ scratch/
 
 # Dicionários baixados pelo tesseract.js (OCR) no diretório de trabalho
 *.traineddata
+
+# Ferramental local de IA de terceiros e bytecode Python
+.agent/
+.agents/
+__pycache__/
+*.pyc
