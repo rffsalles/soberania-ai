@@ -197,6 +197,31 @@ describe('chatWithTutor', () => {
     );
   });
 
+  it('troca capítulo/página inventados (sem trecho recuperado) por indicação neutra na resposta e na interação', async () => {
+    const f = makeDeps({ reply: 'A busca binária aparece no Capítulo 3, página 45 do material adotado pelo professor.' });
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'explique busca binária' }, f.deps);
+    expect(res.reply).toBe('A busca binária aparece no material.');
+    expect(res.citations).toEqual([]);
+    expect(f.createInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ responseText: 'A busca binária aparece no material.' })
+    );
+  });
+
+  it('preserva a citação que veio do trecho recuperado', async () => {
+    const f = makeDeps({ reply: 'Releia o Capítulo 4, pág. 58: o que o LEFT JOIN preserva?' });
+    f.search.mockResolvedValue({
+      query: 'q',
+      chunks: [
+        { id: 'c1', materialId: 'm1', bookTitle: 'Livro', author: 'A', chapter: 'Capítulo 4: SQL', pageNumber: 58, content: 'x' },
+      ],
+      primaryCitation: '[Livro · Capítulo 4, pág. 58]',
+      latencyMs: 1,
+    } as never);
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'explique left join' }, f.deps);
+    expect(res.reply).toBe('Releia o Capítulo 4, pág. 58: o que o LEFT JOIN preserva?');
+    expect(res.citations).toEqual(['[Livro · Capítulo 4, pág. 58]']);
+  });
+
   it('persistInteraction false não grava interação, mas ainda registra o log de inferência', async () => {
     const f = makeDeps();
     const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'oi', persistInteraction: false }, f.deps);

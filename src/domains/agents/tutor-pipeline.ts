@@ -40,7 +40,12 @@ export type TutorPipelineStart =
       stream: AsyncGenerator<StreamChunk, void, unknown>;
       citation?: string;
       topChunk?: DidacticChunk;
+      /** Trechos entregues ao modelo: as únicas fontes que a resposta pode citar. */
+      chunks: DidacticChunk[];
     };
+
+/** Seção de material quando a busca não trouxe nada: explícita para o modelo não citar nem inventar fonte. */
+export const NO_CHUNKS_CONTEXT = '(nenhum trecho do material foi encontrado para esta mensagem; não há fonte para citar)';
 
 export function getSystemPromptForAgenda(agendaType: AgendaType): string {
   switch (agendaType) {
@@ -84,9 +89,10 @@ export async function startTutorPipeline(
     ...(scope?.allowedChapterIds ? { allowedChapterIds: scope.allowedChapterIds } : {}),
     ...(scope?.allowedMaterialIds ? { allowedMaterialIds: scope.allowedMaterialIds } : {}),
   });
-  const ragContext = rag.chunks
-    .map((c) => `[FONTE: ${formatCitation(c)}]\n${c.content}`)
-    .join('\n\n');
+  const ragContext =
+    rag.chunks.length > 0
+      ? rag.chunks.map((c) => `[FONTE: ${formatCitation(c)}]\n${c.content}`).join('\n\n')
+      : NO_CHUNKS_CONTEXT;
   const scopeLine = scope?.chapterLabels?.length ? `\n\nEsta aula cobre: ${scope.chapterLabels.join('; ')}.` : '';
   const systemPrompt = `${getSystemPromptForAgenda(agendaType)}${scopeLine}\n\nMATERIAL DIDÁTICO RELEVANTE (RAG HÍBRIDO):\n${ragContext}`;
 
@@ -95,5 +101,5 @@ export async function startTutorPipeline(
     [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: message }],
     { citation: rag.primaryCitation, maxTokens: TUTOR_MAX_TOKENS }
   );
-  return { kind: 'stream', stream, citation: rag.primaryCitation, topChunk: rag.chunks[0] };
+  return { kind: 'stream', stream, citation: rag.primaryCitation, topChunk: rag.chunks[0], chunks: rag.chunks };
 }

@@ -16,6 +16,7 @@ import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
 import { expandChapterScope } from '@/domains/rag/services/chapter-scope';
 import { startTutorPipeline, type TutorScope } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
+import { stripUnsupportedReferences } from '../citation-guard';
 
 export const MAX_HISTORY_MESSAGES = 10;
 export const MAX_HISTORY_CHARS = 4000;
@@ -248,6 +249,13 @@ async function runChat(
       wasCorrect: null,
     };
   }
+
+  // Capítulo/página que não vieram dos trechos entregues ao modelo são inventados: saem antes de gravar e responder.
+  const checked = stripUnsupportedReferences(reply, start.chunks);
+  if (checked.removed.length > 0) {
+    console.info('[chat] referências sem fonte removidas da resposta:', checked.removed);
+  }
+  reply = checked.text;
 
   const isSocraticChallenge = isSocraticChallengeText(reply);
   const wasCorrect = previous?.isSocraticChallenge

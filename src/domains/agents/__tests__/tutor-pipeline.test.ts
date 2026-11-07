@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { AIMessage, StreamChunk } from '@/lib/ai-provider';
 import type { DidacticChunk } from '@/domains/rag/types';
-import { startTutorPipeline } from '../tutor-pipeline';
+import { NO_CHUNKS_CONTEXT, startTutorPipeline } from '../tutor-pipeline';
 import { TUTOR_MAX_TOKENS } from '@/lib/constants/tutor';
 
 const chunk = (over: Partial<DidacticChunk>): DidacticChunk => ({
@@ -41,6 +41,24 @@ describe('startTutorPipeline (contexto RAG)', () => {
     expect(prompt).toContain('[FONTE: [Apostila · Trecho 2]]');
     // O prompt fixo da tutora cita "pág. Y" como formato; o que não pode aparecer é a página do trecho sintético.
     expect(prompt).not.toContain('pág. 2');
+  });
+});
+
+describe('startTutorPipeline (sem trechos)', () => {
+  it('diz explicitamente ao modelo que não há fonte e devolve a lista de trechos usados', async () => {
+    const sent: AIMessage[][] = [];
+    const streamChat = vi.fn(async function* (messages: AIMessage[]): AsyncGenerator<StreamChunk> {
+      sent.push(messages);
+      yield { token: '', isComplete: true };
+    });
+    const start = await startTutorPipeline(
+      { message: 'o que é entidade?', agendaType: 'DRAFT_REVIEW' },
+      { search: async () => ({ query: 'q', chunks: [], latencyMs: 1 }), streamChat }
+    );
+    if (start.kind !== 'stream') throw new Error('esperava stream');
+    for await (const _ of start.stream) { /* consome */ }
+    expect(sent[0][0].content).toContain(NO_CHUNKS_CONTEXT);
+    expect(start.chunks).toEqual([]);
   });
 });
 

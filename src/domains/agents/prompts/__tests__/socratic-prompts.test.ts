@@ -5,6 +5,7 @@ import {
   DRAFT_MENTOR_SYSTEM_PROMPT,
   OFFICE_HOURS_SYSTEM_PROMPT,
   TUTOR_STYLE_RULES,
+  TUTOR_CITATION_RULES,
 } from '../socratic-prompts';
 
 const PROMPTS = {
@@ -30,6 +31,19 @@ describe('prompts da tutora', () => {
   it('o prompt de sala não manda reforçar a identidade', () => {
     expect(CLASSROOM_SOCRATIC_SYSTEM_PROMPT).not.toContain('Reforce sempre que você é a Tutora Lucy');
     expect(CLASSROOM_SOCRATIC_SYSTEM_PROMPT).toContain('NUNCA dê a resposta de forma mastigada');
-    expect(CLASSROOM_SOCRATIC_SYSTEM_PROMPT).toContain('[Livro Didático · Cap. X, pág. Y]');
+  });
+
+  it('nenhum prompt traz modelo de citação com capítulo/página a preencher (convite a inventar)', () => {
+    for (const prompt of Object.values(PROMPTS)) {
+      expect(prompt).not.toMatch(/Cap\. X|pág\. Y/);
+    }
+  });
+
+  it('todos os prompts de tutoria proíbem citar capítulo/página fora dos trechos [FONTE]', () => {
+    expect(TUTOR_CITATION_RULES).toContain('SOMENTE quando vierem de um trecho marcado com [FONTE: ...]');
+    expect(TUTOR_CITATION_RULES).toContain('Nunca invente');
+    for (const prompt of Object.values(PROMPTS)) {
+      expect(prompt).toContain(TUTOR_CITATION_RULES.trim());
+    }
   });
 });
