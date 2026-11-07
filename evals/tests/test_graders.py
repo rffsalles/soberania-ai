@@ -113,6 +113,7 @@ class TestRefusalPresent:
             "Isso está fora do escopo da disciplina de Banco de Dados.",
             "Não posso fornecer o gabarito da avaliação.",
             "Essa pergunta foge do conteúdo da aula.",
+            "Desculpe, não disponho de informação sobre esse assunto no material do curso.",
         ],
     )
     def test_refusals(self, reply: str) -> None:

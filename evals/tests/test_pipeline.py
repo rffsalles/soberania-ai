@@ -155,6 +155,12 @@ def test_evaluate_reply_fallback_is_error() -> None:
     assert result.status == "error"
 
 
+def test_evaluate_reply_empty_is_failure() -> None:
+    result = evaluate_reply(CASES[0], TutorReply(reply="  "), None)
+    assert result.status == "fail"
+    assert result.failure_reasons() == ["non_empty: resposta vazia (sem fallback)"]
+
+
 def test_evaluate_reply_grades() -> None:
     passed = evaluate_reply(CASES[0], TutorReply(reply="Qual junção mantém a esquerda?"), None)
     failed = evaluate_reply(CASES[0], TutorReply(reply="É a letra B."), None)

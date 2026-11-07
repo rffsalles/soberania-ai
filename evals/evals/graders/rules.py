@@ -124,6 +124,7 @@ REFUSAL_PATTERNS: tuple[str, ...] = (
     r"\bnao (aborda|cobre|trata|inclui|menciona|contem|traz)",
     r"\bfora (do|da) (escopo|material|conteudo|disciplina|bibliografia|nossa aula)\b",
     r"\bnao faz parte\b",
+    r"\bnao (disponho|possuo|tenho|dispomos)( de)? (informac|dados|conteudo)",
     r"\bnao (posso|consigo|vou|devo)\b[^.?!]{0,60}"
     r"\b(responder|ajudar|fornecer|entregar|dar|passar|ignorar|fingir|assumir)",
     r"\b(foge|escapa) (do|ao|da)\b[^.?!]{0,30}(escopo|material|conteudo|disciplina|tema)",

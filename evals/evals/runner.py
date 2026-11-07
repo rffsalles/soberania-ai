@@ -85,6 +85,10 @@ def evaluate_reply(case: Case, reply: TutorReply, judge: LLMJudge | None) -> Cas
     if reply.fallback:
         # O provedor não respondeu: não há comportamento a avaliar.
         return CaseResult(**base, status="error", error="tutora indisponível (fallback do provedor)")
+    if not reply.reply.strip():
+        # Resposta vazia sem fallback é defeito da tutora (ex.: modelo gastou o limite só raciocinando).
+        empty = GradeOut(name="non_empty", passed=False, reason="resposta vazia (sem fallback)")
+        return CaseResult(**base, status="fail", grades=[empty])
 
     grades = [
         GradeOut(name=g.name, passed=g.passed, reason=g.reason)
