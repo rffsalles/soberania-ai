@@ -6,6 +6,7 @@ import {
   OFFICE_HOURS_SYSTEM_PROMPT,
   TUTOR_STYLE_RULES,
   TUTOR_CITATION_RULES,
+  TUTOR_SCOPE_RULES,
 } from '../socratic-prompts';
 
 const PROMPTS = {
@@ -45,5 +46,14 @@ describe('prompts da tutora', () => {
     for (const prompt of Object.values(PROMPTS)) {
       expect(prompt).toContain(TUTOR_CITATION_RULES.trim());
     }
+  });
+
+  it('sala e plantão mandam recusar o que não está nos trechos; grupo e revisão de texto não', () => {
+    expect(TUTOR_SCOPE_RULES).toContain('não encontrou isso no material da disciplina');
+    expect(TUTOR_SCOPE_RULES).toContain('continuação de uma conversa');
+    expect(CLASSROOM_SOCRATIC_SYSTEM_PROMPT).toContain(TUTOR_SCOPE_RULES.trim());
+    expect(OFFICE_HOURS_SYSTEM_PROMPT).toContain(TUTOR_SCOPE_RULES.trim());
+    expect(STUDY_GROUP_SYSTEM_PROMPT).not.toContain(TUTOR_SCOPE_RULES.trim());
+    expect(DRAFT_MENTOR_SYSTEM_PROMPT).not.toContain(TUTOR_SCOPE_RULES.trim());
   });
 });

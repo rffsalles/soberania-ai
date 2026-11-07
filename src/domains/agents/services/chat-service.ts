@@ -222,6 +222,29 @@ async function runChat(
     };
   }
 
+  if (start.kind === 'no_material') {
+    onToken?.(start.reply);
+    const latencyMs = Date.now() - startedAt;
+    const interaction = input.persistInteraction === false ? null : await deps.createInteraction({
+      ...base,
+      type: InteractionType.QUESTION,
+      responseText: start.reply,
+      isSocraticChallenge: false,
+      guardrailBlocked: false,
+      latencyMs,
+    });
+    return {
+      reply: start.reply,
+      citations: [],
+      isSocraticChallenge: false,
+      blockedByExamGuardrail: false,
+      latencyMs,
+      fallback: false,
+      interactionId: interaction?.id ?? null,
+      wasCorrect: null,
+    };
+  }
+
   let reply = '';
   let fallback = false;
   let telemetry: StreamChunk['telemetry'];

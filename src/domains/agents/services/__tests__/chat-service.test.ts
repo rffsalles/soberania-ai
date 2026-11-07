@@ -37,6 +37,10 @@ const telemetry: InferenceTelemetry = {
   externalTrafficBytes: 0,
 };
 
+const defaultChunk = {
+  id: 'c0', materialId: 'm0', bookTitle: 'Livro', author: 'A', chapter: 'Capítulo 1: Introdução', pageNumber: 1, content: 'x',
+};
+
 type LastInteraction = { isSocraticChallenge: boolean; responseText: string; createdAt: Date } | null;
 
 function makeDeps(
@@ -56,7 +60,8 @@ function makeDeps(
   const createInteraction = vi.fn(async () => ({ id: 'int1' }));
   const createInferenceLog = vi.fn(async () => ({ id: 'log1' }));
   const findLastInteraction = vi.fn(async (): Promise<LastInteraction> => opts.last ?? null);
-  const search = vi.fn(async (q: { query: string }) => ({ query: q.query, chunks: [], latencyMs: 1 }));
+  // Por padrão a busca traz um trecho: sem trecho, sala e plantão recusam antes do modelo (ver no-material).
+  const search = vi.fn(async (q: { query: string }) => ({ query: q.query, chunks: [defaultChunk], latencyMs: 1 }));
   const deps = {
     search,
     getAgenda,
@@ -220,6 +225,31 @@ describe('chatWithTutor', () => {
     const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'explique left join' }, f.deps);
     expect(res.reply).toBe('Releia o Capítulo 4, pág. 58: o que o LEFT JOIN preserva?');
     expect(res.citations).toEqual(['[Livro · Capítulo 4, pág. 58]']);
+  });
+
+  it('sala de aula sem trecho recuperado recusa sem chamar o modelo e grava a recusa', async () => {
+    const f = makeDeps();
+    f.search.mockResolvedValue({ query: 'q', chunks: [], latencyMs: 1 } as never);
+    const tokens: string[] = [];
+    const session = await startChat(user, { agendaId: 'ag1', message: 'receita de bolo de cenoura' }, f.deps);
+    const res = await session.run((t) => tokens.push(t));
+    expect(f.streamChat).not.toHaveBeenCalled();
+    expect(res.reply).toMatch(/^Não encontrei isso no material desta aula\./);
+    expect(res.citations).toEqual([]);
+    expect(res.fallback).toBe(false);
+    expect(res.isSocraticChallenge).toBe(false);
+    expect(tokens.join('')).toBe(res.reply);
+    expect(f.createInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ responseText: res.reply, isSocraticChallenge: false, guardrailBlocked: false })
+    );
+    expect(f.createInferenceLog).not.toHaveBeenCalled();
+  });
+
+  it('revisão de texto sem trecho recuperado continua indo ao modelo', async () => {
+    const f = makeDeps({ agenda: agenda({ type: AgendaType.DRAFT_REVIEW }) });
+    f.search.mockResolvedValue({ query: 'q', chunks: [], latencyMs: 1 } as never);
+    await chatWithTutor(user, { agendaId: 'ag1', message: 'meu texto sobre normalização' }, f.deps);
+    expect(f.streamChat).toHaveBeenCalledTimes(1);
   });
 
   it('persistInteraction false não grava interação, mas ainda registra o log de inferência', async () => {

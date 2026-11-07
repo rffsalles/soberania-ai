@@ -62,10 +62,47 @@ describe('startTutorPipeline (sem trechos)', () => {
   });
 });
 
+describe('startTutorPipeline (fora do material)', () => {
+  const noChunks = async () => ({ query: 'q', chunks: [], latencyMs: 1 });
+
+  it('sala de aula sem trecho e sem conversa recusa sem chamar o modelo, sugerindo os capítulos da aula', async () => {
+    const streamChat = vi.fn();
+    const start = await startTutorPipeline(
+      { message: 'receita de bolo?', agendaType: 'CLASSROOM', scope: { allowedChapterIds: ['c4'], chapterLabels: ['Cap. 4: SQL (BD)'] } },
+      { search: noChunks, streamChat }
+    );
+    expect(start.kind).toBe('no_material');
+    if (start.kind !== 'no_material') return;
+    expect(start.reply).toMatch(/^Não encontrei isso no material desta aula\./);
+    expect(start.reply).toContain('Cap. 4: SQL (BD)');
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it('com conversa em andamento segue para o modelo com a regra de escopo no prompt', async () => {
+    const sent: AIMessage[][] = [];
+    const streamChat = vi.fn(async function* (messages: AIMessage[]): AsyncGenerator<StreamChunk> {
+      sent.push(messages);
+      yield { token: '', isComplete: true };
+    });
+    const start = await startTutorPipeline(
+      {
+        message: 'acho que é a atomicidade',
+        agendaType: 'CLASSROOM',
+        history: [{ role: 'assistant', content: 'Qual propriedade garante tudo ou nada?' }],
+      },
+      { search: noChunks, streamChat }
+    );
+    expect(start.kind).toBe('stream');
+    if (start.kind !== 'stream') return;
+    for await (const _ of start.stream) { /* consome */ }
+    expect(sent[0][0].content).toContain('não encontrou isso no material');
+  });
+});
+
 describe('startTutorPipeline (escopo da aula)', () => {
   async function run(scope?: { allowedChapterIds?: string[]; allowedMaterialIds?: string[]; chapterLabels?: string[] }) {
     const sent: AIMessage[][] = [];
-    const search = vi.fn(async () => ({ query: 'q', chunks: [], latencyMs: 1 }));
+    const search = vi.fn(async () => ({ query: 'q', chunks: [chunk({})], latencyMs: 1 }));
     const streamChat = vi.fn(async function* (messages: AIMessage[]): AsyncGenerator<StreamChunk> {
       sent.push(messages);
       yield { token: '', isComplete: true };

@@ -24,8 +24,14 @@ vi.mock('@/domains/pedagogy/services/interaction-repository', () => ({
   findLastInteraction: (...args: unknown[]) => findLastInteraction(...args),
 }));
 // A busca híbrida consulta o Postgres: isolada aqui para o teste não depender de banco.
-vi.mock('@/domains/rag/hybrid-search', () => ({
-  executeHybridSearch: vi.fn(async (q: { query: string }) => ({ query: q.query, chunks: [], latencyMs: 0 })),
+vi.mock('@/domains/rag/hybrid-search', async (orig) => ({
+  formatCitation: (await orig<typeof import('@/domains/rag/hybrid-search')>()).formatCitation,
+  // Um trecho por padrão: sem trecho, sala e plantão recusam antes do provedor (ver no-material).
+  executeHybridSearch: vi.fn(async (q: { query: string }) => ({
+    query: q.query,
+    chunks: [{ id: 'c1', materialId: 'm1', bookTitle: 'Livro', author: 'A', chapter: 'Capítulo 1: Intro', pageNumber: 1, content: 'x' }],
+    latencyMs: 0,
+  })),
 }));
 const createInferenceLog = vi.fn(async (..._args: unknown[]) => ({ id: 'log1' }));
 vi.mock('@/domains/telemetry/services/inference-log-repository', () => ({

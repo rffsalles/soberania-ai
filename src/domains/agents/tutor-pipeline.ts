@@ -10,6 +10,7 @@ import {
   OFFICE_HOURS_SYSTEM_PROMPT,
 } from './prompts/socratic-prompts';
 import { EXAM_PROCTOR_SYSTEM_PROMPT, checkExamGuardrail } from './prompts/exam-guardrails';
+import { buildNoMaterialReply, shouldRefuseWithoutMaterial } from './no-material';
 
 // Módulo sem acesso a banco: pode ser importado por componentes de cliente.
 
@@ -35,6 +36,8 @@ export type TutorPipelineDeps = {
 
 export type TutorPipelineStart =
   | { kind: 'blocked'; refusalMessage: string }
+  /** Nada recuperado em modo preso ao material: recusa determinística, sem chamar o modelo. */
+  | { kind: 'no_material'; reply: string }
   | {
       kind: 'stream';
       stream: AsyncGenerator<StreamChunk, void, unknown>;
@@ -65,7 +68,7 @@ export function getSystemPromptForAgenda(agendaType: AgendaType): string {
 }
 
 /**
- * Pipeline único: guardrail (EXAM) -> RAG híbrido -> prompt enriquecido -> stream do provider.
+ * Pipeline único: guardrail (EXAM) -> RAG híbrido -> (sem trecho em sala/plantão: recusa) -> prompt enriquecido -> stream do provider.
  * Em violação do guardrail (mensagem atual ou turno do aluno no history), nem RAG nem provider são acionados.
  */
 export async function startTutorPipeline(
@@ -89,6 +92,10 @@ export async function startTutorPipeline(
     ...(scope?.allowedChapterIds ? { allowedChapterIds: scope.allowedChapterIds } : {}),
     ...(scope?.allowedMaterialIds ? { allowedMaterialIds: scope.allowedMaterialIds } : {}),
   });
+  if (shouldRefuseWithoutMaterial({ agendaType, chunkCount: rag.chunks.length, historyLength: history.length })) {
+    return { kind: 'no_material', reply: buildNoMaterialReply(agendaType, scope) };
+  }
+
   const ragContext =
     rag.chunks.length > 0
       ? rag.chunks.map((c) => `[FONTE: ${formatCitation(c)}]\n${c.content}`).join('\n\n')
