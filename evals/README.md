@@ -35,7 +35,7 @@ python -m pytest -q && ruff check .          # testes dos graders e do parser, s
 python -m evals run --base-url http://localhost:3000 --no-judge --assume-window-open
 ```
 
-Com o juiz: exporte `AI_BASE_URL`, `AI_API_KEY` e `AI_MODEL` e rode `python -m evals run --judge --delay 8` (o `--delay` evita o rate limit de planos gratuitos). Outras opções úteis: `--category estilo`, `--id inj-dan`, `--limit 5`, `--threshold 0.9`, `--threshold-for fora_do_material=0.5`, `--assume-window-open` (quando a app roda com `NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW=true`). `python -m evals cases` valida e lista os casos; `python -m evals report reports/<arquivo>.json --threshold 0.7` regera o Markdown com outro limiar. Na raiz, `npm run evals` é um atalho para o `run` (precisa do venv ativo).
+Com o juiz: exporte `AI_BASE_URL`, `AI_API_KEY` e `AI_MODEL` e rode `python -m evals run --judge --delay 8` (o `--delay` evita o rate limit de planos gratuitos). Outras opções úteis: `--category estilo`, `--id inj-dan`, `--limit 5`, `--threshold 0.9`, `--threshold-for fora_do_material=0.5`, `--assume-window-open` (quando a app roda com `NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW=true`). `python -m evals cases` valida e lista os casos; `python -m evals report reports/<arquivo>.json --threshold 0.7` regera o Markdown com outro limiar; com `--regrade`, reaplica os graders atuais às respostas gravadas sem chamar a API (o veredito do juiz é mantido). Na raiz, `npm run evals` é um atalho para o `run` (precisa do venv ativo).
 
 Observações sobre o ambiente de demonstração:
 
