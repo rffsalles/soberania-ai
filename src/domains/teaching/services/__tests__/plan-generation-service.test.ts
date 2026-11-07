@@ -64,7 +64,7 @@ describe('isReferencePertinent', () => {
 
   it('coincidência parcial ("dados") ou área diferente não conta', () => {
     expect(isReferencePertinent('Banco de Dados I', { title: 'Estruturas de Dados e Algoritmos', category: 'Algoritmos' })).toBe(false);
-    expect(isReferencePertinent('Banco de Dados I', { title: 'Matemática Básica', category: 'Matematic' })).toBe(false);
+    expect(isReferencePertinent('Banco de Dados I', { title: 'Fundamentos de Lógica Computacional', category: 'Matematic' })).toBe(false);
   });
 });
 
@@ -86,7 +86,7 @@ describe('plan-generation-service', () => {
     const { deps } = makeDeps({ chunks: [], sampled: [chunk(1)] });
     await expect(
       generatePlanSuggestion(
-        { subjectName: 'Banco de Dados I', references: [{ id: 'm9', title: 'Matemática Básica', author: 'Guerra', category: 'Matematic' }] },
+        { subjectName: 'Banco de Dados I', references: [{ id: 'm9', title: 'Fundamentos de Lógica Computacional', author: 'Exemplo', category: 'Matematic' }] },
         deps
       )
     ).rejects.toMatchObject({ status: 422 });

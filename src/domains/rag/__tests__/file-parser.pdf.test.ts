@@ -40,7 +40,7 @@ describe('parseDocumentFile - PDF', () => {
         { num: 2, text: 'Folha de rosto' },
       ],
     });
-    getInfo.mockResolvedValue({ info: { Title: 'Matemática Básica', Author: 'Fernando Guerra' } });
+    getInfo.mockResolvedValue({ info: { Title: 'Fundamentos de Lógica Computacional', Author: 'Autora Exemplo' } });
   });
 
   it('limita o parse às primeiras páginas quando maxPages é informado', async () => {
@@ -49,7 +49,7 @@ describe('parseDocumentFile - PDF', () => {
     expect(getText).toHaveBeenCalledWith(expect.objectContaining({ first: 8 }));
     expect(result.pages).toHaveLength(2);
     expect(result.totalPages).toBe(300);
-    expect(result.info).toEqual({ title: 'Matemática Básica', author: 'Fernando Guerra' });
+    expect(result.info).toEqual({ title: 'Fundamentos de Lógica Computacional', author: 'Autora Exemplo' });
   });
 
   it('parseia o documento inteiro quando nenhuma opção é informada', async () => {

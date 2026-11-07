@@ -109,16 +109,16 @@ describe('RAG Domain - DocumentInspectorService', () => {
   });
 
   it('deve ignorar o stream de fallback do provedor e usar a heurística', async () => {
-    const buffer = Buffer.from('Fernando Guerra\nMatemática Básica\nAutor: Fernando Guerra', 'utf-8');
+    const buffer = Buffer.from('Ana Exemplo\nFundamentos de Lógica Computacional\nAutor: Ana Exemplo', 'utf-8');
     vi.spyOn(aiProvider, 'streamChat').mockImplementation(async function* () {
       yield { token: 'Muito bem colocado! ', isComplete: false, fallback: true };
       yield { token: '{"title": "nao deveria ser lido"}', isComplete: true, fallback: true };
     });
 
-    const result = await documentInspectorService.inspectDocumentHeader(buffer, 'mat basica.pdf.txt');
+    const result = await documentInspectorService.inspectDocumentHeader(buffer, 'livro sintetico.pdf.txt');
 
     expect(result.aiApplied).toBe(false);
-    expect(result.author).toBe('Fernando Guerra');
+    expect(result.author).toBe('Ana Exemplo');
     expect(result.title).not.toBe('nao deveria ser lido');
   });
 
@@ -145,11 +145,11 @@ describe('RAG Domain - DocumentInspectorService', () => {
 
   it('deve oferecer as categorias cadastradas no prompt e devolver apenas as que existem', async () => {
     const spy = mockAiJson({
-      title: 'Matemática Básica',
-      author: 'Fernando Guerra',
+      title: 'Fundamentos de Lógica Computacional',
+      author: 'Autora Exemplo',
       categories: ['banco de dados', 'Matemática'],
     });
-    const buffer = Buffer.from('Matemática Básica\nFernando Guerra\nSumário...', 'utf-8');
+    const buffer = Buffer.from('Fundamentos de Lógica Computacional\nAutora Exemplo\nSumário...', 'utf-8');
 
     const result = await documentInspectorService.inspectDocumentHeader(buffer, 'mat.txt', {
       availableCategories: CATALOG,
@@ -186,16 +186,16 @@ describe('RAG Domain - DocumentInspectorService', () => {
       pages: [{ pageNumber: 1, text: 'CAPA DO LIVRO\nEditora Tal' }],
       isOcrApplied: false,
       detectedMimeType: 'application/pdf',
-      info: { title: 'Matemática Básica', author: 'Fernando Guerra' },
+      info: { title: 'Fundamentos de Lógica Computacional', author: 'Autora Exemplo' },
     });
-    const spy = mockAiJson({ title: 'Matemática Básica', author: 'Fernando Guerra', categories: [] });
+    const spy = mockAiJson({ title: 'Fundamentos de Lógica Computacional', author: 'Autora Exemplo', categories: [] });
 
-    await documentInspectorService.inspectDocumentHeader(Buffer.from('%PDF-1.4'), 'mat basica.pdf');
+    await documentInspectorService.inspectDocumentHeader(Buffer.from('%PDF-1.4'), 'livro sintetico.pdf');
 
-    expect(parseSpy).toHaveBeenCalledWith(expect.anything(), 'mat basica.pdf', expect.objectContaining({ maxPages: 8, skipOcr: true }));
+    expect(parseSpy).toHaveBeenCalledWith(expect.anything(), 'livro sintetico.pdf', expect.objectContaining({ maxPages: 8, skipOcr: true }));
     const userMessage = spy.mock.calls[0][0].find((m) => m.role === 'user')?.content ?? '';
-    expect(userMessage).toContain('Fernando Guerra');
-    expect(userMessage).toContain('Matemática Básica');
+    expect(userMessage).toContain('Autora Exemplo');
+    expect(userMessage).toContain('Fundamentos de Lógica Computacional');
   });
 });
 
@@ -203,19 +203,19 @@ describe('heurística com ficha catalográfica', () => {
   it('extrai título e autores do padrão "Título / Autores. – Cidade" quando a IA não está disponível', async () => {
     process.env.AI_PROVIDER = 'mock';
     const ficha = [
-      'Fernando Guerra',
-      'Inder Jeet Taneja Volume 1',
-      'Matemática Básica',
-      'G934m \tGuerra, Fernando',
-      'Matemática básica / Fernando Guerra e Inder Jeet Taneja. – Florianópolis : Departamento',
-      'de Ciências da Administração / UFSC; [Brasília] : CAPES : UAB, 2009.',
-      'ISBN: 978-85-61608-73-6',
+      'Autora Exemplo',
+      'Coautor Exemplo Volume 1',
+      'Fundamentos de Lógica Computacional',
+      'E96f \tExemplo, Autora',
+      'Fundamentos de lógica computacional / Autora Exemplo e Coautor Exemplo. – Cidade Exemplo : Departamento',
+      'de Computação / Universidade Exemplo; [Cidade Exemplo] : Editora Exemplo, 2025.',
+      'ISBN: 000-00-00000-00-0',
     ].join('\n');
 
-    const result = await documentInspectorService.inspectDocumentHeader(Buffer.from(ficha, 'utf-8'), 'mat basica.txt');
+    const result = await documentInspectorService.inspectDocumentHeader(Buffer.from(ficha, 'utf-8'), 'livro sintetico.txt');
 
-    expect(result.title).toBe('Matemática básica');
-    expect(result.author).toBe('Fernando Guerra e Inder Jeet Taneja');
+    expect(result.title).toBe('Fundamentos de lógica computacional');
+    expect(result.author).toBe('Autora Exemplo e Coautor Exemplo');
     expect(result.aiApplied).toBe(false);
     expect(result.source).toBe('catalog-entry');
   });

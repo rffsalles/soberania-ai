@@ -16,8 +16,8 @@ describe('useDocumentInspection', () => {
           JSON.stringify({
             success: true,
             metadata: {
-              title: 'Matemática Básica',
-              author: 'Fernando Guerra',
+              title: 'Fundamentos de Lógica Computacional',
+              author: 'Autora Exemplo',
               categories: ['Banco de Dados'],
               suggestedCategory: 'Matemática',
               aiApplied: true,
@@ -37,8 +37,8 @@ describe('useDocumentInspection', () => {
 
     await waitFor(() => expect(result.current.isInspecting).toBe(false));
     expect(onMetadata).toHaveBeenCalledWith({
-      title: 'Matemática Básica',
-      author: 'Fernando Guerra',
+      title: 'Fundamentos de Lógica Computacional',
+      author: 'Autora Exemplo',
       categories: ['Banco de Dados'],
     });
     expect(result.current.inspection).toEqual({ aiApplied: true, source: 'ai', suggestedCategory: 'Matemática' });

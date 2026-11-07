@@ -24,11 +24,11 @@ vi.mock('@/domains/rag/chapters', async (orig) => {
 });
 import { alignTreeToText, type ChapterNode, type ChapterRow } from '@/domains/rag/chapters';
 import {
-  matBasicaPages,
-  MAT_BASICA_OUTLINE,
-  MAT_BASICA_PRINTED_TREE,
-  MAT_BASICA_TOTAL_PAGES,
-} from '@/domains/rag/__tests__/fixtures/mat-basica';
+  livroSinteticoPages,
+  LIVRO_SINTETICO_OUTLINE,
+  LIVRO_SINTETICO_PRINTED_TREE,
+  LIVRO_SINTETICO_TOTAL_PAGES,
+} from '@/domains/rag/__tests__/fixtures/livro-sintetico';
 
 const node = (title: string, startPage: number, ...children: ChapterNode[]): ChapterNode => ({ title, startPage, children });
 const tree = (pairs: [string, number][]) => pairs.map(([t, p]) => node(t, p));
@@ -192,26 +192,26 @@ describe('extractAndSaveChapters', () => {
     expect(replaceChapters.mock.calls[0][1].map((x: ChapterRow) => x.startPage)).toEqual([3, 5, 9]);
   });
 
-  it('mat basica: sumário das páginas 9-11 vira árvore com páginas físicas', async () => {
-    const fixturePages = matBasicaPages();
-    const r = await extractAndSaveChapters('m1', { buffer, pages: fixturePages, totalPages: MAT_BASICA_TOTAL_PAGES },
-      depsWith({ outline: MAT_BASICA_OUTLINE, ai: JSON.stringify({ chapters: MAT_BASICA_PRINTED_TREE }) }));
+  it('livro sintetico: sumário das páginas 9-11 vira árvore com páginas físicas', async () => {
+    const fixturePages = livroSinteticoPages();
+    const r = await extractAndSaveChapters('m1', { buffer, pages: fixturePages, totalPages: LIVRO_SINTETICO_TOTAL_PAGES },
+      depsWith({ outline: LIVRO_SINTETICO_OUTLINE, ai: JSON.stringify({ chapters: LIVRO_SINTETICO_PRINTED_TREE }) }));
     expect(r.source).toBe('AI');
     const prompt = streamChat.mock.calls[0][0].map((m: { content: string }) => m.content).join('\n');
     expect(prompt).toContain('Página física 11');
-    expect(prompt).toContain('Logaritmo natural');
+    expect(prompt).toContain('Classes de crescimento');
     expect(streamChat.mock.calls[0][1]).toEqual({ temperature: 0.1, maxTokens: 4000 });
     const rows: ChapterRow[] = replaceChapters.mock.calls[0][1];
     expect(rows.filter((x) => x.depth === 0).map((x) => x.startPage)).toEqual([15, 43, 67, 95, 123]);
     expect(rows.filter((x) => x.depth === 0).at(-1)?.endPage).toBe(174);
-    const fundamentais = rows.find((x) => x.title === 'Conjuntos numéricos fundamentais')!;
+    const fundamentais = rows.find((x) => x.title === 'Proposições lógicas fundamentais')!;
     expect(fundamentais.startPage).toBe(20);
     expect(rows.filter((x) => x.parentOrder === fundamentais.order).map((x) => [x.title, x.startPage])).toEqual([
-      ['Conjuntos dos números naturais', 21],
-      ['Conjuntos dos números inteiros', 21],
-      ['Conjuntos dos números racionais', 22],
-      ['Conjuntos dos números irracionais', 23],
-      ['Conjuntos dos números reais', 24],
+      ['Operador lógico E', 21],
+      ['Operador lógico OU', 21],
+      ['Operador lógico NÃO', 22],
+      ['Operador lógico XOR', 23],
+      ['Operador lógico implicação', 24],
     ]);
     expect(r.chapters).toEqual(await replaceChapters.mock.results[0].value);
   });
@@ -221,7 +221,7 @@ describe('extractAndSaveChapters', () => {
     const r = await extractAndSaveChapters(
       'm1',
       { buffer, pages, totalPages: 20 },
-      depsWith({ ai: JSON.stringify({ chapters: [{ title: 'Matemática Básica', startPage: 1, children: units }] }) }),
+      depsWith({ ai: JSON.stringify({ chapters: [{ title: 'Fundamentos de Lógica Computacional', startPage: 1, children: units }] }) }),
     );
     expect(r.source).toBe('AI');
     const rows: ChapterRow[] = replaceChapters.mock.calls[0][1];
@@ -485,7 +485,7 @@ describe('guarda de vínculos', () => {
   });
 
   it('árvore manual com filhos grava linhas com parentOrder', async () => {
-    await replaceManualChapters('m1', [node('U1', 2, node('Frações', 3)), node('U2', 9)], { user: teacher }, depsWith());
+    await replaceManualChapters('m1', [node('U1', 2, node('Circuitos', 3)), node('U2', 9)], { user: teacher }, depsWith());
     expect(replaceChapters.mock.calls[0][1].map((r: { order: number; parentOrder: number | null }) => [r.order, r.parentOrder])).toEqual([
       [1, null],
       [2, 1],
