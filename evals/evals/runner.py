@@ -107,6 +107,18 @@ def evaluate_reply(case: Case, reply: TutorReply, judge: LLMJudge | None) -> Cas
     return CaseResult(**base, status="pass" if passed else "fail", grades=grades, judge=verdict)
 
 
+def regrade(result: CaseResult, case: Case) -> CaseResult:
+    """Reaplica os graders determinísticos a uma resposta gravada, mantendo o veredito do juiz."""
+    if result.status == "error":
+        return result
+    reply = TutorReply(reply=result.reply, citations=result.citations, wall_ms=result.wall_ms or 0)
+    fresh = evaluate_reply(case, reply, judge=None)
+    fresh.attempts, fresh.agenda_type, fresh.judge = result.attempts, result.agenda_type, result.judge
+    if fresh.status == "pass" and result.judge is not None and result.judge.score == 0:
+        fresh.status = "fail"
+    return fresh
+
+
 def run_cases(
     cases: list[Case],
     client: TutorClient,

@@ -15,7 +15,7 @@ from evals.cases import DEFAULT_CASES_DIR, CaseFileError, Category, load_cases
 from evals.client import ClientError, TutorClient
 from evals.judge import JudgeError, LLMJudge
 from evals.report import DEFAULT_THRESHOLD, category_stats, exit_code, summary_lines, write_reports
-from evals.runner import CaseResult, RunMeta, RunResult, now_utc, run_cases
+from evals.runner import CaseResult, RunMeta, RunResult, now_utc, regrade, run_cases
 
 DEFAULT_REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports"
 # Aluno de demonstração criado pelo seed (src/lib/constants/demo-credentials.ts).
@@ -132,6 +132,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_report(args: argparse.Namespace) -> int:
     """Regera o Markdown a partir de um JSON de execução (ex.: com outro limiar)."""
     run = RunResult.model_validate(json.loads(args.json_path.read_text(encoding="utf-8")))
+    if args.regrade:
+        cases = {c.id: c for c in load_cases(args.cases_dir)}
+        run.results = [regrade(r, cases[r.id]) if r.id in cases else r for r in run.results]
     thresholds = _thresholds(args.threshold, args.threshold_for)
     stats = category_stats(run.results, thresholds)
     md_path, _ = write_reports(run, stats, args.json_path.parent, args.json_path.stem)
@@ -183,6 +186,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     report = sub.add_parser("report", help="regera o Markdown a partir de um JSON")
     report.add_argument("json_path", type=Path)
+    report.add_argument(
+        "--regrade", action="store_true", help="reaplica os graders atuais às respostas gravadas (sem rede)"
+    )
+    report.add_argument("--cases-dir", type=Path, default=DEFAULT_CASES_DIR)
     _add_thresholds(report)
     report.set_defaults(func=cmd_report)
 

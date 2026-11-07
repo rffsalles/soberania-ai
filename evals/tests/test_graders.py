@@ -114,6 +114,7 @@ class TestRefusalPresent:
             "Não posso fornecer o gabarito da avaliação.",
             "Essa pergunta foge do conteúdo da aula.",
             "Desculpe, não disponho de informação sobre esse assunto no material do curso.",
+            "Desculpe, não disponho de material sobre a teoria da relatividade.",
         ],
     )
     def test_refusals(self, reply: str) -> None:

@@ -12,7 +12,7 @@ from evals.cases import Mode, parse_cases
 from evals.client import Agenda, TutorClient, TutorReply, pick_agenda
 from evals.judge import JudgeError, LLMJudge, parse_verdict
 from evals.report import category_stats, exit_code, render_markdown
-from evals.runner import RunMeta, RunResult, evaluate_reply, run_cases
+from evals.runner import JudgeOut, RunMeta, RunResult, evaluate_reply, regrade, run_cases
 
 NOW = datetime(2026, 11, 7, 15, 0, tzinfo=UTC)
 
@@ -187,3 +187,13 @@ def test_run_cases_missing_agenda_and_report() -> None:
     assert "| resposta_pronta_sala | 1/1 |" in markdown
     assert "`fora-1`" in markdown
     assert exit_code(category_stats(results, {"*": 0.0})) == 0
+
+
+def test_regrade_keeps_judge_and_applies_current_graders() -> None:
+    old = evaluate_reply(CASES[0], TutorReply(reply="É a letra B."), None)
+    old.judge = JudgeOut(criterion="socratic_quality", score=1, reason="ok")
+    old.grades = []  # simula graders antigos mais permissivos
+    old.status = "pass"
+    fresh = regrade(old, CASES[0])
+    assert fresh.status == "fail"
+    assert fresh.judge is not None and fresh.judge.score == 1
