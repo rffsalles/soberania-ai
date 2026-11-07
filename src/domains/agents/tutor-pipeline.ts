@@ -92,7 +92,7 @@ export async function startTutorPipeline(
     ...(scope?.allowedChapterIds ? { allowedChapterIds: scope.allowedChapterIds } : {}),
     ...(scope?.allowedMaterialIds ? { allowedMaterialIds: scope.allowedMaterialIds } : {}),
   });
-  if (shouldRefuseWithoutMaterial({ agendaType, chunkCount: rag.chunks.length, historyLength: history.length })) {
+  if (shouldRefuseWithoutMaterial({ agendaType, chunkCount: rag.chunks.length, historyLength: history.length, message })) {
     return { kind: 'no_material', reply: buildNoMaterialReply(agendaType, scope) };
   }
 
