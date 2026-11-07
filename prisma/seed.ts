@@ -19,6 +19,9 @@ import {
 } from './seed-data/academic';
 import { DEMO_AGENDAS, offsetDate } from './seed-data/agendas';
 import { SEED_CORPUS } from './seed-data/corpus';
+import { assertSeedAllowed } from './seed-data/production-guard';
+
+assertSeedAllowed();
 
 const PASSWORD_SALT_ROUNDS = 10;
 const SEED_FILE_SCHEME = 'seed://';
