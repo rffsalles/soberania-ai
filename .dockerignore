@@ -14,3 +14,7 @@ graphify-out
 tsconfig.tsbuildinfo
 Dockerfile
 docker-compose.yml
+evals/.venv
+evals/reports
+evals/**/__pycache__
+evals/*.egg-info

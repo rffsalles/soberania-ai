@@ -24,6 +24,8 @@ services:
         # Embutidas no bundle em tempo de build.
         NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
         NEXT_PUBLIC_INSTITUTION_TIMEZONE: ${NEXT_PUBLIC_INSTITUTION_TIMEZONE:-America/Sao_Paulo}
+        # Demo/evals: sem isso o modo review da tutora so abre dentro do horario do plantao.
+        NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW: ${NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW:-true}
     depends_on:
       db:
         condition: service_healthy

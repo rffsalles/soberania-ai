@@ -8,7 +8,7 @@ Pré-requisito: Docker com Compose v2.
 
 1. `cp .env.example .env` e preencha `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY` e `AI_MODEL` (ex.: Groq com `openai/gpt-oss-120b`). Sem chave, use `AI_PROVIDER=mock`.
 2. (Opcional) defina `AUTH_SECRET` com 32+ caracteres (`openssl rand -base64 48`). Se vazio, o compose usa um segredo fixo apenas para a demo local.
-3. `docker compose up --build`. O entrypoint roda `prisma migrate deploy` e, por padrão, o seed de demonstração (`SEED_DEMO=true`).
+3. `docker compose up --build`. O entrypoint roda `prisma migrate deploy` e, por padrão, o seed de demonstração (`SEED_DEMO=true`); como a imagem roda com `NODE_ENV=production`, o entrypoint define `ALLOW_SEED_IN_PRODUCTION=true` só para o comando do seed (demo local). O `docker-compose.yml` também passa `NEXT_PUBLIC_AGENDA_IGNORE_TIME_WINDOW=true` por padrão no build, para a demo e os evals do modo `review` não dependerem do horário do plantão.
 4. Abra http://localhost:3000 e entre com os atalhos de demo da tela de login (`NEXT_PUBLIC_DEMO_MODE` vem `true` no compose).
 5. Para zerar tudo: `docker compose down -v` (apaga banco e uploads).
 
