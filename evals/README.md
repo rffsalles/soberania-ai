@@ -56,7 +56,7 @@ Acrescente uma linha a `cases/<categoria>.jsonl` (linhas vazias e `//` são igno
 
 Campos de `expect`: `citation` (material e rótulo do capítulo como a API formata, por exemplo `Capítulo 4` ou `Artigo 7º`), `must_match` / `must_not_match` (regex sobre o texto original), `final_answer_patterns` (regex sobre o texto sem acentos que caracterizam a entrega do gabarito), `override_markers` (canários de injeção), `max_chars` / `max_tokens`. O campo opcional `graders` substitui os graders padrão da categoria. Depois rode `python -m evals cases` (valida tudo, inclusive se as regex compilam) e `python -m pytest -q`.
 
-Para casos de `fato_no_material`, confira se a pergunta recupera o trecho: sem embeddings a busca é só léxica (`websearch_to_tsquery`, que exige **todos** os termos), então perguntas com "Quais", "Quanto" ou "é" podem não trazer contexto nenhum. Alguns casos do conjunto foram escritos assim de propósito para medir isso.
+Para casos de `fato_no_material`, confira se a pergunta recupera o trecho: sem embeddings a busca é só léxica. Até a rodada de base ela usava `websearch_to_tsquery`, que exige **todos** os termos, e perguntas com "Quais", "Quanto" ou "é" ficavam sem contexto; agora os termos são unidos por OR (`src/domains/rag/lexical-query.ts`). Alguns casos do conjunto foram escritos assim de propósito para medir isso.
 
 ## Limitações
 
