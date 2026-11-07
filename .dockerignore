@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.env
+.env*.local
+storage
+coverage
+tests
+docs
+.claude
+.superpowers
+graphify-out
+*.log
+tsconfig.tsbuildinfo
+Dockerfile
+docker-compose.yml
