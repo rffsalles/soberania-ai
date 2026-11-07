@@ -16,7 +16,8 @@ import { listDescendantIds } from '@/domains/rag/services/chapter-repository';
 import { expandChapterScope } from '@/domains/rag/services/chapter-scope';
 import { startTutorPipeline, type TutorScope } from '../tutor-pipeline';
 import { isSocraticChallengeText, judgeAnswer } from '../answer-judge';
-import { stripUnsupportedReferences } from '../citation-guard';
+import { citedSources, stripUnsupportedReferences } from '../citation-guard';
+import { formatCitation } from '@/domains/rag/hybrid-search';
 import { toPlainText } from '../plain-text';
 import { guideAnswerRequestReply } from '../answer-request';
 
@@ -285,6 +286,11 @@ async function runChat(
   // Pedido de gabarito em sala: a regra é fixa no código, não depende de o modelo obedecer ao prompt.
   if (start.answerRequest) reply = guideAnswerRequestReply(reply, start.chunks);
 
+  // Principal primeiro (contrato atual: o chat mostra citations[0]); depois os demais trechos citados no texto.
+  const citations = [
+    ...new Set([...(start.citation ? [start.citation] : []), ...citedSources(reply, start.chunks).map(formatCitation)]),
+  ];
+
   const isSocraticChallenge = isSocraticChallengeText(reply);
   const wasCorrect = previous?.isSocraticChallenge
     ? await judgeAnswer(
@@ -310,7 +316,7 @@ async function runChat(
 
   return {
     reply,
-    citations: start.citation ? [start.citation] : [],
+    citations,
     isSocraticChallenge,
     blockedByExamGuardrail: false,
     latencyMs,

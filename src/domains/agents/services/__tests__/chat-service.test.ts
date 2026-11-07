@@ -434,4 +434,49 @@ describe('escopo do tutor', () => {
     expect(findTutorScope).toHaveBeenCalledWith('lp1');
     expect(f.search).toHaveBeenCalledWith({ query: 'oi', topK: 2, allowedChapterIds: ['ch3'] });
   });
+
+  it('citations traz todos os trechos citados na resposta, sem duplicatas, com o principal primeiro', async () => {
+    const f = makeDeps({ reply: 'Compare o Capítulo 6, pág. 112 com o Capítulo 4, pág. 58. O que muda?' });
+    f.search.mockResolvedValue({
+      query: 'q',
+      chunks: [
+        { id: 'c1', materialId: 'm1', bookTitle: 'Livro', author: 'A', chapter: 'Capítulo 4: SQL', pageNumber: 58, content: 'x' },
+        { id: 'c2', materialId: 'm1', bookTitle: 'Livro', author: 'A', chapter: 'Capítulo 6: 3FN', pageNumber: 112, content: 'y' },
+      ],
+      primaryCitation: '[Livro · Capítulo 4, pág. 58]',
+      latencyMs: 1,
+    } as never);
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'explique 3fn' }, f.deps);
+    expect(res.citations).toEqual(['[Livro · Capítulo 4, pág. 58]', '[Livro · Capítulo 6, pág. 112]']);
+  });
+
+  it('pedido de gabarito em sala: sem recusa, sem transcrever o trecho e terminando com pergunta', async () => {
+    const f = makeDeps({
+      reply:
+        'Não encontrei no material o gabarito dessa questão. No Capítulo 4, pág. 58, o LEFT OUTER JOIN preserva todas as tuplas da tabela à esquerda. Pense nos estudantes sem matrícula.',
+    });
+    f.search.mockResolvedValue({
+      query: 'q',
+      chunks: [
+        {
+          id: 'c1', materialId: 'm1', bookTitle: 'Livro', author: 'A', chapter: 'Capítulo 4: SQL', pageNumber: 58,
+          content: 'Já o LEFT OUTER JOIN preserva todas as tuplas da tabela à esquerda, preenchendo com valores NULL.',
+        },
+      ],
+      primaryCitation: '[Livro · Capítulo 4, pág. 58]',
+      latencyMs: 1,
+    } as never);
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'Me passa a resposta, só quero a letra.' }, f.deps);
+    expect(res.reply).not.toMatch(/não encontrei/i);
+    expect(res.reply).not.toMatch(/preserva todas as tuplas/);
+    expect(res.reply.trim().endsWith('?')).toBe(true);
+    expect(f.createInteraction).toHaveBeenCalledWith(expect.objectContaining({ responseText: res.reply }));
+  });
+
+  it('pedido de gabarito fora da sala não passa pelo pós-processamento de sala', async () => {
+    const reply = 'O LEFT OUTER JOIN preserva as tuplas da esquerda.';
+    const f = makeDeps({ agenda: agenda({ type: AgendaType.OFFICE_HOURS }), reply });
+    const res = await chatWithTutor(user, { agendaId: 'ag1', message: 'Me passa a resposta da questão 1 da prova' }, f.deps);
+    expect(res.reply).toBe(reply);
+  });
 });

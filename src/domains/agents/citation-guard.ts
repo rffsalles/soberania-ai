@@ -137,3 +137,16 @@ export function stripUnsupportedReferences(text: string, sources: CitationSource
 
   return { text: removed.length > 0 ? tidy(out) : out, removed };
 }
+
+/**
+ * Trechos entregues ao modelo que o texto efetivamente referencia (capítulo/artigo pelo número e/ou página),
+ * na ordem em que foram entregues e sem duplicatas. Usar depois de `stripUnsupportedReferences`.
+ */
+export function citedSources<T extends CitationSource>(text: string, sources: T[]): T[] {
+  const refs = refsIn(text).map((r) => r.ref);
+  if (refs.length === 0) return [];
+  return sources.filter((source) => {
+    const parsed = parseSource(source);
+    return refs.some((ref) => isSupported(ref, [parsed]));
+  });
+}

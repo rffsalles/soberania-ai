@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripUnsupportedReferences, type CitationSource } from '../citation-guard';
+import { citedSources, stripUnsupportedReferences, type CitationSource } from '../citation-guard';
 
 const cap4: CitationSource = { chapter: 'Capítulo 4: Álgebra Relacional e SQL', pageNumber: 58 };
 const art7: CitationSource = { chapter: 'Artigo 7º: Práticas de Ensino', pageNumber: 12 };
@@ -84,5 +84,27 @@ describe('stripUnsupportedReferences', () => {
   it('tira o marcador interno [FONTE: ...] que o modelo copia do prompt, mantendo a citação', () => {
     const r = stripUnsupportedReferences('Veja [FONTE: [Sistemas · Capítulo 4, pág. 58]].', [cap4]);
     expect(r.text).toBe('Veja [Sistemas · Capítulo 4, pág. 58].');
+  });
+});
+
+describe('citedSources', () => {
+  const cap6: CitationSource = { chapter: 'Capítulo 6: Normalização', pageNumber: 112 };
+
+  it('devolve todos os trechos referenciados no texto, na ordem dos trechos e sem duplicatas', () => {
+    const text = 'Veja o Capítulo 6, pág. 112 e depois o Capítulo 4, pág. 58. De novo: Capítulo 6.';
+    expect(citedSources(text, [cap4, cap6, art7])).toEqual([cap4, cap6]);
+  });
+
+  it('reconhece a referência só por página e a citação entre colchetes', () => {
+    expect(citedSources('Releia a pág. 112.', [cap4, cap6])).toEqual([cap6]);
+    expect(citedSources('[Sistemas · Capítulo 4, pág. 58]', [cap4, cap6])).toEqual([cap4]);
+  });
+
+  it('texto sem referência não cita nenhum trecho', () => {
+    expect(citedSources('O que o LEFT JOIN preserva?', [cap4, cap6])).toEqual([]);
+  });
+
+  it('capítulo com página de outro trecho não conta', () => {
+    expect(citedSources('Capítulo 4, pág. 112', [cap4, cap6])).toEqual([]);
   });
 });
