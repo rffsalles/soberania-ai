@@ -26,4 +26,27 @@ describe('useAgendaFaqs', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(interval).not.toHaveBeenCalled();
   });
+
+  it('ignora resposta atrasada de uma chave anterior', async () => {
+    let resolveFirst!: (r: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce((_u: string, init: { signal: AbortSignal }) => {
+        return new Promise<Response>((resolve, reject) => {
+          resolveFirst = resolve;
+          init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+        });
+      })
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, faqs: [{ id: 'novo' }] }), { status: 200 })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result, rerender } = renderHook(({ k }) => useAgendaFaqs('ag-1', k), { initialProps: { k: '0:0' } });
+    rerender({ k: '1:0' });
+    await act(async () => {});
+    resolveFirst(new Response(JSON.stringify({ success: true, faqs: [{ id: 'velho' }] }), { status: 200 }));
+    await act(async () => {});
+    expect(result.current.faqs).toEqual([{ id: 'novo' }]);
+  });
 });

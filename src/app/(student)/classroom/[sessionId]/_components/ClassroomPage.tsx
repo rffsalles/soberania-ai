@@ -47,6 +47,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   const { agenda: session, isLoading, error, notFound } = useAgenda(sessionId);
   const { lesson, isLoading: lessonLoading } = useAgendaLesson(sessionId);
   const { state, lastSeq } = useClassEvents(sessionId);
+  // '' antes de a sessão carregar: nextBoundaryDelay devolve null e nenhum timer é armado.
   const now = useSessionClock(session?.startTime ?? '', session?.endTime ?? '', state.phase);
   const [repliesDone, setRepliesDone] = React.useState(0);
   const onReplyDone = React.useCallback(() => setRepliesDone((n) => n + 1), []);

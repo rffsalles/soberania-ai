@@ -8,7 +8,8 @@ export const MAX_TIMEOUT_MS = 2_147_483_647;
 export function nextBoundaryDelay(startTime: string, endTime: string, now: number): number | null {
   const start = new Date(startTime).getTime();
   const end = new Date(endTime).getTime();
-  const target = now < start ? start : now < end ? end : null;
+  // deriveAgendaStatus: LIVE em t >= start; COMPLETED só em t > end, então o fim cruza em end + 1.
+  const target = now < start ? start : now <= end ? end + 1 : null;
   return target === null ? null : Math.min(target - now, MAX_TIMEOUT_MS);
 }
 

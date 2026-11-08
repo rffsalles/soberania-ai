@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { deriveAgendaStatus } from '@/domains/agendas/agenda-validator';
 import { MAX_TIMEOUT_MS, nextBoundaryDelay, useSessionClock } from '../use-session-clock';
 
 const START = '2026-11-08T12:00:00.000Z';
@@ -11,8 +12,11 @@ describe('nextBoundaryDelay', () => {
   it('antes do início espera até startTime', () => {
     expect(nextBoundaryDelay(START, END, at('2026-11-08T11:00:00.000Z'))).toBe(3_600_000);
   });
-  it('durante a aula espera até endTime', () => {
-    expect(nextBoundaryDelay(START, END, at('2026-11-08T13:00:00.000Z'))).toBe(3_600_000);
+  it('durante a aula espera até logo após endTime', () => {
+    expect(nextBoundaryDelay(START, END, at('2026-11-08T13:00:00.000Z'))).toBe(3_600_001);
+  });
+  it('exatamente em endTime ainda espera 1 ms para cruzar o fim', () => {
+    expect(nextBoundaryDelay(START, END, at(END))).toBe(1);
   });
   it('depois do fim devolve null', () => {
     expect(nextBoundaryDelay(START, END, at('2026-11-08T15:00:00.000Z'))).toBeNull();
@@ -43,9 +47,12 @@ describe('useSessionClock', () => {
     expect(vi.getTimerCount()).toBe(1);
 
     act(() => {
-      vi.advanceTimersByTime(7_200_000);
+      vi.advanceTimersByTime(7_200_001);
     });
-    expect(result.current.toISOString()).toBe(END);
+    expect(result.current.getTime()).toBeGreaterThan(at(END));
+    expect(deriveAgendaStatus({ status: 'SCHEDULED', startTime: START, endTime: END }, result.current)).toBe(
+      'COMPLETED'
+    );
     expect(vi.getTimerCount()).toBe(0);
     expect(interval).not.toHaveBeenCalled();
   });
