@@ -10,6 +10,7 @@ import { ASSESSMENT_PUBLISHED, CHAPTER_OUTSIDE_PLAN, NO_INDEXED_CHAPTER_CONTENT 
 import {
   assessmentMaxTokens,
   generateQuestions,
+  generateQuestionsFromChunks,
   publishAssessment,
   updateAssessment,
   type AssessmentDeps,
@@ -310,5 +311,54 @@ describe('updateAssessment', () => {
     await updateAssessment('as1', teacher, { title: 'Novo título', questions: [validQuestion('q1')] }, deps);
     expect(deps.updateDraftAssessment).toHaveBeenCalled();
     await expect(updateAssessment('as1', other, { title: 'Outro' }, deps)).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe('generateQuestionsFromChunks', () => {
+  const q = (id: string) => ({
+    id,
+    enunciation: 'Qual é a pergunta de teste?',
+    options: OPTION_KEYS.map((key) => ({ key, text: `Alt ${key}` })),
+    correctKey: 'A',
+    rationale: 'Porque sim.',
+    topic: 'Tema',
+  });
+  const stream = (chunks: StreamChunk[]) =>
+    async function* () {
+      for (const c of chunks) yield c;
+    };
+  const run = (streamChat: () => AsyncGenerator<StreamChunk>, count = 1) =>
+    generateQuestionsFromChunks([chunk(1)], count, () => [{ role: 'user', content: 'x' }], { streamChat });
+
+  it('1 questão válida vira ok com id q1', async () => {
+    const text = JSON.stringify({ questions: [q('zzz')] });
+    const r = await run(stream([{ token: text, isComplete: true }]));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.questions[0].id).toBe('q1');
+  });
+
+  it('fallback rate_limit -> rate_limit', async () => {
+    const r = await run(
+      stream([{ token: '', isComplete: true, fallback: true, fallbackReason: 'rate_limit' }])
+    );
+    expect(r).toEqual({ ok: false, reason: 'rate_limit' });
+  });
+
+  it('fallback sem motivo -> provider_error', async () => {
+    const r = await run(stream([{ token: '', isComplete: true, fallback: true }]));
+    expect(r).toEqual({ ok: false, reason: 'provider_error' });
+  });
+
+  it('streamChat que lança -> provider_error', async () => {
+    const r = await run(async function* () {
+      throw new Error('boom');
+    });
+    expect(r).toEqual({ ok: false, reason: 'provider_error' });
+  });
+
+  it('2 questões com count 1 -> invalid', async () => {
+    const text = JSON.stringify({ questions: [q('a'), q('b')] });
+    const r = await run(stream([{ token: text, isComplete: true }]));
+    expect(r).toEqual({ ok: false, reason: 'invalid' });
   });
 });

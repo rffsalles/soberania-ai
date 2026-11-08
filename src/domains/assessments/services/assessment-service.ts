@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DomainError } from '@/lib/api/domain-error';
 import type { AICompletionOptions, AIMessage, StreamChunk } from '@/lib/ai-provider';
 import { collectStream } from '@/domains/agents/collect-stream';
+import type { StreamChatFn } from '@/domains/telemetry/services/logged-stream-chat';
 import { createLoggedStreamChat } from '@/domains/telemetry/services/logged-stream-chat';
 import { ASSESSMENT_PUBLISHED, ASSESSMENT_STATUS, LESSON_AI_RATE_LIMITED_MESSAGE, NO_INDEXED_CHAPTER_CONTENT } from '@/lib/constants/teaching';
 import { executeHybridSearch } from '@/domains/rag/hybrid-search';
@@ -129,19 +130,34 @@ export function buildFallbackQuestions(chunks: DidacticChunk[], count: number, a
   });
 }
 
-async function askModel(messages: AIMessage[], maxTokens: number, deps: AssessmentDeps) {
+export type QuestionGenerationResult =
+  | { ok: true; questions: Question[]; rubrics: Rubric[] }
+  | { ok: false; reason: 'rate_limit' | 'provider_error' | 'invalid' };
+
+/** Núcleo da geração: chama o modelo com as mensagens montadas e valida `count` questões. */
+export async function generateQuestionsFromChunks(
+  chunks: DidacticChunk[],
+  count: number,
+  buildMessages: (chunks: DidacticChunk[], count: number) => AIMessage[],
+  deps: { streamChat: StreamChatFn }
+): Promise<QuestionGenerationResult> {
+  let ai: ReturnType<typeof parseAssessmentText>;
   try {
-    const { text, fallback, fallbackReason } = await collectStream(deps.streamChat, messages, {
+    const { text, fallback, fallbackReason } = await collectStream(deps.streamChat, buildMessages(chunks, count), {
       temperature: ASSESSMENT_TEMPERATURE,
-      maxTokens,
+      maxTokens: assessmentMaxTokens(count),
     });
-    if (fallbackReason === 'rate_limit') throw new DomainError(429, LESSON_AI_RATE_LIMITED_MESSAGE);
-    return fallback ? null : parseAssessmentText(text);
+    if (fallbackReason === 'rate_limit') return { ok: false, reason: 'rate_limit' };
+    if (fallback) return { ok: false, reason: 'provider_error' };
+    ai = parseAssessmentText(text);
   } catch (err) {
-    if (err instanceof DomainError) throw err;
     console.warn('[assessments] falha ao gerar questões com a IA, usando fallback', err);
-    return null;
+    return { ok: false, reason: 'provider_error' };
   }
+  if (!ai || !z.array(questionSchema).length(count).safeParse(ai.questions).success) {
+    return { ok: false, reason: 'invalid' };
+  }
+  return { ok: true, questions: ai.questions.map((q, i) => ({ ...q, id: `q${i + 1}` })), rubrics: ai.rubrics };
 }
 
 export async function generateQuestions(
@@ -169,22 +185,26 @@ export async function generateQuestions(
   if (chunks.length === 0) chunks = await deps.sampleByChapter([...new Set(scopes.flat())], SAMPLE_PER_CHAPTER, SAMPLE_MAX);
   if (chunks.length === 0) throw new DomainError(422, NO_INDEXED_CHAPTER_CONTENT);
 
-  const messages = buildAssessmentMessages({
-    subjectName: plan.subject.discipline.name,
-    chapters: chosen.map((id) => ({ id, label: info.get(id)!.label })),
+  const ai = await generateQuestionsFromChunks(
     chunks,
-    questionCount: input.questionCount,
-    type: input.type,
-  });
-  const ai = await askModel(messages, assessmentMaxTokens(input.questionCount), deps);
-  const aiQuestions = ai && z.array(questionSchema).length(input.questionCount).safeParse(ai.questions).success;
+    input.questionCount,
+    (cs, count) =>
+      buildAssessmentMessages({
+        subjectName: plan.subject.discipline.name,
+        chapters: chosen.map((id) => ({ id, label: info.get(id)!.label })),
+        chunks: cs,
+        questionCount: count,
+        type: input.type,
+      }),
+    deps
+  );
+  if (!ai.ok && ai.reason === 'rate_limit') throw new DomainError(429, LESSON_AI_RATE_LIMITED_MESSAGE);
 
-  if (ai && aiQuestions) {
+  if (ai.ok) {
     const allowed = new Set(chosen);
     return {
-      questions: ai.questions.map((q, i) => ({
+      questions: ai.questions.map((q) => ({
         ...q,
-        id: `q${i + 1}`,
         chapterId: q.chapterId && allowed.has(q.chapterId) ? q.chapterId : undefined,
       })),
       rubrics: ai.rubrics.length ? ai.rubrics : DEFAULT_RUBRICS,
