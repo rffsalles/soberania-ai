@@ -7,11 +7,8 @@ export type LiveControls = {
   prevIndex: number | null; // null = botão desabilitado
   nextIndex: number | null;
   highlightedIndex: number | null; // passo destacado no roteiro (null se fora do roteiro)
+  stepCount: number;
 };
-
-// Tamanho do roteiro associado a cada resultado, para stepTarget validar o intervalo
-// sem expandir o formato público de LiveControls.
-const stepCounts = new WeakMap<LiveControls, number>();
 
 export function liveControls(
   state: Pick<ClassState, 'phase' | 'currentStepIndex'>,
@@ -25,8 +22,8 @@ export function liveControls(
     prevIndex: null,
     nextIndex: null,
     highlightedIndex: null,
+    stepCount,
   };
-  stepCounts.set(result, stepCount);
 
   if (state.phase === 'NOT_STARTED') {
     result.canStart = !pending;
@@ -58,8 +55,7 @@ export function liveControls(
 
 export function stepTarget(controls: LiveControls, stepIndex: number): number | null {
   if (!controls.canSelectStep) return null;
-  const count = stepCounts.get(controls) ?? 0;
-  if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= count) return null;
+  if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= controls.stepCount) return null;
   if (stepIndex === controls.highlightedIndex) return null;
   return stepIndex;
 }

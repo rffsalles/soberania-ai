@@ -6,7 +6,7 @@ const run = (i: number | null) => ({ phase: 'RUNNING' as const, currentStepIndex
 describe('liveControls', () => {
   it('antes de iniciar só Iniciar', () => {
     expect(liveControls({ phase: 'NOT_STARTED', currentStepIndex: null }, 3, false))
-      .toEqual({ canStart: true, canEnd: false, canSelectStep: false, prevIndex: null, nextIndex: null, highlightedIndex: null });
+      .toEqual({ canStart: true, canEnd: false, canSelectStep: false, prevIndex: null, nextIndex: null, highlightedIndex: null, stepCount: 3 });
   });
   it('meio do roteiro', () => {
     expect(liveControls(run(1), 3, false)).toMatchObject({ prevIndex: 0, nextIndex: 2, highlightedIndex: 1, canEnd: true, canStart: false });
@@ -16,7 +16,7 @@ describe('liveControls', () => {
     expect(liveControls(run(2), 3, false).nextIndex).toBeNull();
   });
   it('passo atual além do roteiro', () => {
-    expect(liveControls(run(5), 3, false)).toMatchObject({ nextIndex: null, prevIndex: 2, highlightedIndex: null });
+    expect(liveControls(run(5), 3, false)).toMatchObject({ nextIndex: null, prevIndex: 2, highlightedIndex: null, stepCount: 3 });
   });
   it('pendente desabilita tudo', () => {
     expect(liveControls(run(1), 3, true)).toMatchObject({ canEnd: false, canSelectStep: false, prevIndex: null, nextIndex: null });
