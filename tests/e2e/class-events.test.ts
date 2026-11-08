@@ -49,3 +49,76 @@ describe.skipIf(!TEST_DB_URL)('class_events (banco)', () => {
     ).rejects.toMatchObject({ code: 'P2002' });
   });
 });
+
+describe.skipIf(!TEST_DB_URL)('class-event-repository (banco)', () => {
+  let db: typeof import('@/lib/db').db;
+  const agendaIds: string[] = [];
+
+  const freshAgenda = async (): Promise<string> => {
+    const student = await db.user.findFirstOrThrow({ where: { enrollment: STUDENT_ENROLLMENT } });
+    const start = new Date();
+    const agenda = await db.agenda.create({
+      data: {
+        title: 'Aula descartável repositório',
+        subject: 'Teste',
+        type: 'CLASSROOM',
+        startTime: start,
+        endTime: new Date(start.getTime() + MS_PER_HOUR),
+        classId: student.classId!,
+      },
+    });
+    agendaIds.push(agenda.id);
+    return agenda.id;
+  };
+
+  beforeAll(async () => {
+    process.env.DATABASE_URL = TEST_DB_URL;
+    db = (await import('@/lib/db')).db;
+  });
+
+  afterAll(async () => {
+    await db.agenda.deleteMany({ where: { id: { in: agendaIds } } });
+    await db.$disconnect();
+  });
+
+  it('10 appends concorrentes geram seq 1..10 sem buraco', async () => {
+    const { appendEvents } = await import('@/domains/classroom/class-event-repository');
+    const freshAgendaId = await freshAgenda();
+    const rows = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        appendEvents(freshAgendaId, () => [
+          { type: 'TEACHER_NOTE', stepIndex: null, payload: { tutor: null, scope: 'LESSON' }, audience: 'TEACHER', createdBy: 'TEACHER' },
+        ]),
+      ),
+    );
+    expect(rows.flat().map((r) => r.seq).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it('dois SESSION_STARTED simultâneos: um grava, o outro 409', async () => {
+    const { appendEvents } = await import('@/domains/classroom/class-event-repository');
+    const { DomainError } = await import('@/lib/api/domain-error');
+    const otherAgendaId = await freshAgenda();
+    const start = () =>
+      appendEvents(otherAgendaId, (ctx) => {
+        if (ctx.phase !== 'NOT_STARTED') throw new DomainError(409, 'A aula já foi iniciada.', { code: 'CLASS_ALREADY_STARTED' });
+        return [{ type: 'SESSION_STARTED', stepIndex: null, payload: {}, audience: 'ALL', createdBy: 'TEACHER' }];
+      });
+    const r = await Promise.allSettled([start(), start()]);
+    expect(r.map((x) => x.status).sort()).toEqual(['fulfilled', 'rejected']);
+  });
+
+  it('audience filtrado no WHERE', async () => {
+    const { appendEvents, findEventsAfter } = await import('@/domains/classroom/class-event-repository');
+    const id = await freshAgenda();
+    const note = (audience: string) => ({
+      type: 'TEACHER_NOTE' as const,
+      stepIndex: null,
+      payload: { tutor: null, scope: 'LESSON' },
+      audience,
+      createdBy: 'TEACHER' as const,
+    });
+    await appendEvents(id, () => [note('ALL'), note('TEACHER'), note('s1'), note('s2')]);
+    const rows = await findEventsAfter(id, 0, ['ALL', 's1'], 200);
+    expect(rows.map((r) => r.audience)).toEqual(['ALL', 's1']);
+  });
+});
