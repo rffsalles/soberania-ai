@@ -114,6 +114,8 @@ The classroom is driven by an append-only `class_events` table (per-class `seq`,
 
 To drive a class end to end in a browser (teacher panel and student page), run `npm run test:e2e:ui`. It needs the dev server (Playwright starts `npm run dev` or reuses port 3000), a `.env` pointing to the dev database, Chromium installed with `npx playwright install chromium`, and the demo seed (accounts and the agenda "Modelagem Conceitual e Álgebra Relacional (JOINs)"); the spec itself sets the roteiro and reopens the agenda. With `PLAYWRIGHT_BASE_URL` set, the browser targets that server but Prisma still writes to the local `.env` database, so use it only when both point to the same environment. CI does not run this test.
 
+The proactive tutor publishes, at each step, a cited card (and a check question when it fits) built from the lesson's chapters; a step costs at most 2 model calls, and a step prepared in advance (`tutor_step_drafts`) is published without calling the model. The Playwright spec covers this without a real provider: every run starts with the tutor muted for the whole class, releases only the step under test with a prepared draft, and asserts that no `TUTOR_CARD`/`TUTOR_QUESTION` rows were logged in `inference_logs`.
+
 ## Evals
 
 [`evals/`](evals/README.md) is a Python 3.11 harness that tests the tutor's behavior over HTTP, the way a student uses it: it logs in with the demo account, asks 40 questions derived from the seed corpus and grades the replies.

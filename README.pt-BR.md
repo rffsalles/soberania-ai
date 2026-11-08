@@ -114,6 +114,8 @@ A sala de aula é movida por uma tabela `class_events` somente de inserção (`s
 
 Para conduzir uma aula de ponta a ponta no navegador (painel do professor e página do aluno), rode `npm run test:e2e:ui`. Precisa do servidor de dev (o Playwright sobe `npm run dev` ou reaproveita a porta 3000), de um `.env` apontando para o banco de dev, do Chromium instalado com `npx playwright install chromium` e do seed de demonstração (contas e a agenda "Modelagem Conceitual e Álgebra Relacional (JOINs)"); o próprio teste define o roteiro e reabre a agenda. Com `PLAYWRIGHT_BASE_URL` definido, o navegador acessa esse servidor, mas o Prisma continua gravando no banco do `.env` local; use só quando os dois apontam para o mesmo ambiente. O CI não roda este teste.
 
+A tutora proativa publica, a cada passo, um cartão citado (e uma pergunta de verificação quando cabe) montado a partir dos capítulos da aula; cada passo custa no máximo 2 chamadas ao modelo, e um passo preparado com antecedência (`tutor_step_drafts`) é publicado sem chamar o modelo. O Playwright cobre isso sem provedor real: cada execução começa com a tutora em silêncio na aula toda, libera só o passo testado com um rascunho preparado e confere que nenhuma linha `TUTOR_CARD`/`TUTOR_QUESTION` foi registrada em `inference_logs`.
+
 ## Evals
 
 [`evals/`](evals/README.md) é um harness em Python 3.11 que testa o comportamento da tutora pela API HTTP, como um aluno a usa: faz login com a conta de demonstração, envia 40 perguntas derivadas do seed e avalia as respostas.
