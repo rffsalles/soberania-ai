@@ -127,6 +127,15 @@ export async function hasEventUpTo(agendaId: string, type: ClassEventType, upToS
   return row !== null;
 }
 
+/** Existe evento do tipo na aula, sem limite de seq (seq é INT4). */
+export async function hasEvent(agendaId: string, type: ClassEventType): Promise<boolean> {
+  const row = await db.classEvent.findFirst({
+    where: { agendaId, type, audience: 'ALL' },
+    select: { seq: true },
+  });
+  return row !== null;
+}
+
 export type TutorEventType = 'TUTOR_CARD' | 'TUTOR_QUESTION' | 'TUTOR_SKIPPED';
 export type NewTutorEvent = {
   type: TutorEventType;

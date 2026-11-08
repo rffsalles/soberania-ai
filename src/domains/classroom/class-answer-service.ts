@@ -11,7 +11,7 @@ import {
 import {
   findEventBySeq,
   findEventsAfter,
-  hasEventUpTo,
+  hasEvent,
   TUTOR_EVENTS_SCAN,
   type ClassEventRow,
 } from './class-event-repository';
@@ -44,7 +44,7 @@ const defaultDeps: ClassAnswerDeps = {
   insertClassAnswer,
   countClassAnswers,
   findClassAnswer,
-  hasSessionEnded: (agendaId) => hasEventUpTo(agendaId, 'SESSION_ENDED', Number.MAX_SAFE_INTEGER),
+  hasSessionEnded: (agendaId) => hasEvent(agendaId, 'SESSION_ENDED'),
 };
 
 const NOT_FOUND = 'Pergunta não encontrada.';

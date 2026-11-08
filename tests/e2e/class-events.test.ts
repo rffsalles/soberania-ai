@@ -41,6 +41,15 @@ describe.skipIf(!TEST_DB_URL)('class_events (banco)', () => {
     await db.classEvent.create({ data: { ...base, seq: 4, type: 'STEP_CHANGED', stepIndex: 0, createdBy: 'TEACHER' } });
   });
 
+  it('hasEvent roda de verdade no Postgres (sem limite de seq INT4)', async () => {
+    const { hasEvent } = await import('@/domains/classroom/class-event-repository');
+    await expect(hasEvent(agendaId, 'SESSION_ENDED')).resolves.toBe(false);
+    await db.classEvent.create({
+      data: { agendaId, seq: 99, type: 'SESSION_ENDED', payload: {}, audience: 'ALL', createdBy: 'TEACHER' },
+    });
+    await expect(hasEvent(agendaId, 'SESSION_ENDED')).resolves.toBe(true);
+  });
+
   it('(agendaId, seq) é único', async () => {
     await expect(
       db.classEvent.create({

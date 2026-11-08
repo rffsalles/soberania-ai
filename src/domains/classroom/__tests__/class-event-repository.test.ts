@@ -30,7 +30,7 @@ vi.mock('@/lib/db', () => ({
   db: { $transaction: (fn: never) => $transaction(fn), classEvent: { findMany: (a: never) => findMany(a), findFirst: (a: never) => findFirst(a) } },
 }));
 
-import { appendEvents, appendTutorEvents, findEventBySeq, findEventsAfter } from '../class-event-repository';
+import { appendEvents, appendTutorEvents, findEventBySeq, findEventsAfter, hasEvent } from '../class-event-repository';
 
 const ev = { type: 'TEACHER_NOTE', stepIndex: null, payload: {}, audience: 'TEACHER', createdBy: 'TEACHER' } as const;
 const p2002 = () => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
@@ -175,5 +175,19 @@ describe('findEventBySeq', () => {
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { agendaId: 'a1', seq: 9, audience: { in: ['ALL'] } } }),
     );
+  });
+});
+
+describe('hasEvent', () => {
+  it('consulta sem limite de seq e devolve true/false', async () => {
+    findFirst.mockResolvedValueOnce({ seq: 7 });
+    await expect(hasEvent('a1', 'SESSION_ENDED')).resolves.toBe(true);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { agendaId: 'a1', type: 'SESSION_ENDED', audience: 'ALL' },
+      select: { seq: true },
+    });
+    expect(findFirst.mock.calls[0][0].where).not.toHaveProperty('seq');
+    findFirst.mockResolvedValueOnce(null);
+    await expect(hasEvent('a1', 'SESSION_ENDED')).resolves.toBe(false);
   });
 });
