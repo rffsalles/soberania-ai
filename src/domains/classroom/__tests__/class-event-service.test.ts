@@ -7,6 +7,8 @@ import type { ClassEventRow, NewClassEvent, AppendContext } from '../class-event
 import { parseClassEvent } from '../class-event-schema';
 import {
   appendTeacherEvent,
+  appendVideoStep,
+  stepIndexAt,
   closeClassIfRunning,
   isClassClosed,
   listEventsAfter,
@@ -32,12 +34,12 @@ function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | nul
   const findEventsAfter = vi.fn(async (_id: string, after: number, audiences: string[], limit: number) =>
     rows.filter((r) => r.seq > after && audiences.includes(r.audience)).slice(0, limit),
   );
-  const appendEvents = async (_id: string, build: (ctx: AppendContext) => NewClassEvent[]) => {
+  const appendEvents = async (_id: string, build: (ctx: AppendContext) => NewClassEvent[], opts?: { stepAudience?: string }) => {
     const run = async () => {
       const session = [...rows].reverse().find((r) => r.type === 'SESSION_STARTED' || r.type === 'SESSION_ENDED');
       const step = [...rows].reverse().find((r) => r.type === 'STEP_CHANGED');
       const phase = !session ? 'NOT_STARTED' : session.type === 'SESSION_STARTED' ? 'RUNNING' : 'ENDED';
-      const events = build({ phase, currentStepIndex: step?.stepIndex ?? null });
+      const events = build({ phase, currentStepIndex: step?.stepIndex ?? null, audienceStepIndex: opts?.stepAudience ? ([...rows].reverse().find((r) => r.type === 'STEP_CHANGED' && r.audience === opts.stepAudience)?.stepIndex ?? null) : null });
       const out = events.map((e, i) => ({
         ...e,
         seq: rows.length + i + 1,
@@ -491,5 +493,94 @@ describe('stalledTutorStepFor', () => {
     deps.repo = { ...deps.repo, findLatestStepChanged: vi.fn(async () => { throw new Error('db'); }) };
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await stalledTutorStepFor(teacher, 'a1', NOW, deps)).toBeNull();
+  });
+});
+
+describe('stepIndexAt', () => {
+  const sc: TimeScriptItem[] = [
+    { timeSeconds: 30, timeRange: 'a', activity: 'A', description: 'd' },
+    { timeSeconds: 600, timeRange: 'b', activity: 'B', description: 'd' },
+    { timeSeconds: 1800, timeRange: 'c', activity: 'C', description: 'd' },
+  ];
+  it('antes do primeiro passo: null', () => expect(stepIndexAt(sc, 10)).toBeNull());
+  it('limite exato', () => {
+    expect(stepIndexAt(sc, 30)).toBe(0);
+    expect(stepIndexAt(sc, 600)).toBe(1);
+  });
+  it('entre passos', () => expect(stepIndexAt(sc, 1000)).toBe(1));
+  it('depois do último', () => expect(stepIndexAt(sc, 99999)).toBe(2));
+});
+
+describe('appendVideoStep', () => {
+  it('professor: 403', async () => {
+    const { deps } = makeDeps();
+    await expect(appendVideoStep(teacher, 'a1', 700, deps)).rejects.toMatchObject({
+      status: 403,
+      message: 'Apenas alunos registram o avanço do vídeo.',
+    });
+  });
+
+  it('escopo: propaga o 404 da agenda', async () => {
+    const { deps } = makeDeps();
+    deps.getAgenda = vi.fn(async () => {
+      throw new DomainError(404, 'Agenda não encontrada.');
+    });
+    await expect(appendVideoStep(student, 'a1', 700, deps)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it.each(['CANCELLED', 'COMPLETED'])('agenda %s: 409 CLASS_ENDED', async (storedStatus) => {
+    const { deps } = makeDeps({ storedStatus });
+    await expect(appendVideoStep(student, 'a1', 700, deps)).rejects.toMatchObject({
+      status: 409,
+      details: { code: 'CLASS_ENDED' },
+      message: 'A aula já foi encerrada.',
+    });
+  });
+
+  it('antes do primeiro passo: []', async () => {
+    const { deps, rows } = makeDeps({ script: [{ ...script[0], timeSeconds: 30 }] });
+    expect(await appendVideoStep(student, 'a1', 10, deps)).toEqual([]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('aula ao vivo (RUNNING): 409 LIVE_CLASS_IN_PROGRESS', async () => {
+    const { deps, rows } = makeDeps();
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    const before = rows.length;
+    await expect(appendVideoStep(student, 'a1', 700, deps)).rejects.toMatchObject({
+      status: 409,
+      details: { code: 'LIVE_CLASS_IN_PROGRESS' },
+      message: 'A aula está acontecendo ao vivo; o roteiro segue o professor.',
+    });
+    expect(rows).toHaveLength(before);
+  });
+
+  it('aula ENDED: 409 CLASS_ENDED', async () => {
+    const { deps } = makeDeps();
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    await expect(appendVideoStep(student, 'a1', 700, deps)).rejects.toMatchObject({
+      status: 409,
+      details: { code: 'CLASS_ENDED' },
+    });
+  });
+
+  it('passo novo: um STEP_CHANGED do aluno, SYSTEM, com videoSeconds', async () => {
+    const { deps, rows } = makeDeps();
+    const out = await appendVideoStep(student, 'a1', 700, deps);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ type: 'STEP_CHANGED', stepIndex: 1, createdBy: 'SYSTEM' });
+    expect(out[0].payload).toEqual({ activity: 'Conceito', timeRange: '10-20', fromStepIndex: null, videoSeconds: 700 });
+    expect(rows[0].audience).toBe('s1');
+  });
+
+  it('mesmo passo não repete; passo seguinte traz fromStepIndex', async () => {
+    const { deps, rows } = makeDeps();
+    await appendVideoStep(student, 'a1', 700, deps);
+    expect(await appendVideoStep(student, 'a1', 900, deps)).toEqual([]);
+    expect(rows).toHaveLength(1);
+    const next = await appendVideoStep(student, 'a1', 1300, deps);
+    expect(next[0]).toMatchObject({ stepIndex: 2 });
+    expect(next[0].payload).toMatchObject({ fromStepIndex: 1, videoSeconds: 1300 });
   });
 });

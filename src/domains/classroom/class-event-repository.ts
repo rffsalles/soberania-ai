@@ -24,7 +24,13 @@ export type ClassEventRow = {
   createdAt: Date;
 };
 
-export type AppendContext = { phase: SessionPhase; currentStepIndex: number | null };
+export type AppendContext = {
+  phase: SessionPhase;
+  currentStepIndex: number | null;
+  /** stepIndex do último STEP_CHANGED com audience = options.stepAudience; null sem a opção. */
+  audienceStepIndex: number | null;
+};
+export type AppendOptions = { stepAudience?: string };
 
 const ROW_SELECT = {
   seq: true,
@@ -42,7 +48,7 @@ function isUniqueViolation(e: unknown): boolean {
 
 type Tx = Prisma.TransactionClient;
 
-async function lockAndReadState(tx: Tx, agendaId: string): Promise<AppendContext> {
+async function lockAndReadState(tx: Tx, agendaId: string, stepAudience?: string): Promise<AppendContext> {
   const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM agendas WHERE id = ${agendaId} FOR UPDATE`;
   if (locked.length === 0) throw new DomainError(404, 'Agenda não encontrada.');
 
@@ -56,12 +62,21 @@ async function lockAndReadState(tx: Tx, agendaId: string): Promise<AppendContext
     orderBy: { seq: 'desc' },
     select: { stepIndex: true },
   });
+  let audienceStepIndex: number | null = null;
+  if (stepAudience !== undefined) {
+    const own = await tx.classEvent.findFirst({
+      where: { agendaId, audience: stepAudience, type: 'STEP_CHANGED' },
+      orderBy: { seq: 'desc' },
+      select: { stepIndex: true },
+    });
+    audienceStepIndex = own?.stepIndex ?? null;
+  }
   const phase: SessionPhase = !lastSession
     ? 'NOT_STARTED'
     : lastSession.type === 'SESSION_STARTED'
       ? 'RUNNING'
       : 'ENDED';
-  return { phase, currentStepIndex: lastStep?.stepIndex ?? null };
+  return { phase, currentStepIndex: lastStep?.stepIndex ?? null, audienceStepIndex };
 }
 
 async function insertEvents(tx: Tx, agendaId: string, events: NewClassEvent[]): Promise<ClassEventRow[]> {
@@ -84,9 +99,10 @@ async function insertEvents(tx: Tx, agendaId: string, events: NewClassEvent[]): 
 async function appendOnce(
   agendaId: string,
   build: (ctx: AppendContext) => NewClassEvent[],
+  options?: AppendOptions,
 ): Promise<ClassEventRow[]> {
   return db.$transaction(async (tx) => {
-    const ctx = await lockAndReadState(tx, agendaId);
+    const ctx = await lockAndReadState(tx, agendaId, options?.stepAudience);
     const events = build(ctx);
     if (events.length === 0) return [];
     return insertEvents(tx, agendaId, events);
@@ -96,12 +112,13 @@ async function appendOnce(
 export async function appendEvents(
   agendaId: string,
   build: (ctx: AppendContext) => NewClassEvent[],
+  options?: AppendOptions,
 ): Promise<ClassEventRow[]> {
   try {
-    return await appendOnce(agendaId, build);
+    return await appendOnce(agendaId, build, options);
   } catch (e) {
     if (!isUniqueViolation(e)) throw e;
-    return appendOnce(agendaId, build);
+    return appendOnce(agendaId, build, options);
   }
 }
 

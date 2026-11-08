@@ -1,4 +1,4 @@
-import { AgendaStatus, Role, type Prisma } from '@prisma/client';
+import { AgendaStatus, Role, type ClassEventActor, type Prisma } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import {
   getAgendaForUser,
@@ -93,6 +93,7 @@ function stepEvent(
   script: TimeScriptItem[],
   stepIndex: number,
   fromStepIndex: number | null,
+  extra: { createdBy?: ClassEventActor; audience?: string; videoSeconds?: number } = {},
 ): NewClassEvent {
   const item = script[stepIndex];
   return {
@@ -102,10 +103,56 @@ function stepEvent(
       activity: item.activity.trim().slice(0, 200) || stepLabel(stepIndex),
       timeRange: item.timeRange.slice(0, 40),
       fromStepIndex,
+      ...(extra.videoSeconds !== undefined ? { videoSeconds: extra.videoSeconds } : {}),
     },
-    audience: 'ALL',
-    createdBy: 'TEACHER',
+    audience: extra.audience ?? 'ALL',
+    createdBy: extra.createdBy ?? 'TEACHER',
   };
+}
+
+/** Maior i com timeSeconds <= videoSeconds; null antes do primeiro passo. */
+export function stepIndexAt(script: TimeScriptItem[], videoSeconds: number): number | null {
+  let found: number | null = null;
+  for (const [i, item] of script.entries()) {
+    if (item.timeSeconds <= videoSeconds) found = i;
+  }
+  return found;
+}
+
+/** Aula gravada: registra o passo do vídeo de um aluno (audience = o aluno, createdBy SYSTEM). */
+export async function appendVideoStep(
+  user: AgendaActor,
+  agendaId: string,
+  videoSeconds: number,
+  deps: ClassEventDeps = defaultDeps,
+): Promise<ClassEventDTO[]> {
+  if (user.role !== Role.STUDENT) {
+    throw new DomainError(403, 'Apenas alunos registram o avanço do vídeo.');
+  }
+  const agenda = await deps.getAgenda(agendaId, user);
+  const stored = await deps.findStoredStatus(agendaId);
+  if (stored === AgendaStatus.CANCELLED || stored === AgendaStatus.COMPLETED) {
+    throw conflict('CLASS_ENDED', 'A aula já foi encerrada.');
+  }
+  const script = agenda.lessonPlanId ? await deps.findTimeScript(agenda.lessonPlanId) : [];
+  const i = stepIndexAt(script, videoSeconds);
+  if (i === null) return [];
+
+  const rows = await deps.repo.appendEvents(
+    agendaId,
+    ({ phase, audienceStepIndex }) => {
+      if (phase === 'RUNNING') {
+        throw conflict('LIVE_CLASS_IN_PROGRESS', 'A aula está acontecendo ao vivo; o roteiro segue o professor.');
+      }
+      if (phase === 'ENDED') throw conflict('CLASS_ENDED', 'A aula já foi encerrada.');
+      if (audienceStepIndex === i) return [];
+      return [
+        stepEvent(script, i, audienceStepIndex, { createdBy: 'SYSTEM', audience: user.id, videoSeconds }),
+      ];
+    },
+    { stepAudience: user.id },
+  );
+  return rows.map(toClassEventDTO);
 }
 
 export async function appendTeacherEvent(

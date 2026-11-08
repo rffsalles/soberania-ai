@@ -57,13 +57,31 @@ describe('appendEvents', () => {
     );
     const build = vi.fn(() => [ev]);
     await appendEvents('a1', build);
-    expect(build).toHaveBeenCalledWith({ phase: 'RUNNING', currentStepIndex: 3 });
+    expect(build).toHaveBeenCalledWith({ phase: 'RUNNING', currentStepIndex: 3, audienceStepIndex: null });
   });
 
   it('sem eventos: NOT_STARTED e passo null', async () => {
     const build = vi.fn(() => []);
     await appendEvents('a1', build);
-    expect(build).toHaveBeenCalledWith({ phase: 'NOT_STARTED', currentStepIndex: null });
+    expect(build).toHaveBeenCalledWith({ phase: 'NOT_STARTED', currentStepIndex: null, audienceStepIndex: null });
+  });
+
+  it('stepAudience: lê o passo do aluno dentro da trava, filtrando a audiência', async () => {
+    findFirst.mockImplementation(async (a: { where: { audience: string; type: unknown } }) =>
+      a.where.audience === 's1' ? { stepIndex: 2 } : a.where.type === 'STEP_CHANGED' ? { stepIndex: 0 } : null,
+    );
+    const build = vi.fn(() => []);
+    await appendEvents('a1', build, { stepAudience: 's1' });
+    expect(build).toHaveBeenCalledWith({ phase: 'NOT_STARTED', currentStepIndex: 0, audienceStepIndex: 2 });
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { agendaId: 'a1', audience: 's1', type: 'STEP_CHANGED' } }),
+    );
+    expect(calls.slice(0, 4)).toEqual(['lock', 'read', 'read', 'read']);
+  });
+
+  it('sem stepAudience: audienceStepIndex null e sem consulta extra', async () => {
+    await appendEvents('a1', () => []);
+    expect(findFirst).toHaveBeenCalledTimes(2);
   });
 
   it('build lança 409: nada é inserido e o erro propaga', async () => {
