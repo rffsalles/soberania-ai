@@ -37,12 +37,15 @@ def card_cites(obs: ProactiveObservation, expect: Expectation) -> GradeResult:
     if card is None:
         return GradeResult(name, False, "não há cartão da tutora no passo")
     material = normalize(expect.citation.material)
-    chapter = re.escape(normalize(expect.citation.chapter))
-    chapter_re = re.compile(rf"(?<![\w]){chapter}(?![\w])")
+    wanted = re.search(r"\d+", expect.citation.chapter)
+    if wanted is None:
+        return GradeResult(name, False, "expect.citation.chapter sem número de capítulo")
     labels = [str((c.get("citation") or {}).get("label", "")) for c in _concepts(card)]
     for label in labels:
         norm = normalize(label)
-        if material in norm and chapter_re.search(norm):
+        # Rótulos reais: "Cap. 6: ... — Material (Autor), p. 1" ou o fallback "Capítulo 6: ... — Material".
+        m = re.match(r"cap(?:\.|itulo)\s*(\d+)(?!\d)", norm)
+        if material in norm and m and m.group(1) == wanted.group(0):
             return GradeResult(name, True, f"citou {label}")
     return GradeResult(
         name,

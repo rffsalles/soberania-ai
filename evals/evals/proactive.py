@@ -107,7 +107,9 @@ def run_proactive_cases(
 
     results: list[CaseResult] = []
     for case in cases:
-        result = _evaluate(case, observations[case.step], timeout_s)  # type: ignore[index]
+        if case.step is None:
+            raise ClientError(f"caso {case.id} sem step")
+        result = _evaluate(case, observations[case.step], timeout_s)
         results.append(result)
         if on_result:
             on_result(result)

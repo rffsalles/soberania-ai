@@ -15,7 +15,8 @@ from evals.graders.proactive import PROACTIVE_GRADERS
 from evals.proactive import ProactiveObservation, run_proactive_cases
 from evals.runner import CaseResult, regrade
 
-LABEL = "Sistemas de Banco de Dados · Capítulo 6, pág. 3"
+LABEL = "Cap. 6: Transações — Sistemas de Banco de Dados (Autor), p. 120 a 131"
+FALLBACK = "Capítulo 6: Transações — Sistemas de Banco de Dados"
 
 
 def _case(**kw: Any) -> Case:
@@ -123,7 +124,9 @@ CITE = _expect(citation={"material": "Sistemas de Banco de Dados", "chapter": "C
 def test_card_cites() -> None:
     g = PROACTIVE_GRADERS["card_cites"]
     assert g(_obs([_card()]), CITE).passed
-    assert not g(_obs([_card(label="Sistemas de Banco de Dados · Capítulo 60")]), CITE).passed
+    assert g(_obs([_card(label=FALLBACK)]), CITE).passed
+    assert not g(_obs([_card(label=LABEL.replace("Cap. 6", "Cap. 16"))]), CITE).passed
+    assert not g(_obs([_card(label=LABEL.replace("Sistemas de Banco de Dados", "Outro livro"))]), CITE).passed
     assert not g(_obs([]), CITE).passed
     assert not g(_obs([_card()]), Expectation()).passed
     assert isinstance(CITE.citation, ExpectedCitation)
