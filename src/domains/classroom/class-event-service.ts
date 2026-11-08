@@ -168,7 +168,7 @@ export async function appendTeacherEvent(
       console.error('[aula] falha ao concluir a agenda após SESSION_ENDED', err);
     }
   }
-  return rows.map(toDTO);
+  return rows.map(toClassEventDTO);
 }
 
 /**
@@ -187,7 +187,7 @@ export async function closeClassIfRunning(
   return rows.length > 0;
 }
 
-function toDTO(row: ClassEventRow): ClassEventDTO {
+export function toClassEventDTO(row: ClassEventRow): ClassEventDTO {
   return {
     seq: row.seq,
     type: row.type,
@@ -207,7 +207,7 @@ function readable(user: AgendaActor, rows: ClassEventRow[]): ClassEventDTO[] {
       console.warn(`[aula] evento ${row.seq} com payload inválido descartado: ${parsed.error}`);
       continue;
     }
-    const dto = { ...toDTO(row), payload: parsed.payload };
+    const dto = { ...toClassEventDTO(row), payload: parsed.payload };
     out.push(isStudent ? projectForStudent(dto) : dto);
   }
   return out;

@@ -1,0 +1,139 @@
+import type { TimeScriptItem } from '@/domains/teaching/time-script';
+import { timeScriptSchema } from '@/domains/teaching/time-script';
+import { findAgendaById } from '@/domains/agendas/services/agenda-repository';
+import { findLessonPlayerData, findLessonTutorScope } from '@/domains/teaching/services/lesson-plan-repository';
+import { parseClassEvent, type ClassEventDTO } from './class-event-schema';
+import {
+  appendTutorEvents,
+  findEventsAfter,
+  TUTOR_EVENTS_SCAN,
+  type NewTutorEvent,
+} from './class-event-repository';
+import { toClassEventDTO } from './class-event-service';
+import { isTutorMuted, sessionPhase, tutorContentForStep } from './class-state';
+import { decideTutorPlan, noMaterialSkip, stepDurationSeconds } from './tutor-policy';
+import { produceStepContent, type StepContent, type StepContentInput } from './tutor-step-content';
+
+export type TutorStepContext = {
+  agendaId: string;
+  lessonPlanId: string;
+  agendaSeconds: number;
+  script: TimeScriptItem[];
+  dailyObjective: string;
+  chapterIds: string[];
+};
+
+export type TutorWorkerDeps = {
+  loadContext(agendaId: string): Promise<TutorStepContext | null>;
+  readEvents(agendaId: string): Promise<ClassEventDTO[]>;
+  produce(input: StepContentInput): Promise<StepContent>;
+  appendTutorEvents: typeof appendTutorEvents;
+};
+
+export type TutorRunResult = 'NO_STEP' | 'ENDED' | 'SILENT' | 'ALREADY_DONE' | 'BUSY' | 'PUBLISHED';
+
+const defaultDeps: TutorWorkerDeps = {
+  async loadContext(agendaId) {
+    const agenda = await findAgendaById(agendaId);
+    if (!agenda?.lessonPlanId) return null;
+    const [lesson, scope] = await Promise.all([
+      findLessonPlayerData(agenda.lessonPlanId),
+      findLessonTutorScope(agenda.lessonPlanId),
+    ]);
+    if (!lesson) return null;
+    const parsed = timeScriptSchema.safeParse(lesson.timeScript);
+    return {
+      agendaId,
+      lessonPlanId: agenda.lessonPlanId,
+      agendaSeconds: Math.max(0, (agenda.endTime.getTime() - agenda.startTime.getTime()) / 1000),
+      script: parsed.success ? parsed.data : [],
+      dailyObjective: lesson.dailyObjective,
+      chapterIds: (scope?.chapters ?? []).map((c) => c.id),
+    };
+  },
+  async readEvents(agendaId) {
+    const rows = await findEventsAfter(agendaId, 0, ['ALL', 'TEACHER'], TUTOR_EVENTS_SCAN);
+    const out: ClassEventDTO[] = [];
+    for (const row of rows) {
+      const parsed = parseClassEvent(row.type, row.payload, row.stepIndex);
+      if (parsed.ok) out.push({ ...toClassEventDTO(row), payload: parsed.payload });
+    }
+    return out;
+  },
+  produce: (input) => produceStepContent(input),
+  appendTutorEvents,
+};
+
+export async function runTutorForStep(
+  agendaId: string,
+  stepIndex: number,
+  deps: TutorWorkerDeps = defaultDeps,
+): Promise<TutorRunResult> {
+  const ctx = await deps.loadContext(agendaId);
+  const item = ctx?.script[stepIndex];
+  if (!ctx || !item) return 'NO_STEP';
+
+  const events = await deps.readEvents(agendaId);
+  if (sessionPhase(events) === 'ENDED') return 'ENDED';
+
+  const plan = decideTutorPlan(
+    { item, durationSeconds: stepDurationSeconds(ctx.script, stepIndex, ctx.agendaSeconds) },
+    { muted: isTutorMuted(events, stepIndex) },
+  );
+  if (plan.kind === 'SILENT') return 'SILENT';
+
+  const content = tutorContentForStep(events, stepIndex);
+  if (content.card || content.skipped) return 'ALREADY_DONE';
+
+  if (plan.question?.from === 'TEACHER' && !content.question) {
+    await deps.appendTutorEvents(agendaId, stepIndex, [
+      {
+        type: 'TUTOR_QUESTION',
+        payload: { kind: 'OPEN', text: plan.question.text, origin: 'TEACHER' },
+        audience: 'ALL',
+      },
+    ]);
+  }
+
+  const result = await deps.produce({
+    agendaId,
+    lessonPlanId: ctx.lessonPlanId,
+    stepIndex,
+    item,
+    dailyObjective: ctx.dailyObjective,
+    chapterIds: ctx.chapterIds,
+    wantQuestion: plan.question?.from === 'MODEL',
+  });
+  if (result.status === 'BUSY') return 'BUSY';
+
+  const batch: NewTutorEvent[] = [];
+  if (result.card) {
+    batch.push({
+      type: 'TUTOR_CARD',
+      payload: { ...result.card.payload, source: result.card.fromDraft ? 'DRAFT' : 'GENERATED' },
+      audience: 'ALL',
+    });
+  }
+  if (result.question) {
+    batch.push({
+      type: 'TUTOR_QUESTION',
+      payload: { ...result.question.payload, source: result.question.fromDraft ? 'DRAFT' : 'GENERATED' },
+      audience: 'ALL',
+    });
+  }
+  if (result.noMaterial) {
+    batch.push({ type: 'TUTOR_SKIPPED', payload: noMaterialSkip(plan), audience: 'TEACHER' });
+  } else if (result.failure) {
+    batch.push({ type: 'TUTOR_SKIPPED', payload: result.failure, audience: 'TEACHER' });
+  }
+  if (batch.length > 0) await deps.appendTutorEvents(agendaId, stepIndex, batch);
+  return 'PUBLISHED';
+}
+
+export async function runTutorForStepSafely(agendaId: string, stepIndex: number): Promise<void> {
+  try {
+    await runTutorForStep(agendaId, stepIndex);
+  } catch (err) {
+    console.error('[tutora] falha no worker', err);
+  }
+}
