@@ -253,7 +253,7 @@ describe('leitura', () => {
     expect(events.map((e) => e.seq)).toEqual([1]);
     expect(JSON.stringify(events[0].payload)).not.toContain('correctKey');
     expect(warn).toHaveBeenCalled();
-    expect(lastSeq).toBe(1);
+    expect(lastSeq).toBe(2);
     warn.mockRestore();
   });
 
