@@ -196,6 +196,7 @@ describe('appendTeacherEvent', () => {
     const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
     expect(out[0].type).toBe('SESSION_ENDED');
     expect(rows.some((r) => r.type === 'SESSION_ENDED')).toBe(true);
+    expect(spy).toHaveBeenCalled();
     spy.mockRestore();
   });
 
@@ -207,7 +208,10 @@ describe('appendTeacherEvent', () => {
     );
     const seqs = results.map((r) => r[0].seq);
     expect(new Set(seqs).size).toBe(5);
-    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(seqs).toEqual([seqs[0], seqs[0] + 1, seqs[0] + 2, seqs[0] + 3, seqs[0] + 4]);
+    const froms = results.map((r) => (r[0].payload as { fromStepIndex: number }).fromStepIndex);
+    expect(froms[0]).toBe(0);
+    for (let i = 1; i < 5; i++) expect(froms[i]).toBe(results[i - 1][0].stepIndex);
   });
 });
 
@@ -261,6 +265,17 @@ describe('leitura', () => {
     expect(t.events.map((e) => e.seq)).toEqual([1, 3]);
     const none = await listEventsAfter(teacher, 'a1', 3, deps);
     expect(none).toEqual({ events: [], lastSeq: 3 });
+    warn.mockRestore();
+  });
+
+  it('lastSeq avança até a última linha crua mesmo se ela for inválida', async () => {
+    const { deps, rows } = makeDeps();
+    seed(rows);
+    rows.splice(0, 1);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { events, lastSeq } = await listEventsAfter(student, 'a1', 0, deps);
+    expect(events).toEqual([]);
+    expect(lastSeq).toBe(2);
     warn.mockRestore();
   });
 

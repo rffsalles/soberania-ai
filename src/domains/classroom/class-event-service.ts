@@ -54,6 +54,10 @@ const defaultDeps: ClassEventDeps = {
   },
 };
 
+function isTeacherRole(user: AgendaActor): boolean {
+  return user.role === Role.TEACHER || user.role === Role.ADMIN;
+}
+
 function conflict(code: string, message: string): DomainError {
   return new DomainError(409, message, { code });
 }
@@ -83,7 +87,7 @@ export async function appendTeacherEvent(
   input: TeacherEventInput,
   deps: ClassEventDeps = defaultDeps,
 ): Promise<ClassEventDTO[]> {
-  if (user.role !== Role.TEACHER && user.role !== Role.ADMIN) {
+  if (!isTeacherRole(user)) {
     throw new DomainError(403, 'Apenas o professor da aula pode registrar eventos.');
   }
   const agenda = await deps.getAgenda(agendaId, user);
@@ -91,7 +95,8 @@ export async function appendTeacherEvent(
     throw badRequest('EVENT_TYPE_NOT_ALLOWED', 'Tipo de evento não permitido para o professor.');
   }
   const type = input.type as ClassEventTypeName;
-  const script = agenda.lessonPlanId ? await deps.findTimeScript(agenda.lessonPlanId) : [];
+  const needsScript = type === 'SESSION_STARTED' || type === 'STEP_CHANGED';
+  const script = needsScript && agenda.lessonPlanId ? await deps.findTimeScript(agenda.lessonPlanId) : [];
 
   let notePayload: unknown;
   if (type === 'STEP_CHANGED') {
@@ -159,7 +164,7 @@ function toDTO(row: ClassEventRow): ClassEventDTO {
 }
 
 function readable(user: AgendaActor, rows: ClassEventRow[]): ClassEventDTO[] {
-  const isStudent = user.role !== Role.TEACHER && user.role !== Role.ADMIN;
+  const isStudent = !isTeacherRole(user);
   const out: ClassEventDTO[] = [];
   for (const row of rows) {
     const parsed = parseClassEvent(row.type, row.payload, row.stepIndex);
@@ -173,19 +178,28 @@ function readable(user: AgendaActor, rows: ClassEventRow[]): ClassEventDTO[] {
   return out;
 }
 
+type PageReader = { readPage(after: number): Promise<{ events: ClassEventDTO[]; lastSeq: number }> };
+
+async function openPageReader(user: AgendaActor, agendaId: string, deps: ClassEventDeps): Promise<PageReader> {
+  await deps.getAgenda(agendaId, user);
+  const audiences = audiencesFor(user);
+  return {
+    async readPage(after) {
+      const rows = await deps.repo.findEventsAfter(agendaId, after, audiences, CLASS_EVENTS_PAGE);
+      // O cursor avança pelas linhas cruas: linhas inválidas descartadas não podem travá-lo.
+      const lastSeq = rows.reduce((max, r) => Math.max(max, r.seq), after);
+      return { events: readable(user, rows), lastSeq };
+    },
+  };
+}
+
 export async function openEventReader(
   user: AgendaActor,
   agendaId: string,
   deps: ClassEventDeps = defaultDeps,
 ): Promise<EventReader> {
-  await deps.getAgenda(agendaId, user);
-  const audiences = audiencesFor(user);
-  return {
-    async read(after) {
-      const rows = await deps.repo.findEventsAfter(agendaId, after, audiences, CLASS_EVENTS_PAGE);
-      return readable(user, rows);
-    },
-  };
+  const pages = await openPageReader(user, agendaId, deps);
+  return { read: async (after) => (await pages.readPage(after)).events };
 }
 
 export async function listEventsAfter(
@@ -194,7 +208,6 @@ export async function listEventsAfter(
   after: number,
   deps: ClassEventDeps = defaultDeps,
 ): Promise<{ events: ClassEventDTO[]; lastSeq: number }> {
-  const reader = await openEventReader(user, agendaId, deps);
-  const events = await reader.read(after);
-  return { events, lastSeq: events.length > 0 ? events[events.length - 1].seq : after };
+  const pages = await openPageReader(user, agendaId, deps);
+  return pages.readPage(after);
 }
