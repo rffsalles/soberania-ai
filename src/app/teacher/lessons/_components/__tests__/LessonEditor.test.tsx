@@ -337,4 +337,18 @@ describe('LessonEditor', () => {
       expect(saved.timeScript).toEqual([{ ...TWO_STEPS[1], description: 'Desc 2 refinada' }]);
     });
   });
+
+  it('"Preparar tutora": rascunho desabilitado com dica; publicada habilita; editar desabilita com outra dica', () => {
+    const steps = [{ timeSeconds: 0, timeRange: '00:00-10:00', activity: 'Abertura', description: 'D' }];
+    const { rerender } = render(<LessonEditor lesson={makeLesson({ timeScript: steps })} onSaved={() => {}} />);
+    expect((screen.getByRole('button', { name: 'Preparar tutora' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Publique a aula para preparar a tutora.')).toBeTruthy();
+
+    rerender(<LessonEditor lesson={makeLesson({ status: 'PUBLISHED', timeScript: steps })} onSaved={() => {}} />);
+    expect((screen.getByRole('button', { name: 'Preparar tutora' }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('Atividade da etapa 1'), { target: { value: 'Outra' } });
+    expect((screen.getByRole('button', { name: 'Preparar tutora' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Salve as alterações antes de preparar a tutora.')).toBeTruthy();
+  });
 });

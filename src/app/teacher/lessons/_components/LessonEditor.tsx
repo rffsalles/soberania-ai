@@ -23,6 +23,7 @@ import { MediaTabs } from './MediaTabs';
 import { RefineField } from './RefineField';
 import { useLessonGeneration } from './use-lesson-generation';
 import { useLessonStatus } from './use-lesson-status';
+import { usePrepareTutor } from './use-prepare-tutor';
 
 const SAVE_ERROR = 'Não foi possível salvar a aula. Tente novamente.';
 const EMPTY_STEP: TimeScriptItem = { timeSeconds: 0, timeRange: '', activity: '', description: '', socraticQuestion: '' };
@@ -109,6 +110,8 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   });
   const busy = generating || changing;
   const published = lesson.status === LESSON_STATUS.PUBLISHED;
+  const { run: prepareTutor, running: preparing, progress, summary } = usePrepareTutor(lesson.id);
+  const canPrepare = published && !dirty && steps.length > 0 && !busy && !preparing;
 
   // Compara o formulário com a aula salva; publicar só vale para o que está salvo.
   function isDirty(): boolean {
@@ -293,10 +296,25 @@ export function LessonEditor({ lesson, onSaved }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
             Roteiro por etapas
-            <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setSteps((c) => [...c, withKey(EMPTY_STEP)])}>
-              <Plus className="h-4 w-4" /> Etapa
-            </Button>
+            <span className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" className="gap-1" disabled={!canPrepare} onClick={() => prepareTutor(steps.length)}>
+                <Sparkles className="h-4 w-4" />
+                {preparing && progress ? `Preparando passo ${Math.min(progress.done + 1, progress.total)} de ${progress.total}…` : 'Preparar tutora'}
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setSteps((c) => [...c, withKey(EMPTY_STEP)])}>
+                <Plus className="h-4 w-4" /> Etapa
+              </Button>
+            </span>
           </CardTitle>
+          {!published && <p className="text-xs text-slate-500">Publique a aula para preparar a tutora.</p>}
+          {published && dirty && <p className="text-xs text-slate-500">Salve as alterações antes de preparar a tutora.</p>}
+          {summary && (
+            <ul role="status" className="text-xs text-slate-600 dark:text-slate-400">
+              {summary.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
           {steps.length === 0 && <p className="text-sm text-slate-500">Nenhuma etapa. Adicione a primeira etapa do roteiro.</p>}
