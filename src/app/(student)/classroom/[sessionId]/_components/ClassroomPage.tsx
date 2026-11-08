@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { deriveAgendaStatus } from '@/domains/agendas/agenda-validator';
 import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 import { useClassEvents } from '@/components/classroom/use-class-events';
+import { NowInClassStrip } from '@/components/classroom/now-in-class-strip';
 import { useSessionClock } from '@/components/classroom/use-session-clock';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 
@@ -46,7 +47,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
 
   const { agenda: session, isLoading, error, notFound } = useAgenda(sessionId);
   const { lesson, isLoading: lessonLoading } = useAgendaLesson(sessionId);
-  const { state, lastSeq } = useClassEvents(sessionId);
+  const { state, lastSeq, status: eventsStatus } = useClassEvents(sessionId);
   // '' antes de a sessão carregar: nextBoundaryDelay devolve null e nenhum timer é armado.
   const now = useSessionClock(session?.startTime ?? '', session?.endTime ?? '', state.phase);
   const [repliesDone, setRepliesDone] = React.useState(0);
@@ -127,6 +128,12 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
             </div>
           </div>
         </div>
+
+        <NowInClassStrip
+          stepIndex={state.phase === 'RUNNING' ? state.currentStepIndex : null}
+          activity={state.currentStepActivity}
+          status={eventsStatus}
+        />
 
         {/* 2-Column Responsive Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
