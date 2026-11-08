@@ -17,6 +17,7 @@ import {
   findLatestStepChanged,
   findStallEvents,
   CLASS_EVENTS_PAGE,
+  TUTOR_EVENTS_SCAN,
   type ClassEventRow,
   type NewClassEvent,
 } from './class-event-repository';
@@ -119,7 +120,10 @@ export function stepIndexAt(script: TimeScriptItem[], videoSeconds: number): num
   return found;
 }
 
-/** Aula gravada: registra o passo do vídeo de um aluno (audience = o aluno, createdBy SYSTEM). */
+/**
+ * Aula gravada (reprise, depois do fim da janela da agenda): registra o passo do vídeo de um aluno
+ * (audience = o aluno, createdBy SYSTEM).
+ */
 export async function appendVideoStep(
   user: AgendaActor,
   agendaId: string,
@@ -133,6 +137,13 @@ export async function appendVideoStep(
   const stored = await deps.findStoredStatus(agendaId);
   if (stored === AgendaStatus.CANCELLED || stored === AgendaStatus.COMPLETED) {
     throw conflict('CLASS_ENDED', 'A aula já foi encerrada.');
+  }
+  // Só a reprise: durante e antes da janela a aula ainda pode acontecer ao vivo com a tutora do professor.
+  if (!(Date.now() > Date.parse(agenda.endTime))) {
+    throw conflict(
+      'CLASS_NOT_OVER',
+      'A aula ainda pode acontecer ao vivo; a tutora da gravação começa depois do horário da aula.',
+    );
   }
   const script = agenda.lessonPlanId ? await deps.findTimeScript(agenda.lessonPlanId) : [];
   const i = stepIndexAt(script, videoSeconds);
@@ -260,6 +271,17 @@ export function toClassEventDTO(row: ClassEventRow): ClassEventDTO {
   };
 }
 
+/** Eventos da aula como o professor os vê (ALL + TEACHER), já validados: leitura de servidor da tutora. */
+export async function readTutorEvents(agendaId: string): Promise<ClassEventDTO[]> {
+  const rows = await findEventsAfter(agendaId, 0, ['ALL', 'TEACHER'], TUTOR_EVENTS_SCAN);
+  const out: ClassEventDTO[] = [];
+  for (const row of rows) {
+    const parsed = parseClassEvent(row.type, row.payload, row.stepIndex);
+    if (parsed.ok) out.push({ ...toClassEventDTO(row), payload: parsed.payload });
+  }
+  return out;
+}
+
 function readable(user: AgendaActor, rows: ClassEventRow[]): ClassEventDTO[] {
   const isStudent = !isTeacherRole(user);
   const out: ClassEventDTO[] = [];
@@ -326,16 +348,17 @@ export async function isClassClosed(
 
 /**
  * Passo atual parado (sem cartão nem TUTOR_SKIPPED há mais de 20 s), ou null. Barata: sai antes de qualquer
- * outra consulta quando o último STEP_CHANGED é recente; qualquer falha só loga.
+ * outra consulta quando o último STEP_CHANGED é recente; qualquer falha só loga. O passo é o do leitor:
+ * para o aluno vale também o STEP_CHANGED da própria aula gravada (audience = ele).
  */
 export async function stalledTutorStepFor(
-  _user: AgendaActor,
+  user: AgendaActor,
   agendaId: string,
   now: number,
   deps: ClassEventDeps = defaultDeps,
 ): Promise<number | null> {
   try {
-    const latest = await deps.repo.findLatestStepChanged(agendaId);
+    const latest = await deps.repo.findLatestStepChanged(agendaId, audiencesFor(user));
     if (!latest || latest.stepIndex === null) return null;
     if (now - latest.createdAt.getTime() <= TUTOR_STALL_MS) return null;
     const rows = await deps.repo.findStallEvents(agendaId, latest.stepIndex);

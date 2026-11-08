@@ -229,10 +229,10 @@ export async function appendTutorEvents(
   }
 }
 
-/** Último STEP_CHANGED da aula (o passo atual), para a checagem barata de passo parado. */
-export function findLatestStepChanged(agendaId: string): Promise<ClassEventRow | null> {
+/** Último STEP_CHANGED visível às audiences (o passo atual do leitor), para a checagem barata de passo parado. */
+export function findLatestStepChanged(agendaId: string, audiences: string[]): Promise<ClassEventRow | null> {
   return db.classEvent.findFirst({
-    where: { agendaId, type: 'STEP_CHANGED' },
+    where: { agendaId, type: 'STEP_CHANGED', audience: { in: audiences } },
     orderBy: { seq: 'desc' },
     select: ROW_SELECT,
   });

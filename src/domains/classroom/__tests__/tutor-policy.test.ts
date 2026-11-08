@@ -46,6 +46,11 @@ describe('tutor-policy', () => {
     expect(noMaterialSkip({ kind: 'RUN', question: { from: 'MODEL' } })).toEqual({ reason: 'NO_MATERIAL', kind: 'BOTH' });
     expect(noMaterialSkip({ kind: 'RUN', question: { from: 'TEACHER', text: 'x' } })).toEqual({ reason: 'NO_MATERIAL', kind: 'CARD' });
   });
+  it('regra 4 com rascunho: cartão já disponível deixa o skip só da pergunta', () => {
+    const model = { kind: 'RUN', question: { from: 'MODEL' } } as const;
+    expect(noMaterialSkip(model, { card: true, question: false })).toEqual({ reason: 'NO_MATERIAL', kind: 'QUESTION' });
+    expect(noMaterialSkip(model, { card: false, question: true })).toEqual({ reason: 'NO_MATERIAL', kind: 'CARD' });
+  });
   it('regra 5', () => {
     expect(failureReason(['rate_limit', 'rate_limit'])).toBe('RATE_LIMIT');
     expect(failureReason(['rate_limit'])).toBe('RATE_LIMIT');

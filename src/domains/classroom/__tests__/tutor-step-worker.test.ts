@@ -201,6 +201,21 @@ describe('runTutorForStep', () => {
     ]);
   });
 
+  it('NO_MATERIAL com cartão do rascunho publica o cartão e o skip só da pergunta', async () => {
+    const { deps, calls } = makeDeps({
+      content: done({ noMaterial: true, card: { payload: cardPayload, fromDraft: true } }),
+    });
+    expect(await runTutorForStep('ag', 0, deps)).toBe('PUBLISHED');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].map((e) => e.type)).toEqual(['TUTOR_CARD', 'TUTOR_SKIPPED']);
+    expect(calls[0][0].payload).toMatchObject({ source: 'DRAFT' });
+    expect(calls[0][1]).toEqual({
+      type: 'TUTOR_SKIPPED',
+      payload: { reason: 'NO_MATERIAL', kind: 'QUESTION' },
+      audience: 'TEACHER',
+    });
+  });
+
   it('cartão + falha vira um append com cartão e skip', async () => {
     const { deps, calls } = makeDeps({
       content: done({

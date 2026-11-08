@@ -7,7 +7,7 @@ import type { LessonActor } from '@/domains/teaching/services/lesson-service';
 import { findLessonWithContext, findLessonTutorScope } from '@/domains/teaching/services/lesson-plan-repository';
 import { findAgendaByLessonPlanId } from '@/domains/agendas/services/agenda-repository';
 import type { ClassEventDTO, TutorCardPayload } from './class-event-schema';
-import { readTutorEvents } from './tutor-step-worker';
+import { readTutorEvents } from './class-event-service';
 import { isTutorMuted, sessionPhase } from './class-state';
 import { decideTutorPlan, stepDurationSeconds, tutorSkipMessage } from './tutor-policy';
 import { listDrafts, type TutorDraftRow } from './tutor-step-draft-repository';

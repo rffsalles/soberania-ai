@@ -35,8 +35,14 @@ export function decideTutorPlan(
   return { kind: 'RUN', question: { from: 'MODEL' } };
 }
 
-export function noMaterialSkip(plan: Extract<TutorPlan, { kind: 'RUN' }>): TutorSkippedPayload {
-  return { reason: 'NO_MATERIAL', kind: plan.question?.from === 'MODEL' ? 'BOTH' : 'CARD' };
+/** Sem trechos: o skip cobre só o que não veio do rascunho (cartão já publicado → só a pergunta). */
+export function noMaterialSkip(
+  plan: Extract<TutorPlan, { kind: 'RUN' }>,
+  has: { card: boolean; question: boolean } = { card: false, question: false },
+): TutorSkippedPayload {
+  if (has.card) return { reason: 'NO_MATERIAL', kind: 'QUESTION' };
+  const questionMissing = plan.question?.from === 'MODEL' && !has.question;
+  return { reason: 'NO_MATERIAL', kind: questionMissing ? 'BOTH' : 'CARD' };
 }
 
 export function failureReason(results: CallResult[]): Exclude<SkipReason, 'NO_MATERIAL'> {

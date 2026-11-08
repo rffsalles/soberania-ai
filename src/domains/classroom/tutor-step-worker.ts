@@ -2,14 +2,9 @@ import type { TimeScriptItem } from '@/domains/teaching/time-script';
 import { timeScriptSchema } from '@/domains/teaching/time-script';
 import { findAgendaById } from '@/domains/agendas/services/agenda-repository';
 import { findLessonPlayerData, findLessonTutorScope } from '@/domains/teaching/services/lesson-plan-repository';
-import { parseClassEvent, type ClassEventDTO } from './class-event-schema';
-import {
-  appendTutorEvents,
-  findEventsAfter,
-  TUTOR_EVENTS_SCAN,
-  type NewTutorEvent,
-} from './class-event-repository';
-import { toClassEventDTO } from './class-event-service';
+import type { ClassEventDTO } from './class-event-schema';
+import { appendTutorEvents, type NewTutorEvent } from './class-event-repository';
+import { readTutorEvents } from './class-event-service';
 import { isTutorMuted, sessionPhase, tutorContentForStep } from './class-state';
 import { decideTutorPlan, noMaterialSkip, stepDurationSeconds } from './tutor-policy';
 import { produceStepContent, type StepContent, type StepContentInput } from './tutor-step-content';
@@ -32,16 +27,6 @@ export type TutorWorkerDeps = {
 };
 
 export type TutorRunResult = 'NO_STEP' | 'ENDED' | 'SILENT' | 'ALREADY_DONE' | 'BUSY' | 'PUBLISHED';
-
-export async function readTutorEvents(agendaId: string): Promise<ClassEventDTO[]> {
-  const rows = await findEventsAfter(agendaId, 0, ['ALL', 'TEACHER'], TUTOR_EVENTS_SCAN);
-  const out: ClassEventDTO[] = [];
-  for (const row of rows) {
-    const parsed = parseClassEvent(row.type, row.payload, row.stepIndex);
-    if (parsed.ok) out.push({ ...toClassEventDTO(row), payload: parsed.payload });
-  }
-  return out;
-}
 
 const defaultDeps: TutorWorkerDeps = {
   async loadContext(agendaId) {
@@ -130,7 +115,8 @@ export async function runTutorForStep(
     });
   }
   if (result.noMaterial) {
-    batch.push({ type: 'TUTOR_SKIPPED', payload: noMaterialSkip(plan), audience: 'TEACHER' });
+    const has = { card: !!result.card, question: !!result.question };
+    batch.push({ type: 'TUTOR_SKIPPED', payload: noMaterialSkip(plan, has), audience: 'TEACHER' });
   } else if (result.failure) {
     batch.push({ type: 'TUTOR_SKIPPED', payload: result.failure, audience: 'TEACHER' });
   }

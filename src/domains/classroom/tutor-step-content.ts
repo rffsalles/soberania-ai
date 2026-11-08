@@ -106,7 +106,8 @@ export async function produceStepContent(
   const { agendaId, lessonPlanId, stepIndex, item, dailyObjective, chapterIds, wantQuestion } = input;
   const { drafts } = deps;
 
-  const draft = await drafts.ensureDraft(lessonPlanId, stepIndex, stepHash(item, chapterIds));
+  const hash = stepHash(item, chapterIds);
+  const draft = await drafts.ensureDraft(lessonPlanId, stepIndex, hash);
   let card: { payload: TutorCardPayload; fromDraft: boolean } | null = null;
   const cardFromDraft = parseDraftCard(draft.card, stepIndex);
   if (cardFromDraft) card = { payload: cardFromDraft, fromDraft: true };
@@ -133,6 +134,9 @@ export async function produceStepContent(
     await drafts.releaseDraft(draft.id, claim);
     return content;
   };
+  // Reserva perdida (vencida e retomada, ou linha zerada por roteiro editado): para sem publicar nem liberar;
+  // quem tem a linha agora (ou a checagem de passo parado) publica.
+  const LOST: StepContent = { status: 'BUSY' };
 
   const scope = await deps.loadScope(lessonPlanId);
   const found = await deps.search({
@@ -145,7 +149,8 @@ export async function produceStepContent(
     (c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY,
   );
   if (chunks.length === 0) {
-    return finish({ status: 'DONE', noMaterial: true, card: null, question: null, failure: null });
+    // O que o rascunho já tinha continua valendo; noMaterial fala só do que falta.
+    return finish({ status: 'DONE', noMaterial: true, card, question, failure: null });
   }
 
   const cardResults: CallResult[] = [];
@@ -160,7 +165,10 @@ export async function produceStepContent(
       dailyObjective,
       sources,
     });
-    while (!card && (await drafts.spendCall(draft.id))) {
+    while (!card) {
+      const spent = await drafts.spendCall(draft.id, claim);
+      if (spent === 'LOST') return LOST;
+      if (spent === 'BUDGET') break;
       let result: CallResult;
       try {
         const { text, fallback, fallbackReason } = await collectStream(
@@ -174,7 +182,7 @@ export async function produceStepContent(
           const parsed = parseTutorCard(text, sources);
           if (parsed) {
             const payload: TutorCardPayload = { ...parsed, source: 'GENERATED' };
-            await drafts.saveDraftContent(draft.id, { card: payload });
+            if (!(await drafts.saveDraftContent(draft.id, claim, hash, { card: payload }))) return LOST;
             card = { payload, fromDraft: false };
             result = 'ok';
           } else result = 'invalid';
@@ -187,7 +195,9 @@ export async function produceStepContent(
   }
 
   const questionResults: CallResult[] = [];
-  if (wantQuestion && !question && (await drafts.spendCall(draft.id))) {
+  const questionSpend = wantQuestion && !question ? await drafts.spendCall(draft.id, claim) : null;
+  if (questionSpend === 'LOST') return LOST;
+  if (questionSpend === 'SPENT') {
     const generated = await generateQuestionsFromChunks(
       chunks,
       1,
@@ -207,7 +217,7 @@ export async function produceStepContent(
         origin: 'TUTOR',
         source: 'GENERATED',
       };
-      await drafts.saveDraftContent(draft.id, { question: payload });
+      if (!(await drafts.saveDraftContent(draft.id, claim, hash, { question: payload }))) return LOST;
       question = { payload, fromDraft: false };
       questionResults.push('ok');
     } else questionResults.push(generated.reason);

@@ -56,19 +56,43 @@ export async function claimDraft(id: string): Promise<DraftClaim | null> {
   return rows[0]?.claimedAt ?? null;
 }
 
-/** Gasta uma das chamadas ao modelo do passo; false quando o teto foi atingido. */
-export async function spendCall(id: string): Promise<boolean> {
+/** SPENT: gastou a chamada; BUDGET: dono da reserva, teto atingido; LOST: a reserva não é mais deste worker. */
+export type SpendResult = 'SPENT' | 'BUDGET' | 'LOST';
+
+/**
+ * Gasta uma das chamadas ao modelo do passo, só com a reserva em mãos. A segunda consulta roda só quando
+ * nada foi gasto, para separar o teto da reserva perdida (vencida e retomada, ou zerada por hash novo).
+ */
+export async function spendCall(id: string, claim: DraftClaim): Promise<SpendResult> {
   const n = await db.$executeRaw`
     UPDATE tutor_step_drafts SET calls = calls + 1, "updatedAt" = now()
-    WHERE id = ${id} AND calls < ${TUTOR_STEP_MAX_CALLS}`;
-  return n === 1;
+    WHERE id = ${id} AND "claimedAt" = ${claim}::timestamp AND calls < ${TUTOR_STEP_MAX_CALLS}`;
+  if (n === 1) return 'SPENT';
+  const rows = await db.$queryRaw<{ owned: boolean }[]>`
+    SELECT ("claimedAt" IS NOT NULL AND "claimedAt" = ${claim}::timestamp) AS owned
+    FROM tutor_step_drafts WHERE id = ${id}`;
+  return rows[0]?.owned ? 'BUDGET' : 'LOST';
 }
 
+/**
+ * Grava o conteúdo gerado só se a reserva ainda é deste worker e o hash do passo não mudou.
+ * false = perdeu a linha (outro worker ou roteiro editado): o chamador para sem publicar.
+ */
 export async function saveDraftContent(
   id: string,
+  claim: DraftClaim,
+  stepHash: string,
   data: { card?: Prisma.InputJsonValue; question?: Prisma.InputJsonValue },
-): Promise<void> {
-  await db.tutorStepDraft.update({ where: { id }, data });
+): Promise<boolean> {
+  const card = data.card === undefined ? null : JSON.stringify(data.card);
+  const question = data.question === undefined ? null : JSON.stringify(data.question);
+  const n = await db.$executeRaw`
+    UPDATE tutor_step_drafts SET
+      card = COALESCE(${card}::jsonb, card),
+      question = COALESCE(${question}::jsonb, question),
+      "updatedAt" = now()
+    WHERE id = ${id} AND "claimedAt" = ${claim}::timestamp AND "stepHash" = ${stepHash}`;
+  return n === 1;
 }
 
 /** Libera só a própria reserva: se ela venceu e outro worker reservou, não mexe. */

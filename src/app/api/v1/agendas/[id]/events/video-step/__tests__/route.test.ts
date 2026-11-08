@@ -59,6 +59,21 @@ describe('POST /api/v1/agendas/:id/events/video-step', () => {
     expect(mocks.after).not.toHaveBeenCalled();
   });
 
+  it('aula ainda dentro da janela: 409 CLASS_NOT_OVER e nada agendado', async () => {
+    const { DomainError } = await import('@/lib/api/domain-error');
+    mocks.appendVideoStep.mockRejectedValue(
+      new DomainError(
+        409,
+        'A aula ainda pode acontecer ao vivo; a tutora da gravação começa depois do horário da aula.',
+        { code: 'CLASS_NOT_OVER' },
+      ),
+    );
+    const res = await post({ videoSeconds: 700 });
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(await res.json())).toContain('CLASS_NOT_OVER');
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
   it.each([{ videoSeconds: -1 }, { videoSeconds: 1.5 }, { videoSeconds: 'x' }, {}])(
     'corpo inválido %j: 400',
     async (body) => {

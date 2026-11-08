@@ -28,7 +28,9 @@ const script: TimeScriptItem[] = [
   { timeSeconds: 1200, timeRange: '20-30', activity: 'Prática', description: 'd2' },
 ];
 
-function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | null; storedStatus?: string } = {}) {
+function makeDeps(
+  opts: { script?: TimeScriptItem[]; lessonPlanId?: string | null; storedStatus?: string; endTime?: string } = {},
+) {
   const rows: ClassEventRow[] = [];
   let chain: Promise<unknown> = Promise.resolve();
   const findEventsAfter = vi.fn(async (_id: string, after: number, audiences: string[], limit: number) =>
@@ -55,6 +57,7 @@ function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | nul
   const completeAgenda = vi.fn(async () => ({ minutesGenerated: true }));
   const getAgenda = vi.fn(async () => ({
     id: 'a1',
+    endTime: opts.endTime ?? '2026-01-01T12:00:00.000Z',
     ...(opts.lessonPlanId === null ? {} : { lessonPlanId: opts.lessonPlanId ?? 'lp1' }),
   }) as AgendaDTO);
   const deps: ClassEventDeps = {
@@ -67,7 +70,10 @@ function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | nul
       hasEventUpTo: vi.fn(async (_id: string, type: string, upTo: number) =>
         rows.some((r) => r.type === type && r.seq <= upTo),
       ),
-      findLatestStepChanged: vi.fn(async () => [...rows].reverse().find((r) => r.type === 'STEP_CHANGED') ?? null),
+      findLatestStepChanged: vi.fn(
+        async (_id: string, audiences: string[]) =>
+          [...rows].reverse().find((r) => r.type === 'STEP_CHANGED' && audiences.includes(r.audience)) ?? null,
+      ),
       findStallEvents: vi.fn(async (_id: string, step: number) =>
         rows.filter(
           (r) =>
@@ -451,7 +457,10 @@ describe('stalledTutorStepFor', () => {
   }
   function depsWith(rows: ClassEventRow[]) {
     const { deps } = makeDeps();
-    const latest = vi.fn(async () => [...rows].reverse().find((r) => r.type === 'STEP_CHANGED') ?? null);
+    const latest = vi.fn(
+      async (_id: string, audiences: string[]) =>
+        [...rows].reverse().find((r) => r.type === 'STEP_CHANGED' && audiences.includes(r.audience)) ?? null,
+    );
     const stall = vi.fn(async (_id: string, step: number) =>
       rows.filter(
         (r) =>
@@ -481,6 +490,22 @@ describe('stalledTutorStepFor', () => {
       const t = mk({ seq: 3, type, stepIndex: 1, createdBy: 'TUTOR' });
       expect(await stalledTutorStepFor(teacher, 'a1', NOW, depsWith([step(), t]).deps)).toBeNull();
     }
+  });
+
+  it('aula gravada: o aluno vê o próprio passo parado; professor e outro aluno não', async () => {
+    const own = step({ audience: 's1', createdBy: 'SYSTEM', stepIndex: 2 });
+    const { deps, latest } = depsWith([own]);
+    expect(await stalledTutorStepFor(student, 'a1', NOW, deps)).toBe(2);
+    expect(latest).toHaveBeenCalledWith('a1', ['ALL', 's1']);
+    expect(await stalledTutorStepFor(teacher, 'a1', NOW, deps)).toBeNull();
+    const other: AgendaActor = { id: 's2', role: Role.STUDENT, classId: 'c1' };
+    expect(await stalledTutorStepFor(other, 'a1', NOW, deps)).toBeNull();
+  });
+
+  it('aula gravada: passo do aluno com cartão publicado não está parado', async () => {
+    const own = step({ audience: 's1', createdBy: 'SYSTEM', stepIndex: 2 });
+    const card = mk({ seq: 3, type: 'TUTOR_CARD', stepIndex: 2, createdBy: 'TUTOR' });
+    expect(await stalledTutorStepFor(student, 'a1', NOW, depsWith([own, card]).deps)).toBeNull();
   });
 
   it('aula encerrada: null', async () => {
@@ -534,6 +559,24 @@ describe('appendVideoStep', () => {
       status: 409,
       details: { code: 'CLASS_ENDED' },
       message: 'A aula já foi encerrada.',
+    });
+  });
+
+  it('antes do fim da janela da agenda: 409 CLASS_NOT_OVER, sem gravar nem ler o roteiro', async () => {
+    const { deps, rows } = makeDeps({ endTime: new Date(Date.now() + 60_000).toISOString() });
+    await expect(appendVideoStep(student, 'a1', 700, deps)).rejects.toMatchObject({
+      status: 409,
+      details: { code: 'CLASS_NOT_OVER' },
+      message: 'A aula ainda pode acontecer ao vivo; a tutora da gravação começa depois do horário da aula.',
+    });
+    expect(deps.findTimeScript).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(0);
+  });
+
+  it('agenda concluída dentro da janela: CLASS_ENDED prevalece', async () => {
+    const { deps } = makeDeps({ storedStatus: 'COMPLETED', endTime: new Date(Date.now() + 60_000).toISOString() });
+    await expect(appendVideoStep(student, 'a1', 700, deps)).rejects.toMatchObject({
+      details: { code: 'CLASS_ENDED' },
     });
   });
 

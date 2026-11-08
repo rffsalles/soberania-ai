@@ -68,19 +68,45 @@ describe.skipIf(!TEST_DB_URL)('tutor_step_drafts (banco)', () => {
     const staleClaim = await db.$queryRaw<{ t: string }[]>`SELECT (now() - interval '61 seconds')::timestamp(3)::text AS t`;
     await releaseDraft(d.id, staleClaim[0].t);
     expect((await ensureDraft(planId, 0, 'h1')).claimActive).toBe(true);
-    expect([await spendCall(d.id), await spendCall(d.id), await spendCall(d.id)]).toEqual([true, true, false]);
+    // Dono antigo não gasta chamada da reserva do novo dono.
+    expect(await spendCall(d.id, staleClaim[0].t)).toBe('LOST');
+    expect([await spendCall(d.id, second!), await spendCall(d.id, second!), await spendCall(d.id, second!)]).toEqual([
+      'SPENT',
+      'SPENT',
+      'BUDGET',
+    ]);
     await releaseDraft(d.id, second!);
     expect((await ensureDraft(planId, 0, 'h1')).claimActive).toBe(false);
     expect(await claimDraft(d.id)).toBeNull(); // calls = 2
   });
 
   it('hash novo zera calls e conteúdo; hash igual preserva', async () => {
-    const { ensureDraft, spendCall, saveDraftContent } = repo;
+    const { ensureDraft, claimDraft, spendCall, saveDraftContent } = repo;
     const d = await ensureDraft(planId, 1, 'a');
-    await spendCall(d.id);
-    await saveDraftContent(d.id, { card: { x: 1 } });
-    expect(await ensureDraft(planId, 1, 'a')).toMatchObject({ calls: 1, card: { x: 1 } });
+    const claim = (await claimDraft(d.id))!;
+    expect(await spendCall(d.id, claim)).toBe('SPENT');
+    expect(await saveDraftContent(d.id, claim, 'a', { card: { x: 1 } })).toBe(true);
+    expect(await saveDraftContent(d.id, claim, 'a', { question: { q: 1 } })).toBe(true);
+    expect(await ensureDraft(planId, 1, 'a')).toMatchObject({ calls: 1, card: { x: 1 }, question: { q: 1 } });
     expect(await ensureDraft(planId, 1, 'b')).toMatchObject({ calls: 0, card: null, stepHash: 'b' });
+  });
+
+  it('worker antigo (hash velho) não grava nem gasta na linha zerada pelo hash novo', async () => {
+    const { ensureDraft, claimDraft, spendCall, saveDraftContent } = repo;
+    const d = await ensureDraft(planId, 2, 'old');
+    const staleClaim = (await claimDraft(d.id))!;
+    expect(await spendCall(d.id, staleClaim)).toBe('SPENT');
+    // Professor salva e prepara: hash novo zera a linha e outro worker reserva.
+    await ensureDraft(planId, 2, 'new');
+    const freshClaim = (await claimDraft(d.id))!;
+    expect(freshClaim).not.toBeNull();
+    expect(await spendCall(d.id, staleClaim)).toBe('LOST');
+    expect(await saveDraftContent(d.id, staleClaim, 'old', { card: { stale: true } })).toBe(false);
+    // Mesmo com a reserva certa, hash diferente não grava.
+    expect(await saveDraftContent(d.id, freshClaim, 'old', { card: { stale: true } })).toBe(false);
+    expect(await ensureDraft(planId, 2, 'new')).toMatchObject({ calls: 0, card: null, stepHash: 'new' });
+    expect(await saveDraftContent(d.id, freshClaim, 'new', { card: { fresh: true } })).toBe(true);
+    expect(await ensureDraft(planId, 2, 'new')).toMatchObject({ card: { fresh: true } });
   });
 
   it('resposta única por aluno e evento; classEventSeq nulo repete livre', async () => {

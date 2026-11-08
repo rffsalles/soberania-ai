@@ -61,8 +61,10 @@ function makeDeps(opts: {
   chunks?: DidacticChunk[];
   script?: Script;
   searchThrows?: boolean;
+  lostAtSpend?: number;
+  saveFails?: boolean;
 } = {}) {
-  const state = { calls: opts.draft?.calls ?? 0 };
+  const state = { calls: opts.draft?.calls ?? 0, spends: 0 };
   const metas: InferenceMeta[] = [];
   const script = [...(opts.script ?? [])];
   const drafts = {
@@ -77,11 +79,13 @@ function makeDeps(opts: {
     })),
     claimDraft: vi.fn(async () => ((opts.claim ?? true) ? 'T1' : null)),
     spendCall: vi.fn(async () => {
-      if (state.calls >= 2) return false;
+      state.spends++;
+      if (opts.lostAtSpend === state.spends) return 'LOST' as const;
+      if (state.calls >= 2) return 'BUDGET' as const;
       state.calls++;
-      return true;
+      return 'SPENT' as const;
     }),
-    saveDraftContent: vi.fn(async () => undefined),
+    saveDraftContent: vi.fn(async () => !opts.saveFails),
     releaseDraft: vi.fn(async () => undefined),
   };
   const search = vi.fn(async () => {
@@ -150,6 +154,45 @@ describe('produceStepContent', () => {
     expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1', 'T1');
   });
 
+  it('sem trechos com cartão do rascunho: devolve o cartão (fromDraft) e noMaterial só da pergunta', async () => {
+    const first = makeDeps({ script: [{ text: cardJson }] });
+    const g = (await produceStepContent({ ...input, wantQuestion: false }, first.deps)) as Extract<
+      StepContent,
+      { status: 'DONE' }
+    >;
+    const m = makeDeps({ draft: { card: g.card!.payload, calls: 1 }, chunks: [] });
+    const r = await produceStepContent(input, m.deps);
+    expect(r).toMatchObject({ status: 'DONE', noMaterial: true, question: null, failure: null });
+    const d = r as Extract<StepContent, { status: 'DONE' }>;
+    expect(d.card?.fromDraft).toBe(true);
+    expect(d.card?.payload.source).toBe('DRAFT');
+    expect(m.drafts.spendCall).not.toHaveBeenCalled();
+    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1', 'T1');
+  });
+
+  it('reserva perdida no spendCall: BUSY sem modelo, sem publicar nem liberar', async () => {
+    const m = makeDeps({ lostAtSpend: 1, script: [{ text: cardJson }] });
+    expect(await produceStepContent(input, m.deps)).toEqual({ status: 'BUSY' });
+    expect(m.streamChat).not.toHaveBeenCalled();
+    expect(m.drafts.saveDraftContent).not.toHaveBeenCalled();
+    expect(m.drafts.releaseDraft).not.toHaveBeenCalled();
+  });
+
+  it('reserva perdida antes da pergunta: BUSY, sem gerar a pergunta', async () => {
+    const m = makeDeps({ lostAtSpend: 2, script: [{ text: cardJson }, { text: questionJson }] });
+    expect(await produceStepContent(input, m.deps)).toEqual({ status: 'BUSY' });
+    expect(m.streamChat).toHaveBeenCalledTimes(1);
+    expect(m.drafts.releaseDraft).not.toHaveBeenCalled();
+  });
+
+  it('saveDraftContent falso (linha perdida): BUSY sem publicar nem liberar', async () => {
+    const m = makeDeps({ saveFails: true, script: [{ text: cardJson }, { text: questionJson }] });
+    expect(await produceStepContent(input, m.deps)).toEqual({ status: 'BUSY' });
+    expect(m.drafts.saveDraftContent).toHaveBeenCalledTimes(1);
+    expect(m.streamChat).toHaveBeenCalledTimes(1);
+    expect(m.drafts.releaseDraft).not.toHaveBeenCalled();
+  });
+
   it('cartão e pergunta ok: 2 spendCall, metas e sem falha', async () => {
     const m = makeDeps({ script: [{ text: cardJson }, { text: questionJson }] });
     const r = await produceStepContent(input, m.deps);
@@ -159,6 +202,10 @@ describe('produceStepContent', () => {
     expect(d.card?.payload.source).toBe('GENERATED');
     expect(d.question?.payload.question.id).toBe('step-1');
     expect(m.drafts.spendCall).toHaveBeenCalledTimes(2);
+    expect(m.drafts.spendCall).toHaveBeenCalledWith('d1', 'T1');
+    expect(m.drafts.saveDraftContent).toHaveBeenCalledWith('d1', 'T1', stepHash(item, ['ch1']), {
+      card: expect.objectContaining({ source: 'GENERATED' }),
+    });
     expect(m.metas).toEqual([
       { agendaId: 'ag1', purpose: 'TUTOR_CARD' },
       { agendaId: 'ag1', purpose: 'TUTOR_QUESTION' },
@@ -195,7 +242,7 @@ describe('produceStepContent', () => {
     expect(m.streamChat).toHaveBeenCalledTimes(2);
   });
 
-  it('spendCall falso no meio: encerra com BUDGET', async () => {
+  it('spendCall BUDGET no meio: encerra', async () => {
     const m = makeDeps({ draft: { calls: 1 }, script: [{ text: 'x' }] });
     const r = await produceStepContent({ ...input, wantQuestion: false }, m.deps);
     expect(r).toMatchObject({ card: null, failure: { reason: 'PROVIDER_ERROR', kind: 'CARD' } });
