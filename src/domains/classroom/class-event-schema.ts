@@ -82,6 +82,11 @@ const tutorSkippedPayload = z.object({
   kind: z.enum(['CARD', 'QUESTION', 'BOTH']),
 });
 
+export type TutorCardPayload = z.infer<typeof tutorCardPayload>;
+export type TutorQuestionPayload = z.infer<typeof tutorQuestionPayload>;
+export type TutorSkippedPayload = z.infer<typeof tutorSkippedPayload>;
+export type TeacherNotePayload = z.infer<typeof teacherNotePayload>;
+
 const PAYLOAD_SCHEMAS: Record<ClassEventTypeName, z.ZodType> = {
   STEP_CHANGED: stepChangedPayload,
   TUTOR_CARD: tutorCardPayload,
