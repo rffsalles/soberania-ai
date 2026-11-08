@@ -59,7 +59,7 @@ export function createClassEventStream(
         try {
           controller.enqueue(encoder.encode(text));
         } catch {
-          closed = true;
+          finish(controller);
         }
       };
       const onAbort = () => finish(controller);
@@ -77,6 +77,7 @@ export function createClassEventStream(
             if (page.events.length > 0) lastSentAt = deps.now();
             after = page.lastSeq;
             if (page.events.length < CLASS_EVENTS_PAGE) break;
+            if (config.maxMs > 0 && deps.now() - startedAt >= config.maxMs) break;
             page = await deps.read(after);
           }
           if (closed || signal.aborted) break;

@@ -35,7 +35,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
       },
     });

@@ -166,4 +166,35 @@ describe('createClassEventStream', () => {
     expect(read).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('read que lança fecha o stream e chama onClose uma vez', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onClose = vi.fn();
+    const text = await drain(
+      createClassEventStream(
+        0,
+        base,
+        { read: async () => { throw new Error('boom'); }, waitForChange: async () => {}, now: () => 0, onClose },
+        new AbortController().signal
+      )
+    );
+    expect(text).toBe('retry: 1000\n\n');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  it('cancelar o leitor no meio encerra o laço e chama onClose uma vez', async () => {
+    const onClose = vi.fn();
+    const read = vi.fn(async (after: number) => ({ events: [], lastSeq: after }));
+    let release!: () => void;
+    const waitForChange = vi.fn(() => new Promise<void>((r) => { release = r; }));
+    const stream = createClassEventStream(0, { ...base, maxMs: 0 }, { read, waitForChange, now: () => 0, onClose }, new AbortController().signal);
+    const reader = stream.getReader();
+    await reader.read();
+    await vi.waitFor(() => expect(waitForChange).toHaveBeenCalled());
+    await reader.cancel();
+    release();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(read).toHaveBeenCalledTimes(1);
+  });
 });

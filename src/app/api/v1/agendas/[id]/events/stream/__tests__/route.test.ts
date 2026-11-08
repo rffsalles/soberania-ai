@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 
@@ -26,8 +26,12 @@ function get(query = '', headers: Record<string, string> = {}, signal?: AbortSig
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv('CLASS_EVENTS_STREAM_MAX_MS', '1');
+  vi.stubEnv('CLASS_EVENTS_STREAM_MAX_MS', '0');
   mocks.requireUser.mockResolvedValue(user);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('GET /api/v1/agendas/:id/events/stream', () => {
@@ -37,9 +41,13 @@ describe('GET /api/v1/agendas/:id/events/stream', () => {
   });
 
   it('Last-Event-ID vence ?after e os headers são de SSE', async () => {
-    const read = vi.fn(async (after: number) => ({ events: [], lastSeq: after }));
+    const ac = new AbortController();
+    const read = vi.fn(async (after: number) => {
+      ac.abort();
+      return { events: [], lastSeq: after };
+    });
     mocks.openEventReader.mockResolvedValue({ read });
-    const res = await get('?after=2', { 'Last-Event-ID': '9' });
+    const res = await get('?after=2', { 'Last-Event-ID': '9' }, ac.signal);
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('text/event-stream; charset=utf-8');
     expect(res.headers.get('Cache-Control')).toBe('no-cache, no-transform');
@@ -52,6 +60,13 @@ describe('GET /api/v1/agendas/:id/events/stream', () => {
     mocks.openEventReader.mockRejectedValue(new DomainError(404, 'Agenda não encontrada'));
     const res = await get();
     expect(res.status).toBe(404);
+    expect(res.headers.get('Content-Type')).toContain('application/json');
+  });
+
+  it('sem permissão devolve 403 JSON', async () => {
+    mocks.openEventReader.mockRejectedValue(new DomainError(403, 'Sem acesso'));
+    const res = await get();
+    expect(res.status).toBe(403);
     expect(res.headers.get('Content-Type')).toContain('application/json');
   });
 });
