@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { DEMO_CREDENTIALS } from '../../src/lib/constants/demo-credentials';
 import { DEMO_LIVE_TIME_SCRIPT } from '../../prisma/seed-data/academic';
 
@@ -12,9 +12,12 @@ test.beforeAll(async () => {
     where: { title: 'Modelagem Conceitual e Álgebra Relacional (JOINs)', type: 'CLASSROOM' },
   });
   agendaId = agenda.id;
+  if (!agenda.lessonPlanId) {
+    throw new Error('A agenda de demonstração não tem plano de aula; rode o seed de demonstração.');
+  }
   await prisma.lessonPlan.update({
-    where: { id: agenda.lessonPlanId! },
-    data: { timeScript: DEMO_LIVE_TIME_SCRIPT as unknown as object[] },
+    where: { id: agenda.lessonPlanId },
+    data: { timeScript: DEMO_LIVE_TIME_SCRIPT as unknown as Prisma.InputJsonValue },
   });
   steps = DEMO_LIVE_TIME_SCRIPT.slice(0, 3).map((item) => item.activity);
   await prisma.classEvent.deleteMany({ where: { agendaId } });
@@ -40,26 +43,32 @@ async function login(page: Page, identifier: string, password: string) {
 test('professor inicia, avança, volta e encerra; aluno vê só o passo atual', async ({ browser }) => {
   const prof = DEMO_CREDENTIALS.find((c) => c.role === 'TEACHER')!;
   const aluno = DEMO_CREDENTIALS.find((c) => c.role === 'STUDENT')!;
-  const teacher = await (await browser.newContext()).newPage();
-  const student = await (await browser.newContext()).newPage();
-  await login(teacher, prof.enrollment, prof.password);
-  await login(student, aluno.enrollment, aluno.password);
-  const strip = student.getByTestId('now-in-class-strip');
-
-  await teacher.goto(`/teacher/live/${agendaId}`);
-  await student.goto(`/classroom/${agendaId}`);
-  await expect(strip).toHaveCount(0);
-  await teacher.getByRole('button', { name: 'Iniciar aula' }).click();
-  await expect(strip).toContainText(steps[0], { timeout: 5_000 });
-  await expect(teacher.locator('[aria-current="step"]')).toContainText(steps[0], { timeout: 5_000 });
-  await teacher.getByRole('button', { name: 'Próximo', exact: true }).click();
-  await expect(strip).toContainText(steps[1], { timeout: 5_000 });
-  await expect(student.getByText(steps[2])).toHaveCount(0);
-  await teacher.getByRole('button', { name: 'Anterior', exact: true }).click();
-  await expect(strip).toContainText(steps[0], { timeout: 5_000 });
-  teacher.once('dialog', (d) => d.accept());
-  await teacher.getByRole('button', { name: 'Encerrar aula' }).click();
-  await expect(teacher.getByText('Aula encerrada.')).toBeVisible({ timeout: 5_000 });
-  await expect(strip).toHaveCount(0, { timeout: 5_000 });
-  expect((await prisma.agenda.findUniqueOrThrow({ where: { id: agendaId } })).status).toBe('COMPLETED');
+  const teacherCtx = await browser.newContext();
+  const studentCtx = await browser.newContext();
+  const teacher = await teacherCtx.newPage();
+  const student = await studentCtx.newPage();
+  try {
+    await login(teacher, prof.enrollment, prof.password);
+    await login(student, aluno.enrollment, aluno.password);
+    const strip = student.getByTestId('now-in-class-strip');
+    await teacher.goto(`/teacher/live/${agendaId}`);
+    await student.goto(`/classroom/${agendaId}`);
+    await expect(strip).toHaveCount(0);
+    await teacher.getByRole('button', { name: 'Iniciar aula' }).click();
+    await expect(strip).toContainText(steps[0], { timeout: 5_000 });
+    await expect(teacher.locator('[aria-current="step"]')).toContainText(steps[0], { timeout: 5_000 });
+    await teacher.getByRole('button', { name: 'Próximo', exact: true }).click();
+    await expect(strip).toContainText(steps[1], { timeout: 5_000 });
+    await expect(student.getByText(steps[2])).toHaveCount(0);
+    await teacher.getByRole('button', { name: 'Anterior', exact: true }).click();
+    await expect(strip).toContainText(steps[0], { timeout: 5_000 });
+    teacher.once('dialog', (d) => d.accept());
+    await teacher.getByRole('button', { name: 'Encerrar aula' }).click();
+    await expect(teacher.getByText('Aula encerrada.')).toBeVisible({ timeout: 5_000 });
+    await expect(strip).toHaveCount(0, { timeout: 5_000 });
+    expect((await prisma.agenda.findUniqueOrThrow({ where: { id: agendaId } })).status).toBe('COMPLETED');
+  } finally {
+    await teacherCtx.close();
+    await studentCtx.close();
+  }
 });
