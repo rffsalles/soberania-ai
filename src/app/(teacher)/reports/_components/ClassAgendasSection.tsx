@@ -1,12 +1,14 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { CalendarCheck2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { changeAgendaStatus, generateClassMinutes } from '@/components/agendas/agenda-actions';
+import { teacherLivePath } from '@/lib/constants/routes';
 import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 import type { AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import type { AgendaMinutesResult } from '@/domains/pedagogy/services/minutes-service';
@@ -142,6 +144,11 @@ export function ClassAgendasSection({ agendas, isLoading, error, onChanged }: Pr
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
+                      {agenda.type === 'CLASSROOM' && agenda.status === 'LIVE' && (
+                        <Button size="sm" asChild>
+                          <Link href={teacherLivePath(agenda.id)}>Conduzir aula</Link>
+                        </Button>
+                      )}
                       {open && (
                         <>
                           <Button size="sm" variant="outline" disabled={disabled} onClick={() => run(agenda, 'complete')}>
