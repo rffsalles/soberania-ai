@@ -69,3 +69,8 @@ scratch/
 .agents/
 __pycache__/
 *.pyc
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

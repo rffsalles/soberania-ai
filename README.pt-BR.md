@@ -112,6 +112,8 @@ A sala de aula é movida por uma tabela `class_events` somente de inserção (`s
 - `CLASS_EVENTS_NOTIFY_MODE=listen`: `LISTEN/NOTIFY` do Postgres, um `pg.Client` por processo. Exige conexão direta (sem pooler).
 - `CLASS_EVENTS_STREAM_MAX_MS`: duração máxima de uma conexão de stream. Padrão 8000 com `VERCEL` definido, 0 (sem limite) fora. Ao terminar, o navegador reconecta com `Last-Event-ID`, sem perder nem repetir eventos; na Vercel a latência fica em cerca de 2 s.
 
+Para conduzir uma aula de ponta a ponta no navegador (painel do professor e página do aluno), rode `npm run test:e2e:ui`. Precisa do servidor de dev (o Playwright sobe `npm run dev` ou reaproveita a porta 3000), de um `.env` apontando para o banco de dev, do Chromium instalado com `npx playwright install chromium` e de nenhum seed além das contas de demonstração. O CI não roda este teste.
+
 ## Evals
 
 [`evals/`](evals/README.md) é um harness em Python 3.11 que testa o comportamento da tutora pela API HTTP, como um aluno a usa: faz login com a conta de demonstração, envia 40 perguntas derivadas do seed e avalia as respostas.
