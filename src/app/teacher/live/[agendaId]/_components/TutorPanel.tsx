@@ -46,8 +46,8 @@ export function TutorPanel({ view, nextActivity, disabled, onNote }: Props) {
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Cartão publicado</h3>
           <ul className="list-disc pl-5 text-sm text-slate-600 dark:text-slate-300">
-            {card.concepts.map((c) => (
-              <li key={c.title}>{c.title}</li>
+            {card.concepts.map((c, i) => (
+              <li key={`${i}-${c.citation.chunkId}`}>{c.title}</li>
             ))}
           </ul>
         </div>

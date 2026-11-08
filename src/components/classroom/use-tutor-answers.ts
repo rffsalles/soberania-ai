@@ -7,11 +7,13 @@ import type { AnswerOutcome } from '@/domains/classroom/class-state';
 export const ANSWER_ERROR = 'Não foi possível enviar sua resposta. Tente novamente.';
 
 export type AnswerInput = { optionKey?: string; text?: string };
+/** Erro do último envio, preso à pergunta (`seq`) que falhou. */
+export type AnswerError = { seq: number; message: string };
 
 export function useTutorAnswers(agendaId: string) {
   const [answers, setAnswers] = useState<Record<number, AnswerOutcome>>({});
   const [pendingSeq, setPendingSeq] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AnswerError | null>(null);
   const inFlight = useRef(false);
 
   const submit = useCallback(
@@ -28,14 +30,13 @@ export function useTutorAnswers(agendaId: string) {
         });
         const body = await res.json().catch(() => null);
         if (res.ok && body?.success && body.result) {
-          setAnswers((prev) => ({ ...prev, [seq]: body.result }));
-        } else if (res.status === 409 && body?.details?.code === 'ALREADY_ANSWERED') {
-          setAnswers((prev) => ({ ...prev, [seq]: { alreadyAnswered: true } }));
+          // 201 = resposta nova; 200 com alreadyAnswered = resultado da resposta já gravada.
+          setAnswers((prev) => ({ ...prev, [seq]: body.result as AnswerOutcome }));
         } else {
-          setError(typeof body?.error === 'string' ? body.error : ANSWER_ERROR);
+          setError({ seq, message: typeof body?.error === 'string' ? body.error : ANSWER_ERROR });
         }
       } catch {
-        setError(ANSWER_ERROR);
+        setError({ seq, message: ANSWER_ERROR });
       } finally {
         inFlight.current = false;
         setPendingSeq(null);

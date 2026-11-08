@@ -1,7 +1,7 @@
 export type PgClientLike = {
   connect(): Promise<void>;
   query(sql: string): Promise<unknown>;
-  on(ev: string, cb: (arg?: any) => void): void; // eslint-disable-line @typescript-eslint/no-explicit-any
+  on(ev: string, cb: (arg?: any) => void): void;
   end(): Promise<void>;
 };
 export type Subscription = { wait(signal: AbortSignal, timeoutMs: number): Promise<void>; close(): void };
@@ -155,7 +155,6 @@ const globalForListener = globalThis as unknown as { classEventListener?: ClassE
 export function getClassEventListener(): ClassEventListener {
   if (!globalForListener.classEventListener) {
     globalForListener.classEventListener = createClassEventListener(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { Client } = require('pg') as typeof import('pg');
       return new Client({ connectionString: process.env.DATABASE_URL }) as unknown as PgClientLike;
     });

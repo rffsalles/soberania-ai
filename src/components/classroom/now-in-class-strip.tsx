@@ -10,6 +10,7 @@ import {
   type StudentView,
 } from '@/domains/classroom/class-state';
 import type { ClassEventsStatus } from '@/components/classroom/use-class-events';
+import type { AnswerError } from '@/components/classroom/use-tutor-answers';
 
 type AnswerInput = { optionKey?: string; text?: string };
 
@@ -18,7 +19,8 @@ interface NowInClassStripProps {
   status: ClassEventsStatus;
   onAnswer: (seq: number, input: AnswerInput) => void;
   answerPending: boolean;
-  answerError: string | null;
+  /** Mostrado só sob a pergunta cujo envio falhou. */
+  answerError: AnswerError | null;
   onContinueInChat: (text: string) => void;
 }
 
@@ -26,16 +28,18 @@ export function continueInChatText(q: StudentQuestion, a: AnswerOutcome): string
   if (q.kind === 'OPEN') {
     return `Sobre a pergunta "${q.text}": pode me ajudar a pensar na resposta?`;
   }
-  const rationale = 'rationale' in a ? a.rationale : null;
+  const rationale = a.rationale;
   return rationale
     ? `Sobre a pergunta "${q.enunciation}": a justificativa foi "${rationale}". Pode me explicar melhor?`
     : `Sobre a pergunta "${q.enunciation}": pode me ajudar a revisar?`;
 }
 
 function feedbackLines(q: StudentQuestion, a: AnswerOutcome): string[] {
-  if ('alreadyAnswered' in a) return ['Você já respondeu esta pergunta.'];
-  if (q.kind === 'OPEN') return ['Resposta registrada.'];
-  const lines = [a.wasCorrect ? 'Você acertou.' : `Resposta certa: ${a.correctKey}.`];
+  const lines = a.alreadyAnswered ? ['Você já respondeu esta pergunta.'] : [];
+  if (q.kind === 'OPEN') return a.alreadyAnswered ? lines : ['Resposta registrada.'];
+  if (a.wasCorrect !== null || a.correctKey) {
+    lines.push(a.wasCorrect ? 'Você acertou.' : `Resposta certa: ${a.correctKey}.`);
+  }
   if (a.rationale) lines.push(a.rationale);
   return lines;
 }
@@ -106,9 +110,9 @@ function QuestionBlock({
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 text-sm"
             />
           )}
-          {answerError && (
+          {answerError?.seq === question.seq && (
             <p role="alert" className="text-xs text-rose-600">
-              {answerError}
+              {answerError.message}
             </p>
           )}
           <Button type="button" size="sm" disabled={!canSubmit} onClick={submit}>
@@ -150,8 +154,8 @@ export function NowInClassStrip({
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Da tutora</p>
           <ul className="space-y-2">
-            {card.concepts.map((c) => (
-              <li key={c.title} className="space-y-0.5">
+            {card.concepts.map((c, i) => (
+              <li key={`${i}-${c.citation.chunkId}`} className="space-y-0.5">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">{c.title}</p>
                 <p className="text-sm text-slate-700 dark:text-slate-200">{c.explanation}</p>
                 <p className="text-xs text-slate-500">

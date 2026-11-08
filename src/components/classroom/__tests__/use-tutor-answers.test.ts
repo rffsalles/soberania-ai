@@ -22,13 +22,14 @@ describe('useTutorAnswers', () => {
     expect(hook.current.answers[4]).toEqual(result);
     expect(hook.current.pendingSeq).toBeNull();
   });
-  it('409 ALREADY_ANSWERED vira alreadyAnswered', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => json(409, { success: false, error: 'x', details: { code: 'ALREADY_ANSWERED' } })));
+  it('200 com alreadyAnswered guarda o resultado da resposta gravada', async () => {
+    const result = { wasCorrect: true, correctKey: 'B', rationale: 'ok', alreadyAnswered: true };
+    vi.stubGlobal('fetch', vi.fn(async () => json(200, { success: true, result })));
     const { result: hook } = renderHook(() => useTutorAnswers('a1'));
     await act(async () => {
-      await hook.current.submit(4, { text: 'oi' });
+      await hook.current.submit(4, { optionKey: 'B' });
     });
-    expect(hook.current.answers[4]).toEqual({ alreadyAnswered: true });
+    expect(hook.current.answers[4]).toEqual(result);
     expect(hook.current.error).toBeNull();
   });
   it('erro usa a mensagem do corpo ou a padrão', async () => {
@@ -37,12 +38,12 @@ describe('useTutorAnswers', () => {
     await act(async () => {
       await hook.current.submit(4, { text: 'oi' });
     });
-    expect(hook.current.error).toBe('Fora da janela');
+    expect(hook.current.error).toEqual({ seq: 4, message: 'Fora da janela' });
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('net'); }));
     await act(async () => {
       await hook.current.submit(4, { text: 'oi' });
     });
-    expect(hook.current.error).toBe(ANSWER_ERROR);
+    expect(hook.current.error).toEqual({ seq: 4, message: ANSWER_ERROR });
   });
   it('dois submit no mesmo act chamam fetch uma vez', async () => {
     const fetchMock = vi.fn(async () => json(201, { success: true, result: { wasCorrect: null, correctKey: null, rationale: null } }));

@@ -62,7 +62,8 @@ test.beforeEach(async () => {
 });
 
 test.afterAll(async () => {
-  // Devolve a agenda ao estado anterior (os eventos apagados e o roteiro continuam como o teste deixou).
+  // Apaga eventos, rascunhos da tutora e respostas às perguntas da aula, e devolve a agenda ao estado anterior
+  // (o roteiro continua como o teste deixou).
   if (agendaId && lessonPlanId) await clearClassData();
   if (agendaId && original) {
     await prisma.agenda.update({ where: { id: agendaId }, data: original });
@@ -172,7 +173,7 @@ test('tutora publica o rascunho e a pergunta do professor; aluno responde; pulso
     await student.getByLabel('Sua resposta').fill('Ele não aparece no resultado.');
     await student.getByRole('button', { name: 'Responder' }).click();
     await expect(strip).toContainText('Resposta registrada.');
-    const panel = teacher.getByRole('region', { name: 'Tutora' });
+    const panel = teacher.getByRole('region', { name: 'Tutora', exact: true });
     await expect(panel).toContainText('Cartão publicado');
     await expect(panel).toContainText('1 resposta (pergunta aberta, sem correção automática)', { timeout: 15_000 });
     const sw = teacher.getByRole('switch', { name: 'Tutora em silêncio nesta aula' });

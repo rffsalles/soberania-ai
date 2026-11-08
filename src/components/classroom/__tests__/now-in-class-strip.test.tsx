@@ -62,6 +62,10 @@ describe('NowInClassStrip', () => {
     expect(screen.getByText('Passo 3')).not.toBeNull();
     expect(screen.getByRole('status').textContent).toContain('Atualizando');
   });
+  it('offline mostra Reconectando', () => {
+    renderStrip({ ...empty, stepIndex: 0, activity: 'x' }, { status: 'offline' });
+    expect(screen.getByRole('status').textContent).toContain('Reconectando');
+  });
   it('mostra o cartão com fontes e página só quando existe', () => {
     renderStrip({ ...empty, card });
     const text = screen.getByTestId('now-in-class-strip').textContent ?? '';
@@ -84,10 +88,19 @@ describe('NowInClassStrip', () => {
     expect(onAnswer).toHaveBeenCalledWith(4, { optionKey: 'B' });
   });
   it('em voo mostra Enviando... desabilitado e o erro em alert', () => {
-    renderStrip({ ...empty, question: mc }, { answerPending: true, answerError: 'Falhou' });
+    renderStrip({ ...empty, question: mc }, { answerPending: true, answerError: { seq: 4, message: 'Falhou' } });
     const btn = screen.getByRole('button', { name: 'Enviando...' }) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(screen.getByRole('alert').textContent).toBe('Falhou');
+  });
+  it('erro de outra pergunta (seq diferente) não aparece', () => {
+    renderStrip({ ...empty, question: mc }, { answerError: { seq: 2, message: 'Falhou' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+  it('conceitos com título repetido renderizam os dois', () => {
+    const dup = { ...card, concepts: [card.concepts[0], { ...card.concepts[0], citation: { ...card.concepts[0].citation, chunkId: 'c9' } }] };
+    renderStrip({ ...empty, card: dup });
+    expect(screen.getAllByText('LEFT JOIN')).toHaveLength(2);
   });
   it('erro mostra a resposta certa e a justificativa; Continuar no chat envia o texto exato', () => {
     const { onContinueInChat } = renderStrip({
@@ -117,9 +130,23 @@ describe('NowInClassStrip', () => {
     renderStrip({ ...empty, question: open, answer: { wasCorrect: null, correctKey: null, rationale: null } });
     expect(screen.getByTestId('now-in-class-strip').textContent).toContain('Resposta registrada.');
   });
-  it('alreadyAnswered mostra a frase', () => {
-    renderStrip({ ...empty, question: mc, answer: { alreadyAnswered: true } });
-    expect(screen.getByTestId('now-in-class-strip').textContent).toContain('Você já respondeu esta pergunta.');
+  it('alreadyAnswered mostra a frase e o resultado da resposta gravada', () => {
+    renderStrip({
+      ...empty,
+      question: mc,
+      answer: { wasCorrect: false, correctKey: 'B', rationale: 'Mantém a esquerda.', alreadyAnswered: true },
+    });
+    const text = screen.getByTestId('now-in-class-strip').textContent ?? '';
+    expect(text).toContain('Você já respondeu esta pergunta.');
+    expect(text).toContain('Resposta certa: B.');
+    expect(text).toContain('Mantém a esquerda.');
+  });
+  it('alreadyAnswered em pergunta aberta mostra só a frase', () => {
+    const open = { seq: 7, kind: 'OPEN' as const, text: 'Por quê?' };
+    renderStrip({ ...empty, question: open, answer: { wasCorrect: null, correctKey: null, rationale: null, alreadyAnswered: true } });
+    const text = screen.getByTestId('now-in-class-strip').textContent ?? '';
+    expect(text).toContain('Você já respondeu esta pergunta.');
+    expect(text).not.toContain('Resposta registrada.');
   });
   it('continueInChatText nas demais variantes', () => {
     expect(continueInChatText(mc, { wasCorrect: true, correctKey: 'B', rationale: null })).toBe(

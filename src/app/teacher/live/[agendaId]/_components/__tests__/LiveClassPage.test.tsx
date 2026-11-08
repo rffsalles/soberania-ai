@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   lesson: null as unknown,
   type: 'CLASSROOM',
   lastSeq: 0,
+  events: [] as unknown[],
+  realPulse: false,
 }));
 
 vi.mock('@/components/agendas/use-agenda', () => ({
@@ -30,10 +32,18 @@ vi.mock('@/components/classroom/use-agenda-lesson', () => ({
   useAgendaLesson: () => ({ lesson: mocks.lesson, isLoading: false }),
 }));
 vi.mock('@/components/classroom/use-class-events', () => ({
-  useClassEvents: () => ({ events: [], status: mocks.status, lastSeq: mocks.lastSeq, state: mocks.state }),
+  useClassEvents: () => ({ events: mocks.events, status: mocks.status, lastSeq: mocks.lastSeq, state: mocks.state }),
 }));
 
-vi.mock('@/components/classroom/use-class-pulse', () => ({ useClassPulse: () => ({ pulse: [] }) }));
+// Por padrão sem pulso; `mocks.realPulse` liga o hook real (fetch mockado) para testar a integração.
+vi.mock('@/components/classroom/use-class-pulse', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/components/classroom/use-class-pulse')>();
+  return {
+    ...real,
+    useClassPulse: (...args: Parameters<typeof real.useClassPulse>) =>
+      mocks.realPulse ? real.useClassPulse(...args) : { pulse: [] },
+  };
+});
 
 import LiveClassPage from '../LiveClassPage';
 
@@ -58,6 +68,8 @@ beforeEach(() => {
   mocks.status = 'live';
   mocks.type = 'CLASSROOM';
   mocks.lastSeq = 0;
+  mocks.events = [];
+  mocks.realPulse = false;
   mocks.lesson = { videoUrl: null, mediaType: 'NONE', timeScript: script };
   fetchMock = vi.fn(ok);
   vi.stubGlobal('fetch', fetchMock);
@@ -272,5 +284,50 @@ describe('LiveClassPage', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('status').map((e) => e.textContent)).toContain('As atas não foram geradas.');
     });
+  });
+});
+
+describe('LiveClassPage com o pulso real', () => {
+  it('pergunta publicada no passo: lê /pulse e mostra "1 resposta" na coluna da tutora', async () => {
+    mocks.realPulse = true;
+    mocks.state = running(0);
+    mocks.lastSeq = 3;
+    const at = '2026-11-08T10:00:00.000Z';
+    mocks.events = [
+      { seq: 1, type: 'SESSION_STARTED', stepIndex: null, payload: {}, createdBy: 'TEACHER', createdAt: at },
+      {
+        seq: 2,
+        type: 'STEP_CHANGED',
+        stepIndex: 0,
+        payload: { activity: script[0].activity, timeRange: script[0].timeRange, fromStepIndex: null },
+        createdBy: 'TEACHER',
+        createdAt: at,
+      },
+      {
+        seq: 3,
+        type: 'TUTOR_QUESTION',
+        stepIndex: 0,
+        payload: { kind: 'OPEN', text: 'Por que usar FK?', origin: 'TEACHER' },
+        createdBy: 'TUTOR',
+        createdAt: at,
+      },
+    ];
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.endsWith('/pulse')
+          ? {
+              ok: true,
+              json: async () => ({
+                success: true,
+                pulse: [{ seq: 3, stepIndex: 0, kind: 'OPEN', answered: 1, correct: null }],
+              }),
+            }
+          : { ok: true, json: async () => ({ success: true, events: [] }) },
+      ),
+    );
+    render(<LiveClassPage agendaId="a1" />);
+    const panel = screen.getByRole('region', { name: 'Tutora' });
+    await waitFor(() => expect(panel.textContent).toContain('1 resposta'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/agendas/a1/pulse');
   });
 });
