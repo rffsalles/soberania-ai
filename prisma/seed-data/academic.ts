@@ -9,6 +9,7 @@ import {
   SCHEDULE_DEFAULT_START_TIME,
 } from '../../src/lib/constants/teaching';
 import { localDateTimeToUtc } from '../../src/lib/timezone';
+import type { TimeScriptItem } from '../../src/domains/teaching/time-script';
 
 export const DEMO_COURSE = {
   code: 'ADS',
@@ -79,12 +80,36 @@ const DEMO_LESSON_TOPICS = [
   'Prova Bimestral P1 Supervisionada com Anti-Fraude',
 ];
 
+/** Roteiro da aula de demonstração conduzida ao vivo (classNumber 3, vinculada à agenda CLASSROOM). */
+export const DEMO_LIVE_TIME_SCRIPT: TimeScriptItem[] = [
+  {
+    timeSeconds: 0,
+    timeRange: '0-10 min',
+    activity: 'Revisão: chaves e relacionamentos',
+    description: 'Retomar chave primária, chave estrangeira e cardinalidade com o modelo da aula anterior.',
+  },
+  {
+    timeSeconds: 600,
+    timeRange: '10-30 min',
+    activity: 'INNER JOIN e LEFT JOIN na prática',
+    description: 'Comparar os resultados das duas junções sobre Estudantes e Matriculas.',
+    socraticQuestion: 'O que acontece com um estudante sem matrícula num INNER JOIN?',
+  },
+  {
+    timeSeconds: 1800,
+    timeRange: '30-50 min',
+    activity: 'Subqueries e operações de conjunto',
+    description: 'Reescrever uma junção como subquery e combinar consultas com UNION e EXCEPT.',
+  },
+];
+
 /** Demo lessons follow the schedule's own calendar rules, so the sync never conflicts with them. */
 export const DEMO_LESSON_PLANS = DEMO_LESSON_TOPICS.map((topicTitle, index) => ({
   classNumber: DEMO_MEETINGS[index].classNumber,
   // Mesmo instante que a sincronização do cronograma gravaria: data + horário de início no fuso da instituição.
   classDate: localDateTimeToUtc(DEMO_MEETINGS[index].date, DEMO_SCHEDULE.startTime, INSTITUTION_TIMEZONE),
   topicTitle,
+  timeScript: DEMO_MEETINGS[index].classNumber === 3 ? DEMO_LIVE_TIME_SCRIPT : ([] as TimeScriptItem[]),
 }));
 
 export const DEMO_ASSESSMENT = {

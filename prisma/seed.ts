@@ -25,7 +25,6 @@ assertSeedAllowed();
 
 const PASSWORD_SALT_ROUNDS = 10;
 const SEED_FILE_SCHEME = 'seed://';
-const EMPTY_TIME_SCRIPT: never[] = [];
 
 const prisma = new PrismaClient();
 
@@ -183,7 +182,7 @@ async function main() {
       classDate: lesson.classDate,
       topicTitle: lesson.topicTitle,
       dailyObjective: `Compreender e praticar: ${lesson.topicTitle}.`,
-      timeScript: EMPTY_TIME_SCRIPT,
+      timeScript: lesson.timeScript,
       methodology: DEMO_TEACHING_PLAN.methodology,
       resourcesNeeded: [],
       fixationExercise: 'Resolver a lista de exercícios de fixação do capítulo correspondente.',
