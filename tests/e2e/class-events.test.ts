@@ -121,4 +121,26 @@ describe.skipIf(!TEST_DB_URL)('class-event-repository (banco)', () => {
     const rows = await findEventsAfter(id, 0, ['ALL', 's1'], 200);
     expect(rows.map((r) => r.audience)).toEqual(['ALL', 's1']);
   });
+
+  it('LISTEN recebe NOTIFY do appendEvents com o seq no payload', async () => {
+    const { appendEvents } = await import('@/domains/classroom/class-event-repository');
+    const { Client } = await import('pg');
+    const id = await freshAgenda();
+    const client = new Client({ connectionString: TEST_DB_URL });
+    await client.connect();
+    try {
+      const got = new Promise<{ channel: string; payload?: string }>((resolve) =>
+        client.on('notification', (m) => resolve(m)),
+      );
+      await client.query(`LISTEN "class_events_${id}"`);
+      await appendEvents(id, () => [
+        { type: 'TEACHER_NOTE' as const, stepIndex: null, payload: { tutor: null, scope: 'LESSON' }, audience: 'ALL', createdBy: 'TEACHER' as const },
+      ]);
+      const msg = await Promise.race([got, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('sem NOTIFY')), 5000))]);
+      expect(msg.channel).toBe(`class_events_${id}`);
+      expect(msg.payload).toBe('1');
+    } finally {
+      await client.end();
+    }
+  });
 });

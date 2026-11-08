@@ -5,6 +5,7 @@ import { DomainError } from '@/lib/api/domain-error';
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   openEventReader: vi.fn(),
+  subscribe: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/request-user', async (importOriginal) => ({
@@ -13,6 +14,10 @@ vi.mock('@/lib/auth/request-user', async (importOriginal) => ({
 }));
 vi.mock('@/domains/classroom/class-event-service', () => ({
   openEventReader: mocks.openEventReader,
+}));
+
+vi.mock('@/domains/classroom/class-event-listener', () => ({
+  getClassEventListener: () => ({ subscribe: mocks.subscribe }),
 }));
 
 import * as route from '../route';
@@ -68,5 +73,35 @@ describe('GET /api/v1/agendas/:id/events/stream', () => {
     const res = await get();
     expect(res.status).toBe(403);
     expect(res.headers.get('Content-Type')).toContain('application/json');
+  });
+
+  it('modo listen: usa subscribe e fecha a assinatura ao encerrar', async () => {
+    vi.stubEnv('CLASS_EVENTS_NOTIFY_MODE', 'listen');
+    const ac = new AbortController();
+    const close = vi.fn();
+    const wait = vi.fn(async () => undefined);
+    mocks.subscribe.mockReturnValue({ wait, close });
+    mocks.openEventReader.mockResolvedValue({
+      read: async (after: number) => {
+        ac.abort();
+        return { events: [], lastSeq: after };
+      },
+    });
+    const res = await get('', {}, ac.signal);
+    await res.text();
+    expect(mocks.subscribe).toHaveBeenCalledWith('ag1');
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('modo poll: não toca no ouvinte', async () => {
+    const ac = new AbortController();
+    mocks.openEventReader.mockResolvedValue({
+      read: async (after: number) => {
+        ac.abort();
+        return { events: [], lastSeq: after };
+      },
+    });
+    await (await get('', {}, ac.signal)).text();
+    expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 });

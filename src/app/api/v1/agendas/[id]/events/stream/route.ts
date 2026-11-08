@@ -25,10 +25,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params;
     const reader = await openEventReader(user, id);
     const cursor = resolveCursor(new URL(req.url).searchParams.get('after'), req.headers.get('last-event-id'));
+    const config = readStreamConfig();
+    let waitForChange = abortableWait;
+    let onClose: (() => void) | undefined;
+    if (config.mode === 'listen') {
+      const { getClassEventListener } = await import('@/domains/classroom/class-event-listener');
+      const sub = getClassEventListener().subscribe(id);
+      waitForChange = sub.wait;
+      onClose = () => sub.close();
+    }
     const stream = createClassEventStream(
       cursor,
-      readStreamConfig(),
-      { read: (after) => reader.read(after), waitForChange: abortableWait, now: () => Date.now() },
+      config,
+      { read: (after) => reader.read(after), waitForChange, now: () => Date.now(), onClose },
       req.signal,
     );
     return new Response(stream, {
