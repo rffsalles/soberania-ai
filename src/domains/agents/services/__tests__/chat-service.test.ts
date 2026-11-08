@@ -167,6 +167,8 @@ describe('chatWithTutor', () => {
         externalTrafficBytes: 0,
         fallback: false,
         agendaType: AgendaType.CLASSROOM,
+        agendaId: 'ag1',
+        purpose: 'CHAT',
       })
     );
   });

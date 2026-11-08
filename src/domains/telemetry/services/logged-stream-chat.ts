@@ -1,8 +1,10 @@
-import type { AgendaType } from '@prisma/client';
+import type { AgendaType, InferencePurpose } from '@prisma/client';
 import { aiProvider, type AICompletionOptions, type AIMessage, type StreamChunk } from '@/lib/ai-provider';
 import { createInferenceLog, type InferenceLogInput } from './inference-log-repository';
 
 export type StreamChatFn = (messages: AIMessage[], options?: AICompletionOptions) => AsyncGenerator<StreamChunk>;
+
+export type InferenceMeta = { agendaId?: string | null; purpose?: InferencePurpose | null };
 
 export type LoggedStreamChatDeps = {
   streamChat: StreamChatFn;
@@ -19,7 +21,11 @@ const defaultDeps: LoggedStreamChatDeps = {
  * ("tráfego externo", chamadas, TTFT) só é verdadeira se toda chamada ao provedor for registrada,
  * não apenas as do chat. A gravação nunca derruba o stream.
  */
-export function createLoggedStreamChat(deps: LoggedStreamChatDeps = defaultDeps, agendaType: AgendaType | null = null): StreamChatFn {
+export function createLoggedStreamChat(
+  deps: LoggedStreamChatDeps = defaultDeps,
+  agendaType: AgendaType | null = null,
+  meta: InferenceMeta = {}
+): StreamChatFn {
   return async function* loggedStreamChat(messages, options = {}) {
     let fallback = false;
     const stream = deps.streamChat(messages, {
@@ -38,6 +44,8 @@ export function createLoggedStreamChat(deps: LoggedStreamChatDeps = defaultDeps,
             externalTrafficBytes: Math.round(telemetry.externalTrafficBytes),
             fallback,
             agendaType,
+            agendaId: meta.agendaId ?? null,
+            purpose: meta.purpose ?? null,
           })
           .catch((err) => console.warn('[telemetry] falha ao gravar InferenceLog', err));
       },

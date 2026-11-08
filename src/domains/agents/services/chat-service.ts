@@ -152,7 +152,8 @@ async function logInference(
   deps: ChatDeps,
   telemetry: StreamChunk['telemetry'],
   fallback: boolean,
-  agendaType: AgendaDTO['type']
+  agendaType: AgendaDTO['type'],
+  agendaId: string
 ) {
   if (!telemetry) return;
   // Interação já salva: falha no log de inferência não pode derrubar o chat.
@@ -168,6 +169,8 @@ async function logInference(
       externalTrafficBytes: Math.round(telemetry.externalTrafficBytes),
       fallback,
       agendaType,
+      agendaId,
+      purpose: 'CHAT',
     });
   } catch (err) {
     console.warn('[chat] falha ao gravar InferenceLog', err);
@@ -263,7 +266,7 @@ async function runChat(
   reply = reply.trim();
 
   if (fallback) {
-    await logInference(deps, telemetry, true, agenda.type);
+    await logInference(deps, telemetry, true, agenda.type, agenda.id);
     return {
       reply: TUTOR_UNAVAILABLE_MESSAGE,
       citations: [],
@@ -312,7 +315,7 @@ async function runChat(
     wasCorrect,
     latencyMs,
   });
-  await logInference(deps, telemetry, fallback, agenda.type);
+  await logInference(deps, telemetry, fallback, agenda.type, agenda.id);
 
   return {
     reply,

@@ -42,6 +42,8 @@ describe('createLoggedStreamChat', () => {
       externalTrafficBytes: 2048,
       fallback: false,
       agendaType: null,
+      agendaId: null,
+      purpose: null,
     });
   });
 
@@ -50,6 +52,17 @@ describe('createLoggedStreamChat', () => {
     const streamChat = createLoggedStreamChat({ streamChat: fakeStream(true), createInferenceLog }, 'OFFICE_HOURS');
     for await (const _ of streamChat([{ role: 'user', content: 'oi' }])) { /* consome */ }
     expect(createInferenceLog).toHaveBeenCalledWith(expect.objectContaining({ fallback: true, agendaType: 'OFFICE_HOURS' }));
+  });
+
+  it('grava agendaId e purpose quando recebe meta', async () => {
+    const createInferenceLog = vi.fn(async () => ({ id: 'log1' }));
+    const streamChat = createLoggedStreamChat(
+      { streamChat: fakeStream(false), createInferenceLog },
+      'CLASSROOM',
+      { agendaId: 'ag1', purpose: 'TUTOR_CARD' }
+    );
+    for await (const _ of streamChat([{ role: 'user', content: 'oi' }])) { /* consome */ }
+    expect(createInferenceLog).toHaveBeenCalledWith(expect.objectContaining({ agendaId: 'ag1', purpose: 'TUTOR_CARD' }));
   });
 
   it('falha ao gravar o log não interrompe o stream', async () => {
