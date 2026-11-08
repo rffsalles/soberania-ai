@@ -104,6 +104,14 @@ Testes de exemplo:
 - `src/lib/auth/__tests__/rbac.test.ts`: matriz de papéis.
 - `tests/e2e/full-flow.test.ts`: admin → professor (upload, plano, aula, prova) → aluno (chat, envio) → atas e relatórios.
 
+## Eventos de aula
+
+A sala de aula é movida por uma tabela `class_events` somente de inserção (`seq` por aula, trigger `pg_notify`). Os clientes leem por `GET /api/v1/agendas/:id/events` (paginado) e `GET /api/v1/agendas/:id/events/stream` (SSE com `retry: 1000`, `id: <seq>` e retomada por `Last-Event-ID`); o `POST` na primeira rota grava um evento. A página do aluno usa o hook `useClassEvents` e não tem `setInterval` periódico: se o stream não abrir em 10 s, cai para polling a cada 5 s e tenta o stream de novo após 30 s.
+
+- `CLASS_EVENTS_NOTIFY_MODE=poll` (padrão): cada conexão aberta consulta a tabela a cada 2 s. Funciona com qualquer Postgres, inclusive com pooler.
+- `CLASS_EVENTS_NOTIFY_MODE=listen`: `LISTEN/NOTIFY` do Postgres, um `pg.Client` por processo. Exige conexão direta (sem pooler).
+- `CLASS_EVENTS_STREAM_MAX_MS`: duração máxima de uma conexão de stream. Padrão 8000 com `VERCEL` definido, 0 (sem limite) fora. Ao terminar, o navegador reconecta com `Last-Event-ID`, sem perder nem repetir eventos; na Vercel a latência fica em cerca de 2 s.
+
 ## Evals
 
 [`evals/`](evals/README.md) é um harness em Python 3.11 que testa o comportamento da tutora pela API HTTP, como um aluno a usa: faz login com a conta de demonstração, envia 40 perguntas derivadas do seed e avalia as respostas.
@@ -161,6 +169,8 @@ Todas estão documentadas em [.env.example](.env.example). As essenciais:
 | `AI_EMBEDDING_MODEL`, `AI_EMBEDDING_BASE_URL` | Modelo de embeddings (precisa gerar 1024 dimensões, ex.: `bge-m3`); vazio significa só busca léxica |
 | `ENABLE_OCR` | OCR para PDFs escaneados |
 | `STORAGE_PROVIDER` | `local` ou `r2` |
+| `CLASS_EVENTS_NOTIFY_MODE` | `poll` (padrão) ou `listen` (exige conexão direta ao Postgres) |
+| `CLASS_EVENTS_STREAM_MAX_MS` | Duração máxima de um stream de eventos; padrão 8000 na Vercel, sem limite fora |
 
 **Nota sobre o Groq.** Modelo de chat recomendado: `openai/gpt-oss-120b`, com `AI_BASE_URL=https://api.groq.com/openai/v1`. Alguns modelos do plano gratuito têm limite baixo de tokens por minuto e devolvem 429 em prompts longos da tutora. O Groq não tem endpoint de embeddings: aponte `AI_EMBEDDING_BASE_URL` para um Ollama rodando `bge-m3` ou deixe os embeddings desligados.
 

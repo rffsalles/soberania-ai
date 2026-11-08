@@ -60,6 +60,8 @@ Recomendadas:
 - `ENABLE_OCR`, `OCR_MAX_PAGES`: OCR de PDFs escaneados; desligue (`ENABLE_OCR=false`) na Vercel se houver timeouts.
 - `AI_EMBEDDING_MODEL`, `AI_EMBEDDING_BASE_URL`, `AI_EMBEDDING_API_KEY`: embeddings para busca vetorial. O Groq não oferece embeddings; deixe vazio para busca apenas lexical. Se usar, a dimensão tem de ser 1024.
 
+- `CLASS_EVENTS_NOTIFY_MODE`: na Vercel deixe `poll` (padrão). `listen` (LISTEN/NOTIFY) só vale fora da Vercel, em Docker/VPS com conexão direta ao Postgres, nunca atrás de pooler. `CLASS_EVENTS_STREAM_MAX_MS` já assume 8000 na Vercel; as conexões de stream são renovadas pelo navegador com `Last-Event-ID`.
+
 Não definir na demo: `ENABLE_PYTHON_SANDBOX` (executa código gerado por LLM), `AI_ALLOW_INSECURE_TLS`, `FORCE_SECURE_COOKIE` (já é implícito em produção).
 
 ### 2.5 Seed e primeiro administrador
