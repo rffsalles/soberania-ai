@@ -20,13 +20,14 @@
 - **Ordem do orçamento:** cartão primeiro (até 2 chamadas), pergunta gerada com o que sobrar. Rascunho com `stepHash` igual é promovido sem reserva e sem chamada.
 - **Pulso:** recarrega a cada evento novo do hook e, só enquanto o passo atual tem pergunta publicada, por um único `setTimeout` de 10 s re-armado após cada leitura (spec §4). Nenhum `setInterval`.
 - **Aviso de atas** (follow-up da Entrega 2): `POST /events` passa a devolver `warning` quando `SESSION_ENDED` grava o evento mas a agenda não conclui ou as atas falham; o painel mostra o aviso.
+- `reduceTeacherView(events, pulse, stepCount)` recebe `stepCount` (necessário para `nextStepIndex`); desvio da assinatura da spec §4.
 - A faixa do aluno aparece quando `phase !== 'ENDED'` e há passo visível (prepara a aula gravada da 3b sem mudar a faixa de novo).
 
 ## Global Constraints
 
 - Trabalho direto em `main`, sem branch/PR; cada task termina em commit com o trailer `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
-- Nenhuma task roda `npm run db:seed`, `prisma migrate reset` ou `prisma migrate dev` contra o banco de dev (porta 5432). Migration nova via `prisma migrate dev --create-only` com revisão manual do SQL (o drift do pgvector gera DROPs espúrios; o índice parcial `class_events_tutor_step_uq` existe só na migration SQL e não pode ser dropado); aplicar com `npx prisma migrate deploy`. Seed só no docker 5433 (`DATABASE_URL_TEST`), se algum teste precisar.
-- Sem estado de aula em memória de processo; nenhum `setInterval` na sala/painel.
+- Nenhuma task roda `npm run db:seed`, `prisma migrate reset` ou `prisma migrate dev` (sem `--create-only`) contra o banco de dev (porta 5432). Migration nova via `prisma migrate dev --create-only` é permitida porque só gera SQL; revisar o SQL à mão (o drift do pgvector gera DROPs espúrios; o índice parcial `class_events_tutor_step_uq` existe só na migration SQL e não pode ser dropado; o novo índice parcial `student_interactions_class_event_answer_uq` também existe só em SQL); aplicar com `npx prisma migrate deploy`. Seed só no docker 5433 (`DATABASE_URL_TEST`), se algum teste precisar.
+- Sem estado de aula em memória de processo; nenhum `setInterval` na sala/painel nos arquivos criados ou alterados por esta entrega (o fallback em `use-class-events.ts` da Entrega 1 permanece).
 - Teto de 2 chamadas ao modelo por passo por aula, reserva via `UPDATE ... WHERE` atômico, como na spec §3 (`calls < 2` e `claimedAt` nulo ou com mais de 60 s); cada chamada incrementa `calls` antes de ser feita.
 - Tipos da tutora não são aceitos no `POST /events` do professor (já é assim); audience aplicado no servidor.
 - Copy em pt-BR exatamente como nas tasks. Sem stubs/placeholders.
