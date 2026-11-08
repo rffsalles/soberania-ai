@@ -33,8 +33,18 @@ export function createClassEventListener(
     if (connected && client) client.query(sql).catch(() => undefined);
   };
 
+  function wakeAll(markDirty: boolean) {
+    for (const subs of channels.values()) {
+      for (const sub of subs) {
+        if (markDirty) sub.dirty = true;
+        sub.wake?.();
+      }
+    }
+  }
+
   function scheduleReconnect() {
     connected = false;
+    wakeAll(false);
     const old = client;
     client = null;
     old?.end().catch(() => undefined);
@@ -62,17 +72,27 @@ export function createClassEventListener(
         sub.wake?.();
       }
     });
+    const abandon = () => {
+      connecting = false;
+      c.end().catch(() => undefined);
+      void connect();
+    };
     try {
       await c.connect();
-      connected = true;
-      for (const name of channels.keys()) await c.query(`LISTEN "${name}"`);
-      // notificações perdidas durante a queda: acorda todos para reler
-      for (const subs of channels.values()) for (const sub of subs) { sub.dirty = true; sub.wake?.(); }
+      if (client !== c) return abandon();
+      for (const name of channels.keys()) {
+        await c.query(`LISTEN "${name}"`);
+        if (client !== c) return abandon();
+      }
     } catch {
-      if (client === c) scheduleReconnect();
-    } finally {
       connecting = false;
+      if (client === c) scheduleReconnect();
+      return;
     }
+    connecting = false;
+    connected = true;
+    // notificações perdidas durante a queda: acorda todos para reler
+    wakeAll(true);
   }
 
   return {

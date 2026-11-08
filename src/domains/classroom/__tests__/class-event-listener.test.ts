@@ -106,4 +106,79 @@ describe('createClassEventListener', () => {
     ac.abort();
     await expect(p).resolves.toBeUndefined();
   });
+
+  it('close durante a conexão não trava o ouvinte: novo subscribe cria cliente e faz LISTEN', async () => {
+    let release!: () => void;
+    let first = true;
+    const l = createClassEventListener(() => {
+      const c = new FakeClient();
+      if (first) {
+        first = false;
+        c.connect = vi.fn(() => new Promise<void>((r) => (release = r)));
+      }
+      clients.push(c);
+      return c as unknown as PgClientLike;
+    });
+    l.subscribe('ag1').close();
+    const again = l.subscribe('ag1');
+    release();
+    await flush();
+    expect(clients).toHaveLength(2);
+    expect(clients[0].end).toHaveBeenCalled();
+    expect(clients[1].queries).toContain('LISTEN "class_events_ag1"');
+    expect(l.isConnected()).toBe(true);
+    again.close();
+  });
+
+  it('close duplo não repete UNLISTEN', async () => {
+    const l = createClassEventListener(make);
+    const a = l.subscribe('ag1');
+    const b = l.subscribe('ag1');
+    await flush();
+    a.close();
+    a.close();
+    expect(clients[0].queries.filter((q) => q.startsWith('UNLISTEN'))).toHaveLength(0);
+    b.close();
+    b.close();
+    expect(clients[0].queries.filter((q) => q.startsWith('UNLISTEN'))).toHaveLength(1);
+  });
+
+  it('close acorda o wait pendente e limpa o timer', async () => {
+    const l = createClassEventListener(make);
+    const s = l.subscribe('ag1');
+    await flush();
+    let resolved = false;
+    void s.wait(new AbortController().signal, 25000).then(() => (resolved = true));
+    s.close();
+    await flush();
+    expect(resolved).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('connect rejeitado tenta de novo após reconnectMs', async () => {
+    let n = 0;
+    const l = createClassEventListener(() => {
+      const c = new FakeClient();
+      if (n++ === 0) c.connect = vi.fn(async () => { throw new Error('down'); });
+      clients.push(c);
+      return c as unknown as PgClientLike;
+    }, { reconnectMs: 300 });
+    l.subscribe('ag1');
+    await flush();
+    expect(l.isConnected()).toBe(false);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(clients).toHaveLength(2);
+    expect(l.isConnected()).toBe(true);
+  });
+
+  it('queda acorda waits pendentes para degradar a polling', async () => {
+    const l = createClassEventListener(make, { reconnectMs: 5000 });
+    const s = l.subscribe('ag1');
+    await flush();
+    let resolved = false;
+    void s.wait(new AbortController().signal, 25000).then(() => (resolved = true));
+    clients[0].emit('error', new Error('x'));
+    await flush();
+    expect(resolved).toBe(true);
+  });
 });
