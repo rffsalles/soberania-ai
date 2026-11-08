@@ -7,14 +7,15 @@ import { DynamicFaqAccordion } from '@/components/classroom/dynamic-faq-accordio
 import { PedagogicalMinutesModal } from '@/components/classroom/pedagogical-minutes-modal';
 import { Badge } from '@/components/ui/badge';
 import { AgendaNotFound } from '@/components/agendas/agenda-not-found';
-import { toAgendaSession } from '@/components/agendas/agenda-session';
 import { useAgenda } from '@/components/agendas/use-agenda';
 import { useFillViewportHeight } from '@/components/classroom/use-fill-viewport-height';
 import { useAgendaFaqs, useAgendaLesson } from '@/components/classroom/use-agenda-lesson';
 import { resolveMediaType } from '@/domains/teaching/media-type';
 import { Skeleton } from '@/components/ui/skeleton';
-import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
-import { formatRemaining } from '@/lib/format/duration';
+import { deriveAgendaStatus } from '@/domains/agendas/agenda-validator';
+import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
+import { useClassEvents } from '@/components/classroom/use-class-events';
+import { useSessionClock } from '@/components/classroom/use-session-clock';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 
 const AGENDA_STATUS_LIVE = 'LIVE';
@@ -26,6 +27,12 @@ const STATUS_BADGE: Record<string, { label: string; variant: 'teal' | 'secondary
   CANCELLED: { label: 'CANCELADA', variant: 'secondary' },
 };
 
+const END_TIME_FORMAT = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: INSTITUTION_TIMEZONE,
+});
+
 const CHAT_COLUMN_CLASSES = 'lg:col-span-5 h-[70vh] lg:sticky lg:top-[6.5rem]';
 
 interface ClassroomPageProps {
@@ -33,18 +40,17 @@ interface ClassroomPageProps {
 }
 
 export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
-  const [now, setNow] = React.useState(() => new Date());
-  React.useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
-  }, []);
   const [minutesModalOpen, setMinutesModalOpen] = React.useState(false);
 
   const [activeCheckpoint, setActiveCheckpoint] = React.useState<SocraticCheckpoint | null>(null);
 
   const { agenda: session, isLoading, error, notFound } = useAgenda(sessionId);
   const { lesson, isLoading: lessonLoading } = useAgendaLesson(sessionId);
-  const { faqs, isLoading: faqsLoading } = useAgendaFaqs(sessionId, session?.status === AGENDA_STATUS_LIVE);
+  const { state, lastSeq } = useClassEvents(sessionId);
+  const now = useSessionClock(session?.startTime ?? '', session?.endTime ?? '', state.phase);
+  const [repliesDone, setRepliesDone] = React.useState(0);
+  const onReplyDone = React.useCallback(() => setRepliesDone((n) => n + 1), []);
+  const { faqs, isLoading: faqsLoading } = useAgendaFaqs(sessionId, `${lastSeq}:${repliesDone}`);
 
   const chatColumnRef = React.useRef<HTMLDivElement>(null);
   useFillViewportHeight(chatColumnRef, 16, 360, Boolean(session));
@@ -76,8 +82,9 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
     );
   }
 
-  const statusBadge = STATUS_BADGE[session.status] ?? STATUS_BADGE.SCHEDULED;
-  const timeValidation = validateAgendaTimeWindow(toAgendaSession(session), now);
+  const status = state.phase === 'ENDED' ? 'COMPLETED' : deriveAgendaStatus(session, now);
+  const statusBadge = STATUS_BADGE[status] ?? STATUS_BADGE.SCHEDULED;
+  const endsAt = END_TIME_FORMAT.format(new Date(session.endTime));
 
   return (
     <div className="flex-1 bg-slate-100/70 dark:bg-slate-950 flex flex-col font-sans">
@@ -88,7 +95,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant={statusBadge.variant} className="gap-1 px-2.5 py-0.5">
-                {session.status === AGENDA_STATUS_LIVE && (
+                {status === AGENDA_STATUS_LIVE && (
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
                 )}
                 {statusBadge.label}
@@ -114,7 +121,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
               <Clock className="h-4 w-4 text-brand-orange" />
-              <span>{formatRemaining(timeValidation.minutesRemaining)} restantes</span>
+              <span>até {endsAt}</span>
             </div>
           </div>
         </div>
@@ -148,6 +155,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
               agendaId={session.id}
               suggestions={activeCheckpoint ? [activeCheckpoint.question] : undefined}
               onOpenMinutesModal={() => setMinutesModalOpen(true)}
+              onReplyDone={onReplyDone}
             />
           </div>
         </div>

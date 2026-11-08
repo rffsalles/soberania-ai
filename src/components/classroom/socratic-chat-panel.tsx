@@ -10,6 +10,7 @@ export interface SocraticChatPanelProps {
   suggestions?: string[];
   onOpenMinutesModal?: () => void;
   onGuardrailBlock?: () => void;
+  onReplyDone?: () => void;
   className?: string;
 }
 
@@ -19,6 +20,7 @@ export function SocraticChatPanel({
   suggestions,
   onOpenMinutesModal,
   onGuardrailBlock,
+  onReplyDone,
   className,
 }: SocraticChatPanelProps) {
   return (
@@ -28,6 +30,7 @@ export function SocraticChatPanel({
       suggestions={suggestions}
       onOpenMinutesModal={onOpenMinutesModal}
       onGuardrailBlock={onGuardrailBlock}
+      onReplyDone={onReplyDone}
       className={className}
     />
   );

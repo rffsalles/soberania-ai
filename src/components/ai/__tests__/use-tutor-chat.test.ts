@@ -45,6 +45,25 @@ describe('useTutorChat', () => {
     expect(sent).toMatchObject({ agendaId: 'ag-1', message: 'O que é um JOIN?', history: [] });
   });
 
+  it('chama onReplyDone uma vez após done e não em error', async () => {
+    const onReplyDone = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(sseResponse(['event: done\ndata: {"reply":"ok"}\n\n']))
+    );
+    const { result } = renderHook(() => useTutorChat({ agendaId: 'ag-1', onReplyDone }));
+    await act(async () => {
+      await result.current.send('oi');
+    });
+    expect(onReplyDone).toHaveBeenCalledTimes(1);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(sseResponse(['event: error\ndata: {}\n\n'])));
+    await act(async () => {
+      await result.current.send('de novo');
+    });
+    expect(onReplyDone).toHaveBeenCalledTimes(1);
+  });
+
   it('popula error quando o servidor responde 422', async () => {
     vi.stubGlobal(
       'fetch',

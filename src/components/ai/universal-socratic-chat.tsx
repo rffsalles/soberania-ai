@@ -23,6 +23,7 @@ export interface UniversalSocraticChatProps {
   suggestions?: string[];
   onOpenMinutesModal?: () => void;
   onGuardrailBlock?: () => void;
+  onReplyDone?: () => void;
   className?: string;
   title?: string;
   subtitle?: string;
@@ -102,6 +103,7 @@ function SocraticChatBody({
   suggestions,
   onOpenMinutesModal,
   onGuardrailBlock,
+  onReplyDone,
   className,
   title = 'Tutora Lucy Virtual',
   subtitle = 'Apoio Socrático Multimodal · On-Premises',
@@ -123,6 +125,7 @@ function SocraticChatBody({
     agendaId,
     initialMessages: greeting,
     onGuardrailBlock,
+    onReplyDone,
   });
 
   return (

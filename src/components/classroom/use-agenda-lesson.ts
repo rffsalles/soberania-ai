@@ -5,8 +5,6 @@ import { API_ROUTES } from '@/lib/constants/routes';
 import type { FAQItem } from '@/domains/pedagogy/faq-builder';
 import type { AgendaLessonDTO } from '@/domains/teaching/services/agenda-lesson-service';
 
-const FAQ_REFETCH_MS = 30_000;
-
 async function fetchField<T>(url: string, field: string, signal: AbortSignal): Promise<T | null> {
   try {
     const res = await fetch(url, { signal });
@@ -40,27 +38,24 @@ export function useAgendaLesson(agendaId: string): { lesson: AgendaLessonDTO | n
   return state;
 }
 
-/** FAQ dinâmica da agenda; recarrega a cada 30 s enquanto a aula está ao vivo. */
-export function useAgendaFaqs(agendaId: string, isLive: boolean): { faqs: FAQItem[]; isLoading: boolean } {
+/** FAQ dinâmica da agenda; recarrega na montagem e sempre que `reloadKey` muda. */
+export function useAgendaFaqs(
+  agendaId: string,
+  reloadKey: string | number
+): { faqs: FAQItem[]; isLoading: boolean } {
   const [state, setState] = React.useState<{ faqs: FAQItem[]; isLoading: boolean }>({ faqs: [], isLoading: true });
 
   React.useEffect(() => {
     const controller = new AbortController();
-    const load = () =>
-      fetchField<FAQItem[]>(
-        `${API_ROUTES.AGENDAS}/${encodeURIComponent(agendaId)}/faqs`,
-        'faqs',
-        controller.signal
-      ).then((faqs) => {
-        if (!controller.signal.aborted) setState((prev) => ({ faqs: faqs ?? prev.faqs, isLoading: false }));
-      });
-    void load();
-    const timer = isLive ? setInterval(load, FAQ_REFETCH_MS) : null;
-    return () => {
-      controller.abort();
-      if (timer) clearInterval(timer);
-    };
-  }, [agendaId, isLive]);
+    fetchField<FAQItem[]>(
+      `${API_ROUTES.AGENDAS}/${encodeURIComponent(agendaId)}/faqs`,
+      'faqs',
+      controller.signal
+    ).then((faqs) => {
+      if (!controller.signal.aborted) setState((prev) => ({ faqs: faqs ?? prev.faqs, isLoading: false }));
+    });
+    return () => controller.abort();
+  }, [agendaId, reloadKey]);
 
   return state;
 }

@@ -41,10 +41,13 @@ export function useTutorChat({
   agendaId,
   initialMessages = [],
   onGuardrailBlock,
+  onReplyDone,
 }: {
   agendaId: string;
   initialMessages?: ChatMessage[];
   onGuardrailBlock?: () => void;
+  /** Chamado uma vez ao fim de cada resposta concluída (evento done); não em erro. */
+  onReplyDone?: () => void;
 }) {
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -55,6 +58,8 @@ export function useTutorChat({
   const isSendingRef = React.useRef(false);
   const onGuardrailBlockRef = React.useRef(onGuardrailBlock);
   onGuardrailBlockRef.current = onGuardrailBlock;
+  const onReplyDoneRef = React.useRef(onReplyDone);
+  onReplyDoneRef.current = onReplyDone;
 
   React.useEffect(
     () => () => {
@@ -124,6 +129,7 @@ export function useTutorChat({
               isGuardrailViolation: done.blockedByExamGuardrail,
               fallback: done.fallback,
             });
+            onReplyDoneRef.current?.();
           } else if (event.event === SSE_EVENT.ERROR) {
             fail();
           }
