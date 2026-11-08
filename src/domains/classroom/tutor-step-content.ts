@@ -80,13 +80,13 @@ const defaultDeps: StepContentDeps = {
   streamChat: (meta) => createLoggedStreamChat(undefined, 'CLASSROOM', meta),
 };
 
-function draftCard(raw: unknown, stepIndex: number): TutorCardPayload | null {
+export function parseDraftCard(raw: unknown, stepIndex: number): TutorCardPayload | null {
   if (raw == null) return null;
   const parsed = parseClassEvent('TUTOR_CARD', raw, stepIndex);
   return parsed.ok ? ({ ...(parsed.payload as TutorCardPayload), source: 'DRAFT' } as TutorCardPayload) : null;
 }
 
-function draftQuestion(raw: unknown, stepIndex: number): MultipleChoicePayload | null {
+export function parseDraftQuestion(raw: unknown, stepIndex: number): MultipleChoicePayload | null {
   if (raw == null) return null;
   const parsed = parseClassEvent('TUTOR_QUESTION', raw, stepIndex);
   if (!parsed.ok) return null;
@@ -108,11 +108,11 @@ export async function produceStepContent(
 
   const draft = await drafts.ensureDraft(lessonPlanId, stepIndex, stepHash(item, chapterIds));
   let card: { payload: TutorCardPayload; fromDraft: boolean } | null = null;
-  const cardFromDraft = draftCard(draft.card, stepIndex);
+  const cardFromDraft = parseDraftCard(draft.card, stepIndex);
   if (cardFromDraft) card = { payload: cardFromDraft, fromDraft: true };
   let question: { payload: MultipleChoicePayload; fromDraft: boolean } | null = null;
   if (wantQuestion) {
-    const q = draftQuestion(draft.question, stepIndex);
+    const q = parseDraftQuestion(draft.question, stepIndex);
     if (q) question = { payload: q, fromDraft: true };
   }
 

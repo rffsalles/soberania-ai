@@ -89,3 +89,12 @@ export function upsertAgendaByLessonPlanId(lessonPlanId: string, data: LessonAge
     update: data,
   });
 }
+
+export function findAgendaByLessonPlanId(
+  lessonPlanId: string,
+): Promise<{ id: string; startTime: Date; endTime: Date; status: AgendaRecord['status'] } | null> {
+  return db.agenda.findUnique({
+    where: { lessonPlanId },
+    select: { id: true, startTime: true, endTime: true, status: true },
+  });
+}
