@@ -33,6 +33,16 @@ export type TutorWorkerDeps = {
 
 export type TutorRunResult = 'NO_STEP' | 'ENDED' | 'SILENT' | 'ALREADY_DONE' | 'BUSY' | 'PUBLISHED';
 
+export async function readTutorEvents(agendaId: string): Promise<ClassEventDTO[]> {
+  const rows = await findEventsAfter(agendaId, 0, ['ALL', 'TEACHER'], TUTOR_EVENTS_SCAN);
+  const out: ClassEventDTO[] = [];
+  for (const row of rows) {
+    const parsed = parseClassEvent(row.type, row.payload, row.stepIndex);
+    if (parsed.ok) out.push({ ...toClassEventDTO(row), payload: parsed.payload });
+  }
+  return out;
+}
+
 const defaultDeps: TutorWorkerDeps = {
   async loadContext(agendaId) {
     const agenda = await findAgendaById(agendaId);
@@ -54,15 +64,7 @@ const defaultDeps: TutorWorkerDeps = {
       chapterIds: (scope?.chapters ?? []).map((c) => c.id),
     };
   },
-  async readEvents(agendaId) {
-    const rows = await findEventsAfter(agendaId, 0, ['ALL', 'TEACHER'], TUTOR_EVENTS_SCAN);
-    const out: ClassEventDTO[] = [];
-    for (const row of rows) {
-      const parsed = parseClassEvent(row.type, row.payload, row.stepIndex);
-      if (parsed.ok) out.push({ ...toClassEventDTO(row), payload: parsed.payload });
-    }
-    return out;
-  },
+  readEvents: readTutorEvents,
   produce: (input) => produceStepContent(input),
   appendTutorEvents,
 };

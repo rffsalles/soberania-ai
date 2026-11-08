@@ -6,10 +6,9 @@ import { assertOwner } from '@/domains/teaching/ownership';
 import type { LessonActor } from '@/domains/teaching/services/lesson-service';
 import { findLessonWithContext, findLessonTutorScope } from '@/domains/teaching/services/lesson-plan-repository';
 import { findAgendaByLessonPlanId } from '@/domains/agendas/services/agenda-repository';
-import { parseClassEvent, type ClassEventDTO, type TutorCardPayload } from './class-event-schema';
-import { findEventsAfter, TUTOR_EVENTS_SCAN } from './class-event-repository';
-import { toClassEventDTO } from './class-event-service';
-import { isTutorMuted } from './class-state';
+import type { ClassEventDTO, TutorCardPayload } from './class-event-schema';
+import { readTutorEvents } from './tutor-step-worker';
+import { isTutorMuted, sessionPhase } from './class-state';
 import { decideTutorPlan, stepDurationSeconds, tutorSkipMessage } from './tutor-policy';
 import { listDrafts, type TutorDraftRow } from './tutor-step-draft-repository';
 import { stepHash } from './tutor-step-hash';
@@ -47,7 +46,7 @@ export type DraftLesson = {
 
 export type TutorDraftDeps = {
   loadLesson(lessonPlanId: string): Promise<DraftLesson | null>;
-  findAgenda(lessonPlanId: string): Promise<{ id: string; startTime: Date; endTime: Date } | null>;
+  findAgenda(lessonPlanId: string): Promise<{ id: string; startTime: Date; endTime: Date; status: string } | null>;
   readEvents(agendaId: string): Promise<ClassEventDTO[]>;
   produce(input: StepContentInput): Promise<StepContent>;
   listDrafts(lessonPlanId: string): Promise<TutorDraftRow[]>;
@@ -66,15 +65,7 @@ const defaultDeps: TutorDraftDeps = {
     };
   },
   findAgenda: findAgendaByLessonPlanId,
-  async readEvents(agendaId) {
-    const rows = await findEventsAfter(agendaId, 0, ['ALL', 'TEACHER'], TUTOR_EVENTS_SCAN);
-    const out: ClassEventDTO[] = [];
-    for (const row of rows) {
-      const parsed = parseClassEvent(row.type, row.payload, row.stepIndex);
-      if (parsed.ok) out.push({ ...toClassEventDTO(row), payload: parsed.payload });
-    }
-    return out;
-  },
+  readEvents: readTutorEvents,
   produce: (input) => produceStepContent(input),
   listDrafts,
 };
@@ -110,6 +101,9 @@ export async function prepareTutorDraft(
 
   const agendaSeconds = Math.max(0, (agenda.endTime.getTime() - agenda.startTime.getTime()) / 1000);
   const events = await deps.readEvents(agenda.id);
+  if (agenda.status === 'CANCELLED' || agenda.status === 'COMPLETED' || sessionPhase(events) === 'ENDED') {
+    throw new DomainError(409, 'A aula já foi encerrada.', { code: 'CLASS_ENDED' });
+  }
   const plan = decideTutorPlan(
     { item, durationSeconds: stepDurationSeconds(script, stepIndex, agendaSeconds) },
     { muted: isTutorMuted(events, stepIndex) },

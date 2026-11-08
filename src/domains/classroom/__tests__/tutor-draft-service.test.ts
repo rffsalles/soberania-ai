@@ -64,6 +64,7 @@ function makeDeps(over: Partial<TutorDraftDeps> & { lesson?: Partial<DraftLesson
       id: 'ag1',
       startTime: new Date('2026-11-08T10:00:00Z'),
       endTime: new Date('2026-11-08T11:30:00Z'),
+      status: 'SCHEDULED',
     })),
     readEvents: vi.fn(async () => over.events ?? []),
     produce: vi.fn(async () => done()),
@@ -171,6 +172,29 @@ describe('prepareTutorDraft', () => {
   it('sem agenda: 409 NO_AGENDA', async () => {
     const e = await codeOf(prepareTutorDraft(teacher, 'lp1', 0, makeDeps({ findAgenda: vi.fn(async () => null) })));
     expect(e).toEqual({ status: 409, code: 'NO_AGENDA', message: 'A aula publicada não tem agenda.' });
+  });
+
+  it('aula encerrada: 409 CLASS_ENDED sem chamar produce (agenda COMPLETED ou SESSION_ENDED)', async () => {
+    const ended = {
+      seq: 1,
+      type: 'SESSION_ENDED',
+      stepIndex: null,
+      payload: {},
+      createdBy: 'TEACHER',
+      createdAt: '2026-11-08T10:00:00.000Z',
+    } as ClassEventDTO;
+    const completed = makeDeps({
+      findAgenda: vi.fn(async () => ({ id: 'ag1', startTime: new Date(0), endTime: new Date(5400000), status: 'COMPLETED' })),
+    });
+    const byEvent = makeDeps({ events: [ended] });
+    for (const deps of [completed, byEvent]) {
+      expect(await codeOf(prepareTutorDraft(teacher, 'lp1', 0, deps))).toEqual({
+        status: 409,
+        code: 'CLASS_ENDED',
+        message: 'A aula já foi encerrada.',
+      });
+      expect(deps.produce).not.toHaveBeenCalled();
+    }
   });
 
   it('passo fora do roteiro: 400 STEP_OUT_OF_RANGE', async () => {
