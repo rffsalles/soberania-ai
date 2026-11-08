@@ -4,6 +4,7 @@ import type { AgendaActor, AgendaDTO } from '@/domains/agendas/services/agenda-s
 import { DomainError } from '@/lib/api/domain-error';
 import type { TimeScriptItem } from '@/domains/teaching/time-script';
 import type { ClassEventRow, NewClassEvent, AppendContext } from '../class-event-repository';
+import { parseClassEvent } from '../class-event-schema';
 import {
   appendTeacherEvent,
   isClassClosed,
@@ -173,6 +174,21 @@ describe('appendTeacherEvent', () => {
       deps,
     );
     expect(ev.payload).toEqual({ activity: 'Prática', timeRange: '20-30', fromStepIndex: 0 });
+  });
+
+  it('activity longa é truncada; vazia vira Passo N', async () => {
+    const longScript: TimeScriptItem[] = [
+      { timeSeconds: 0, timeRange: 'x'.repeat(50), activity: 'a'.repeat(250), description: '' },
+      { timeSeconds: 60, timeRange: '1-2', activity: '   ', description: '' },
+    ];
+    const { deps } = makeDeps({ script: longScript });
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    const [e0] = await appendTeacherEvent(teacher, 'a1', { type: 'STEP_CHANGED', stepIndex: 0 }, deps);
+    expect((e0.payload as { activity: string }).activity).toHaveLength(200);
+    expect((e0.payload as { timeRange: string }).timeRange).toHaveLength(40);
+    const [e1] = await appendTeacherEvent(teacher, 'a1', { type: 'STEP_CHANGED', stepIndex: 1 }, deps);
+    expect((e1.payload as { activity: string }).activity).toBe('Passo 2');
+    expect(parseClassEvent('STEP_CHANGED', e0.payload, 0).ok).toBe(true);
   });
 
   it('TEACHER_NOTE grava audience TEACHER; os demais ALL', async () => {

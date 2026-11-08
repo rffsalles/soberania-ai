@@ -85,7 +85,11 @@ function stepEvent(
   return {
     type: 'STEP_CHANGED',
     stepIndex,
-    payload: { activity: item.activity, timeRange: item.timeRange, fromStepIndex },
+    payload: {
+      activity: item.activity.trim().slice(0, 200) || `Passo ${stepIndex + 1}`,
+      timeRange: item.timeRange.slice(0, 40),
+      fromStepIndex,
+    },
     audience: 'ALL',
     createdBy: 'TEACHER',
   };

@@ -9,6 +9,7 @@ export type TutorContent = {
 export type ClassState = {
   phase: SessionPhase;
   currentStepIndex: number | null;
+  currentStepActivity: string | null;
   lessonMuted: boolean;
   tutorByStep: Record<number, TutorContent>;
 };
@@ -73,9 +74,12 @@ export function reduceClassState(events: ClassEventDTO[]): ClassState {
     if (e.type !== 'TUTOR_CARD' && e.type !== 'TUTOR_QUESTION' && e.type !== 'TUTOR_SKIPPED') continue;
     tutorByStep[e.stepIndex] ??= tutorContentForStep(events, e.stepIndex);
   }
+  const step = currentStep(events);
+  const activity = (step?.payload as { activity?: unknown } | null | undefined)?.activity;
   return {
     phase: sessionPhase(events),
-    currentStepIndex: currentStep(events)?.stepIndex ?? null,
+    currentStepIndex: step?.stepIndex ?? null,
+    currentStepActivity: typeof activity === 'string' ? activity : null,
     lessonMuted: lessonMuted(events),
     tutorByStep,
   };

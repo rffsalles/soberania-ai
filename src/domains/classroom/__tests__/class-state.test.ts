@@ -22,6 +22,16 @@ describe('class-state', () => {
     const es = [ev(3, 'STEP_CHANGED', 0), ev(1, 'SESSION_STARTED'), ev(2, 'STEP_CHANGED', 0), ev(4, 'STEP_CHANGED', 2), ev(5, 'STEP_CHANGED', 1)];
     expect(reduceClassState(es).currentStepIndex).toBe(1);
   });
+  it('currentStepActivity vem do STEP_CHANGED de maior seq', () => {
+    const es = [
+      ev(1, 'SESSION_STARTED'),
+      ev(2, 'STEP_CHANGED', 0, { activity: 'Revisão', timeRange: '0-10 min', fromStepIndex: null }),
+      ev(3, 'STEP_CHANGED', 1, { activity: 'JOINs', timeRange: '10-30 min', fromStepIndex: 0 }),
+    ];
+    expect(reduceClassState(es).currentStepActivity).toBe('JOINs');
+    expect(reduceClassState([ev(1, 'SESSION_STARTED')]).currentStepActivity).toBeNull();
+    expect(reduceClassState([ev(1, 'STEP_CHANGED', 0, {})]).currentStepActivity).toBeNull();
+  });
   it('fases', () => {
     expect(sessionPhase([])).toBe('NOT_STARTED');
     expect(sessionPhase([ev(1, 'SESSION_STARTED')])).toBe('RUNNING');
