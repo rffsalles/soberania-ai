@@ -185,6 +185,29 @@ class TutorClient:
                 resolved[mode] = agenda
         return resolved
 
+    def post_event(
+        self, agenda_id: str, type: str, step_index: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Grava um evento da aula (professor): `SESSION_STARTED` ou `STEP_CHANGED`."""
+        payload: dict[str, Any] = {"type": type}
+        if step_index is not None:
+            payload["stepIndex"] = step_index
+        body = self._json(self._request("POST", f"agendas/{agenda_id}/events", json=payload))
+        return list(body.get("events") or [])
+
+    def list_events(self, agenda_id: str, after: int = 0) -> list[dict[str, Any]]:
+        """Lê os eventos da aula depois de `after`, paginando até `lastSeq` parar de avançar."""
+        events: list[dict[str, Any]] = []
+        cursor = after
+        while True:
+            body = self._json(self._request("GET", f"agendas/{agenda_id}/events", params={"after": cursor}))
+            page = list(body.get("events") or [])
+            events.extend(page)
+            last = body.get("lastSeq")
+            if not page or not isinstance(last, int) or last <= cursor:
+                return events
+            cursor = last
+
     def chat(
         self,
         agenda_id: str,

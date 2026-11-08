@@ -109,7 +109,8 @@ def evaluate_reply(case: Case, reply: TutorReply, judge: LLMJudge | None) -> Cas
 
 def regrade(result: CaseResult, case: Case) -> CaseResult:
     """Reaplica os graders determinísticos a uma resposta gravada, mantendo o veredito do juiz."""
-    if result.status == "error":
+    if result.status == "error" or result.category == "proativo":
+        # O proativo depende dos eventos da aula, que não ficam no relatório: nada a reaplicar.
         return result
     reply = TutorReply(reply=result.reply, citations=result.citations, wall_ms=result.wall_ms or 0)
     fresh = evaluate_reply(case, reply, judge=None)

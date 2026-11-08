@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from evals.cases import GRADER_NAMES, Expectation, ExpectedCitation
-from evals.graders import GRADERS
+from evals.graders import GRADERS, PROACTIVE_GRADERS
 from evals.graders.rules import (
     approx_tokens,
     asks_back,
@@ -22,7 +22,7 @@ NONE = Expectation()
 
 
 def test_registry_matches_case_schema() -> None:
-    assert set(GRADERS) == GRADER_NAMES
+    assert set(GRADERS) | set(PROACTIVE_GRADERS) == GRADER_NAMES
 
 
 def test_normalize_strips_accents_and_spaces() -> None:

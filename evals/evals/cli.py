@@ -11,15 +11,18 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from evals.cases import DEFAULT_CASES_DIR, CaseFileError, Category, load_cases
+from evals.cases import DEFAULT_CASES_DIR, CaseFileError, Category, Mode, load_cases
 from evals.client import ClientError, TutorClient
 from evals.judge import JudgeError, LLMJudge
+from evals.proactive import run_proactive_cases
 from evals.report import DEFAULT_THRESHOLD, category_stats, exit_code, summary_lines, write_reports
 from evals.runner import CaseResult, RunMeta, RunResult, now_utc, regrade, run_cases
 
 DEFAULT_REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports"
 # Aluno de demonstração criado pelo seed (src/lib/constants/demo-credentials.ts).
 DEMO_STUDENT = ("202601001", "aluno123")
+# Professor de demonstração do seed; só o `proativo` precisa dele (grava os eventos da aula).
+DEMO_TEACHER = ("PROF001", "prof123")
 
 console = Console()
 
@@ -105,8 +108,10 @@ def cmd_run(args: argparse.Namespace) -> int:
             color = {"pass": "green", "fail": "red", "error": "yellow"}[result.status]
             console.print(f"[{color}]{result.status:5}[/] {result.id}")
 
+        regular = [c for c in cases if c.category is not Category.PROATIVO]
+        proactive = [c for c in cases if c.category is Category.PROATIVO]
         results = run_cases(
-            cases,
+            regular,
             client,
             agendas,
             judge=judge,
@@ -114,6 +119,23 @@ def cmd_run(args: argparse.Namespace) -> int:
             fallback_retries=args.fallback_retries,
             on_result=progress,
         )
+        if proactive:
+            classroom = agendas.get(Mode.CLASSROOM)
+            if classroom is None:
+                console.print("[red]O proativo precisa de uma agenda CLASSROOM com janela aberta.[/]")
+                return 2
+            try:
+                with TutorClient(args.base_url, timeout=args.timeout, retries=args.retries) as teacher:
+                    teacher.login(
+                        args.teacher_identifier,
+                        os.environ.get("EVALS_TEACHER_PASSWORD", args.teacher_password),
+                    )
+                    results += run_proactive_cases(
+                        proactive, teacher, client, classroom.id, on_result=progress
+                    )
+            except ClientError as exc:
+                console.print(f"[red]Falha no proativo: {exc}[/]")
+                return 2
     if judge:
         judge.close()
 
@@ -168,6 +190,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--base-url", default=os.environ.get("EVALS_BASE_URL", "http://localhost:3000"))
     run.add_argument("--enrollment", default=DEMO_STUDENT[0], help="matrícula do aluno")
     run.add_argument("--password", default=DEMO_STUDENT[1], help="senha (ou EVALS_PASSWORD)")
+    run.add_argument("--teacher-identifier", default=DEMO_TEACHER[0], help="professor (só no proativo)")
+    run.add_argument(
+        "--teacher-password", default=DEMO_TEACHER[1], help="senha do professor (ou EVALS_TEACHER_PASSWORD)"
+    )
     run.add_argument("--judge", action=argparse.BooleanOptionalAction, default=False, help="liga o juiz LLM")
     run.add_argument("--timeout", type=float, default=90.0, help="timeout por requisição (s)")
     run.add_argument("--retries", type=int, default=3, help="retries para rede/5xx/429")

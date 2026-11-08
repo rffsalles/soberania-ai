@@ -75,7 +75,8 @@ def test_duplicate_ids_rejected(tmp_path) -> None:
 def test_shipped_cases_are_valid_and_cover_all_categories() -> None:
     cases = load_cases(DEFAULT_CASES_DIR)
     assert len(cases) >= 40
-    assert {c.category for c in cases} == set(Category)
+    assert {c.category for c in cases} == set(Category) - {Category.PROATIVO}  # proativo é opt-in
+    assert len(load_cases(DEFAULT_CASES_DIR, categories=["proativo"])) == 10
 
 
 def test_filters() -> None:

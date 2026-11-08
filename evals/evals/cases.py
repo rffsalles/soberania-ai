@@ -21,6 +21,7 @@ class Category(StrEnum):
     FORA_DO_MATERIAL = "fora_do_material"
     ESTILO = "estilo"
     INJECAO = "injecao"
+    PROATIVO = "proativo"
 
 
 class Mode(StrEnum):
@@ -39,6 +40,12 @@ GRADER_NAMES = frozenset(
         "length_within",
         "no_instruction_override",
         "patterns",
+        "card_cites",
+        "card_shape",
+        "question_generated",
+        "teacher_question",
+        "no_question",
+        "skipped_no_material",
     }
 )
 
@@ -49,6 +56,7 @@ DEFAULT_GRADERS: dict[Category, tuple[str, ...]] = {
     Category.FORA_DO_MATERIAL: ("refusal_present",),
     Category.ESTILO: ("length_within", "patterns"),
     Category.INJECAO: ("no_instruction_override", "no_final_answer"),
+    Category.PROATIVO: (),
 }
 
 # Critérios do juiz LLM (opcional, `--judge`) por categoria.
@@ -80,6 +88,7 @@ class Expectation(BaseModel):
     override_markers: list[str] = Field(default_factory=list)
     max_chars: int | None = Field(default=None, gt=0)
     max_tokens: int | None = Field(default=None, gt=0)
+    teacher_question: str | None = Field(default=None, min_length=1)
 
     @field_validator("must_match", "must_not_match", "final_answer_patterns", "override_markers")
     @classmethod
@@ -102,6 +111,7 @@ class Case(BaseModel):
     mode: Mode
     question: str = Field(min_length=1, max_length=4000)
     expect: Expectation = Field(default_factory=Expectation)
+    step: int | None = Field(default=None, ge=0, le=59)
     graders: list[str] | None = None
     notes: str = ""
 
@@ -123,6 +133,17 @@ class Case(BaseModel):
             raise ValueError("length_within exige expect.max_chars ou expect.max_tokens")
         if "patterns" in active and not (self.expect.must_match or self.expect.must_not_match):
             raise ValueError("patterns exige expect.must_match ou expect.must_not_match")
+        if "card_cites" in active and self.expect.citation is None:
+            raise ValueError("card_cites exige expect.citation")
+        if "teacher_question" in active and not self.expect.teacher_question:
+            raise ValueError("teacher_question exige expect.teacher_question")
+        if self.category is Category.PROATIVO:
+            if self.step is None:
+                raise ValueError("a categoria proativo exige step")
+            if not active:
+                raise ValueError("a categoria proativo exige graders")
+        elif self.step is not None:
+            raise ValueError("step só vale na categoria proativo")
         return self
 
     def active_graders(self) -> tuple[str, ...]:
@@ -159,7 +180,10 @@ def load_cases(
     categories: Iterable[str] | None = None,
     ids: Iterable[str] | None = None,
 ) -> list[Case]:
-    """Carrega todos os `*.jsonl` do diretório, garantindo ids únicos, com filtros opcionais."""
+    """Carrega todos os `*.jsonl` do diretório, garantindo ids únicos, com filtros opcionais.
+
+    A categoria `proativo` é opt-in: consome a aula demo, então só entra com `categories`/`ids`.
+    """
     cases: list[Case] = []
     for path in sorted(cases_dir.glob("*.jsonl")):
         with path.open(encoding="utf-8") as fh:
@@ -169,6 +193,10 @@ def load_cases(
         if case.id in seen:
             raise CaseFileError(f"id duplicado: {case.id}")
         seen.add(case.id)
+    categories = list(categories) if categories else []
+    ids = list(ids) if ids else []
+    if not categories and not ids:
+        cases = [c for c in cases if c.category is not Category.PROATIVO]
     if categories:
         wanted = {Category(c) for c in categories}
         cases = [c for c in cases if c.category in wanted]

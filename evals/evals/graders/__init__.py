@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from evals.cases import Case, Expectation
+from evals.graders.proactive import PROACTIVE_GRADERS
 from evals.graders.rules import (
     GradeResult,
     asks_back,
@@ -34,4 +35,4 @@ def grade(case: Case, reply: str, citations: list[str]) -> list[GradeResult]:
     return [GRADERS[name](reply, citations, case.expect) for name in case.active_graders()]
 
 
-__all__ = ["GRADERS", "GradeResult", "grade"]
+__all__ = ["GRADERS", "PROACTIVE_GRADERS", "GradeResult", "grade"]
