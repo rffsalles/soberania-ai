@@ -18,6 +18,8 @@ interface InteractiveVideoPlayerProps {
   mediaType: LessonMediaType;
   checkpoints: SocraticCheckpoint[];
   onTriggerCheckpoint?: (checkpoint: SocraticCheckpoint) => void;
+  stepTimes?: number[];
+  onStepCross?: (videoSeconds: number) => void;
   className?: string;
 }
 
@@ -30,6 +32,15 @@ function formatTime(secs: number) {
   const m = Math.floor(secs / SECONDS_PER_MINUTE).toString().padStart(2, '0');
   const s = Math.floor(secs % SECONDS_PER_MINUTE).toString().padStart(2, '0');
   return `${m}:${s}`;
+}
+
+/** Índice do último passo cujo início é <= seconds; -1 antes do primeiro. */
+export function stepTimeIndex(stepTimes: number[], seconds: number): number {
+  let index = -1;
+  stepTimes.forEach((time, i) => {
+    if (time <= seconds) index = i;
+  });
+  return index;
 }
 
 let youtubeApiPromise: Promise<void> | null = null;
@@ -60,6 +71,8 @@ export function InteractiveVideoPlayer({
   mediaType,
   checkpoints,
   onTriggerCheckpoint,
+  stepTimes,
+  onStepCross,
   className,
 }: InteractiveVideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -67,6 +80,12 @@ export function InteractiveVideoPlayer({
   const ytPlayer = React.useRef<YT.Player | null>(null);
   const triggered = React.useRef<Set<number>>(new Set());
   const [activeCheckpoint, setActiveCheckpoint] = React.useState<SocraticCheckpoint | null>(null);
+
+  const stepTimesRef = React.useRef(stepTimes);
+  const onStepCrossRef = React.useRef(onStepCross);
+  stepTimesRef.current = stepTimes;
+  onStepCrossRef.current = onStepCross;
+  const lastStepIndex = React.useRef(-1);
 
   const sorted = React.useMemo(() => [...checkpoints].sort((a, b) => a.timeSeconds - b.timeSeconds), [checkpoints]);
 
@@ -82,6 +101,14 @@ export function InteractiveVideoPlayer({
 
   const checkAt = React.useCallback(
     (now: number) => {
+      const reportStep = onStepCrossRef.current;
+      if (reportStep && stepTimesRef.current) {
+        const stepIndex = stepTimeIndex(stepTimesRef.current, now);
+        if (stepIndex >= 0 && stepIndex !== lastStepIndex.current) {
+          lastStepIndex.current = stepIndex;
+          reportStep(Math.floor(now));
+        }
+      }
       const passed = sorted.filter((cp) => cp.timeSeconds <= now);
       if (!passed.some((cp) => !triggered.current.has(cp.timeSeconds))) return;
       // Marca todos os anteriores como vistos para não disparar em cascata após um salto na linha do tempo.

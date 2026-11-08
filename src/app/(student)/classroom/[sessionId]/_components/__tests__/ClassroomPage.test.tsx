@@ -5,7 +5,13 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type { ClassState } from '@/domains/classroom/class-state';
 import type { ClassEventDTO } from '@/domains/classroom/class-event-schema';
 
-const mocks = vi.hoisted(() => ({ state: null as unknown as ClassState, events: [] as ClassEventDTO[] }));
+const mocks = vi.hoisted(() => ({
+  state: null as unknown as ClassState,
+  events: [] as ClassEventDTO[],
+  videoUrl: null as string | null,
+  mediaType: 'NONE' as string,
+  playerProps: null as null | { stepTimes?: number[]; onStepCross?: unknown },
+}));
 
 vi.mock('@/components/agendas/use-agenda', () => ({
   useAgenda: () => ({
@@ -27,8 +33,8 @@ vi.mock('@/components/agendas/use-agenda', () => ({
 vi.mock('@/components/classroom/use-agenda-lesson', () => ({
   useAgendaLesson: () => ({
     lesson: {
-      videoUrl: null,
-      mediaType: 'NONE',
+      videoUrl: mocks.videoUrl,
+      mediaType: mocks.mediaType,
       timeScript: [
         { timeSeconds: 0, activity: 'Introdução a SQL' },
         { timeSeconds: 60, activity: 'INNER JOIN e LEFT JOIN na prática' },
@@ -46,7 +52,12 @@ vi.mock('@/components/classroom/use-session-clock', () => ({
   useSessionClock: () => new Date('2026-11-08T14:00:00.000Z'),
 }));
 vi.mock('@/components/classroom/use-fill-viewport-height', () => ({ useFillViewportHeight: () => undefined }));
-vi.mock('@/components/classroom/interactive-video-player', () => ({ InteractiveVideoPlayer: () => null }));
+vi.mock('@/components/classroom/interactive-video-player', () => ({
+  InteractiveVideoPlayer: (props: { stepTimes?: number[]; onStepCross?: unknown }) => {
+    mocks.playerProps = props;
+    return null;
+  },
+}));
 vi.mock('@/components/classroom/socratic-chat-panel', () => ({ SocraticChatPanel: () => null }));
 vi.mock('@/components/classroom/dynamic-faq-accordion', () => ({ DynamicFaqAccordion: () => null }));
 vi.mock('@/components/classroom/pedagogical-minutes-modal', () => ({ PedagogicalMinutesModal: () => null }));
@@ -70,6 +81,9 @@ const stepEv = (seq: number, i: number, activity: string) =>
 beforeEach(() => {
   mocks.state = base;
   mocks.events = [];
+  mocks.videoUrl = null;
+  mocks.mediaType = 'NONE';
+  mocks.playerProps = null;
 });
 afterEach(cleanup);
 
@@ -112,5 +126,26 @@ describe('ClassroomPage faixa Agora na aula', () => {
     ];
     render(<ClassroomPage sessionId="a1" />);
     expect(screen.getByTestId('now-in-class-strip').textContent).toContain('LEFT JOIN');
+  });
+});
+
+describe('ClassroomPage aula gravada', () => {
+  it('NOT_STARTED com vídeo e roteiro passa onStepCross e stepTimes', () => {
+    mocks.videoUrl = 'https://youtu.be/abcdefghijk';
+    mocks.mediaType = 'YOUTUBE';
+    render(<ClassroomPage sessionId="a1" />);
+    expect(typeof mocks.playerProps?.onStepCross).toBe('function');
+    expect(mocks.playerProps?.stepTimes).toEqual([0, 60, 120]);
+  });
+  it('sem vídeo onStepCross é indefinido', () => {
+    render(<ClassroomPage sessionId="a1" />);
+    expect(mocks.playerProps?.onStepCross).toBeUndefined();
+  });
+  it('fase RUNNING passa onStepCross indefinido', () => {
+    mocks.videoUrl = 'https://youtu.be/abcdefghijk';
+    mocks.mediaType = 'YOUTUBE';
+    mocks.state = { ...base, phase: 'RUNNING', currentStepIndex: 0, currentStepActivity: 'x' };
+    render(<ClassroomPage sessionId="a1" />);
+    expect(mocks.playerProps?.onStepCross).toBeUndefined();
   });
 });

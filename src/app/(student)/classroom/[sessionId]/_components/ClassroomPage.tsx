@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useVideoStepReporter } from '@/components/classroom/use-video-step-reporter';
 import { InteractiveVideoPlayer, type SocraticCheckpoint } from '@/components/classroom/interactive-video-player';
 import { SocraticChatPanel } from '@/components/classroom/socratic-chat-panel';
 import { DynamicFaqAccordion } from '@/components/classroom/dynamic-faq-accordion';
@@ -11,6 +12,7 @@ import { useAgenda } from '@/components/agendas/use-agenda';
 import { useFillViewportHeight } from '@/components/classroom/use-fill-viewport-height';
 import { useAgendaFaqs, useAgendaLesson } from '@/components/classroom/use-agenda-lesson';
 import { resolveMediaType } from '@/domains/teaching/media-type';
+import { LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
 import { Skeleton } from '@/components/ui/skeleton';
 import { deriveAgendaStatus } from '@/domains/agendas/agenda-validator';
 import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
@@ -72,6 +74,16 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
       ),
     [lesson]
   );
+
+  const lessonVideoUrl = lesson?.videoUrl ?? session?.videoUrl ?? null;
+  const lessonMediaType = lesson?.mediaType ?? resolveMediaType(session?.videoUrl);
+  const stepTimes = React.useMemo(() => (lesson?.timeScript ?? []).map((s) => s.timeSeconds), [lesson]);
+  const reportStepEnabled =
+    state.phase === 'NOT_STARTED' &&
+    Boolean(lessonVideoUrl) &&
+    lessonMediaType !== LESSON_MEDIA_TYPE.NONE &&
+    stepTimes.length > 0;
+  const reportStep = useVideoStepReporter(sessionId, reportStepEnabled);
 
   if (isLoading || !session) {
     return (
@@ -152,10 +164,12 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
               <Skeleton className="aspect-video w-full rounded-2xl" />
             ) : (
               <InteractiveVideoPlayer
-                videoUrl={lesson?.videoUrl ?? session.videoUrl ?? null}
-                mediaType={lesson?.mediaType ?? resolveMediaType(session.videoUrl)}
+                videoUrl={lessonVideoUrl}
+                mediaType={lessonMediaType}
                 checkpoints={checkpoints}
                 onTriggerCheckpoint={setActiveCheckpoint}
+                stepTimes={stepTimes}
+                onStepCross={reportStepEnabled ? reportStep : undefined}
               />
             )}
             {activeCheckpoint && (
