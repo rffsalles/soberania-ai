@@ -5,6 +5,7 @@ import {
   isTutorMuted,
   reduceClassState,
   sessionPhase,
+  stepLabel,
   tutorContentForStep,
 } from '../class-state';
 
@@ -48,5 +49,12 @@ describe('class-state', () => {
     const es = [ev(1, 'TUTOR_CARD', 0), ev(2, 'TUTOR_SKIPPED', 1), ev(3, 'TUTOR_QUESTION', 0)];
     expect(tutorContentForStep(es, 0)).toMatchObject({ card: { seq: 1 }, question: { seq: 3 }, skipped: null });
     expect(tutorContentForStep(es, 1).skipped?.seq).toBe(2);
+  });
+});
+
+describe('stepLabel', () => {
+  it('converte índice base 0 em Passo N', () => {
+    expect(stepLabel(0)).toBe('Passo 1');
+    expect(stepLabel(4)).toBe('Passo 5');
   });
 });

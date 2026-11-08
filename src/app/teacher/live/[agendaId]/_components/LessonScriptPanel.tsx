@@ -22,13 +22,13 @@ export function LessonScriptPanel({
           <li key={i}>
             <button
               type="button"
-              disabled={target === null}
+              aria-disabled={target === null ? 'true' : undefined}
               aria-current={current ? 'step' : undefined}
               onClick={() => target !== null && onGoTo(target)}
-              className={`w-full text-left rounded-xl border px-4 py-3 transition-colors disabled:cursor-default ${
+              className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${target === null ? 'cursor-default' : 'hover:bg-slate-50 dark:hover:bg-slate-800'} ${
                 current
                   ? 'border-brand-orange bg-brand-orange/10'
-                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 enabled:hover:bg-slate-50 dark:enabled:hover:bg-slate-800'
+                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
               }`}
             >
               <span className="block text-xs font-medium text-slate-500">{item.timeRange}</span>

@@ -16,6 +16,11 @@ export type ClassState = {
 
 type NotePayload = { tutor?: 'MUTE' | 'UNMUTE' | 'PUBLISH_NOW' | null; scope?: 'STEP' | 'LESSON' };
 
+/** Rótulo padrão de um passo (índice base 0) quando não há descrição. */
+export function stepLabel(stepIndex: number): string {
+  return `Passo ${stepIndex + 1}`;
+}
+
 function sorted(events: ClassEventDTO[]): ClassEventDTO[] {
   return [...events].sort((a, b) => a.seq - b.seq);
 }

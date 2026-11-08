@@ -7,6 +7,7 @@ import type { ClassEventRow, NewClassEvent, AppendContext } from '../class-event
 import { parseClassEvent } from '../class-event-schema';
 import {
   appendTeacherEvent,
+  closeClassIfRunning,
   isClassClosed,
   listEventsAfter,
   openEventReader,
@@ -360,5 +361,33 @@ describe('isClassClosed', () => {
     const { deps, getAgenda } = makeDeps();
     getAgenda.mockRejectedValueOnce(new DomainError(404, 'Agenda não encontrada.'));
     await expectDomain(isClassClosed(student, 'a1', 0, deps), 404);
+  });
+});
+
+describe('closeClassIfRunning', () => {
+  it('RUNNING grava um SESSION_ENDED do SYSTEM e não conclui a agenda', async () => {
+    const { deps, rows, completeAgenda } = makeDeps();
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    const before = rows.length;
+    expect(await closeClassIfRunning('a1', deps)).toBe(true);
+    const added = rows.slice(before);
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({ type: 'SESSION_ENDED', createdBy: 'SYSTEM', audience: 'ALL', stepIndex: null });
+    expect(completeAgenda).not.toHaveBeenCalled();
+  });
+
+  it('NOT_STARTED não grava nada', async () => {
+    const { deps, rows } = makeDeps();
+    expect(await closeClassIfRunning('a1', deps)).toBe(false);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('ENDED não grava de novo', async () => {
+    const { deps, rows } = makeDeps();
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    const before = rows.length;
+    expect(await closeClassIfRunning('a1', deps)).toBe(false);
+    expect(rows).toHaveLength(before);
   });
 });

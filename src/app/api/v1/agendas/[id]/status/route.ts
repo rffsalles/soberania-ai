@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { setAgendaStatusSchema } from '@/lib/validators/agenda.validator';
 import { setAgendaStatus } from '@/domains/agendas/services/agenda-service';
+import { closeClassIfRunning } from '@/domains/classroom/class-event-service';
 import { generateMinutesForAgenda } from '@/domains/pedagogy/services/minutes-service';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +13,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const { status } = setAgendaStatusSchema.parse(await req.json());
     const agenda = await setAgendaStatus(id, user, status);
+    if (status === AgendaStatus.COMPLETED || status === AgendaStatus.CANCELLED) {
+      // O stream dos alunos e o painel só saem do estado "em andamento" com um SESSION_ENDED.
+      try {
+        await closeClassIfRunning(id);
+      } catch (err) {
+        console.error('[agendas] falha ao registrar o fim da aula ao vivo', err);
+      }
+    }
     if (status !== AgendaStatus.COMPLETED) return NextResponse.json({ success: true, agenda });
     // Status já gravado: falha ao gerar atas não pode derrubar a resposta.
     try {

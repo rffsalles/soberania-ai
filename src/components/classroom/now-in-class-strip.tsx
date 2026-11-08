@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { LiveStatusIndicator } from '@/components/classroom/live-status-indicator';
+import { stepLabel } from '@/domains/classroom/class-state';
 import type { ClassEventsStatus } from '@/components/classroom/use-class-events';
 
 interface NowInClassStripProps {
@@ -21,7 +22,7 @@ export function NowInClassStrip({ stepIndex, activity, status }: NowInClassStrip
       <div className="min-w-0 space-y-0.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-brand-teal">Agora na aula</p>
         <p className="text-base font-semibold text-slate-900 dark:text-white">
-          {activity ?? `Passo ${stepIndex + 1}`}
+          {activity ?? stepLabel(stepIndex)}
         </p>
       </div>
       <LiveStatusIndicator status={status} />

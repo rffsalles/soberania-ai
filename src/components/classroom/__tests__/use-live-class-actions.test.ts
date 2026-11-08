@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useLiveClassActions, LIVE_ACTION_ERROR } from '../use-live-class-actions';
 
 const okResponse = () =>
-  new Response(JSON.stringify({ success: true, events: [] }), { status: 201 });
+  new Response(JSON.stringify({ success: true, events: [{ seq: 4 }, { seq: 5 }] }), { status: 201 });
 
 describe('useLiveClassActions', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -17,14 +17,14 @@ describe('useLiveClassActions', () => {
     vi.unstubAllGlobals();
   });
 
-  it('envia POST com o corpo do comando e devolve true em 201', async () => {
+  it('envia POST com o corpo do comando e devolve o maior seq em 201', async () => {
     fetchMock.mockResolvedValue(okResponse());
     const { result } = renderHook(() => useLiveClassActions('a1'));
-    let ok = false;
+    let ok: number | null = null;
     await act(async () => {
       ok = await result.current.send({ type: 'STEP_CHANGED', stepIndex: 2 });
     });
-    expect(ok).toBe(true);
+    expect(ok).toBe(5);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/agendas/a1/events',
       expect.objectContaining({
@@ -38,7 +38,7 @@ describe('useLiveClassActions', () => {
     let resolve!: (r: Response) => void;
     fetchMock.mockReturnValue(new Promise<Response>((r) => (resolve = r)));
     const { result } = renderHook(() => useLiveClassActions('a1'));
-    let p!: Promise<boolean>;
+    let p!: Promise<number | null>;
     act(() => {
       p = result.current.send({ type: 'SESSION_STARTED' });
     });
@@ -50,19 +50,19 @@ describe('useLiveClassActions', () => {
     expect(result.current.pending).toBeNull();
   });
 
-  it('segundo send durante o pendente não chama fetch e devolve false', async () => {
+  it('segundo send durante o pendente não chama fetch e devolve null', async () => {
     let resolve!: (r: Response) => void;
     fetchMock.mockReturnValue(new Promise<Response>((r) => (resolve = r)));
     const { result } = renderHook(() => useLiveClassActions('a1'));
-    let first!: Promise<boolean>;
-    let second = true;
+    let first!: Promise<number | null>;
+    let second: number | null = 0;
     await act(async () => {
       first = result.current.send({ type: 'SESSION_STARTED' });
       second = await result.current.send({ type: 'SESSION_ENDED' });
       resolve(okResponse());
       await first;
     });
-    expect(second).toBe(false);
+    expect(second).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -73,22 +73,22 @@ describe('useLiveClassActions', () => {
       })
     );
     const { result } = renderHook(() => useLiveClassActions('a1'));
-    let ok = true;
+    let ok: number | null = 0;
     await act(async () => {
       ok = await result.current.send({ type: 'SESSION_STARTED' });
     });
-    expect(ok).toBe(false);
+    expect(ok).toBeNull();
     expect(result.current.error).toBe('A aula já foi iniciada.');
   });
 
   it('falha de rede usa a mensagem padrão', async () => {
     fetchMock.mockRejectedValue(new TypeError('network'));
     const { result } = renderHook(() => useLiveClassActions('a1'));
-    let ok = true;
+    let ok: number | null = 0;
     await act(async () => {
       ok = await result.current.send({ type: 'SESSION_STARTED' });
     });
-    expect(ok).toBe(false);
+    expect(ok).toBeNull();
     expect(result.current.error).toBe(LIVE_ACTION_ERROR);
     expect(result.current.pending).toBeNull();
   });
@@ -104,6 +104,17 @@ describe('useLiveClassActions', () => {
     await act(async () => {
       await result.current.send({ type: 'SESSION_STARTED' });
     });
+    expect(result.current.error).toBeNull();
+  });
+
+  it('clearError limpa a mensagem', async () => {
+    fetchMock.mockRejectedValue(new TypeError('network'));
+    const { result } = renderHook(() => useLiveClassActions('a1'));
+    await act(async () => {
+      await result.current.send({ type: 'SESSION_STARTED' });
+    });
+    expect(result.current.error).toBe(LIVE_ACTION_ERROR);
+    act(() => result.current.clearError());
     expect(result.current.error).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import * as React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ClassState } from '@/domains/classroom/class-state';
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   status: 'live' as 'live' | 'polling' | 'offline',
   lesson: null as unknown,
   type: 'CLASSROOM',
+  lastSeq: 0,
 }));
 
 vi.mock('@/components/agendas/use-agenda', () => ({
@@ -29,7 +30,7 @@ vi.mock('@/components/classroom/use-agenda-lesson', () => ({
   useAgendaLesson: () => ({ lesson: mocks.lesson, isLoading: false }),
 }));
 vi.mock('@/components/classroom/use-class-events', () => ({
-  useClassEvents: () => ({ events: [], status: mocks.status, lastSeq: 0, state: mocks.state }),
+  useClassEvents: () => ({ events: [], status: mocks.status, lastSeq: mocks.lastSeq, state: mocks.state }),
 }));
 
 import LiveClassPage from '../LiveClassPage';
@@ -48,12 +49,13 @@ const base: ClassState = {
 };
 
 let fetchMock: ReturnType<typeof vi.fn>;
-const ok = () => Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+const ok = () => Promise.resolve({ ok: true, json: async () => ({ success: true, events: [] }) });
 
 beforeEach(() => {
   mocks.state = base;
   mocks.status = 'live';
   mocks.type = 'CLASSROOM';
+  mocks.lastSeq = 0;
   mocks.lesson = { videoUrl: null, mediaType: 'NONE', timeScript: script };
   fetchMock = vi.fn(ok);
   vi.stubGlobal('fetch', fetchMock);
@@ -102,9 +104,72 @@ describe('LiveClassPage', () => {
     mocks.state = running(1);
     render(<LiveClassPage agendaId="a1" />);
     const current = screen.getByRole('button', { name: /INNER JOIN/ }) as HTMLButtonElement;
-    expect(current.disabled).toBe(true);
+    expect(current.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(current);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('com o painel travado, clicar em outro passo não grava e o foco permanece', async () => {
+    mocks.state = running(1);
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    render(<LiveClassPage agendaId="a1" />);
+    fireEvent.click(screen.getByRole('button', { name: /Subqueries/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const other = screen.getByRole('button', { name: /Revisão/ });
+    expect(other.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(other);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('após o 201, mantém os controles travados até lastSeq alcançar o seq devolvido', async () => {
+    mocks.state = running(1);
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({ ok: true, json: async () => ({ success: true, events: [{ seq: 7 }] }) })
+    );
+    const view = render(<LiveClassPage agendaId="a1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Encerrar aula' }) as HTMLButtonElement).disabled).toBe(true));
+    expect((screen.getByRole('button', { name: 'Próximo' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /Subqueries/ }).getAttribute('aria-disabled')).toBe('true');
+    mocks.state = running(2);
+    mocks.lastSeq = 7;
+    view.rerender(<LiveClassPage agendaId="a1" />);
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Encerrar aula' }) as HTMLButtonElement).disabled).toBe(false));
+    expect((screen.getByRole('button', { name: 'Anterior' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('libera os controles após 6 s mesmo sem o evento chegar', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.state = running(1);
+      fetchMock.mockImplementation(() =>
+        Promise.resolve({ ok: true, json: async () => ({ success: true, events: [{ seq: 7 }] }) })
+      );
+      render(<LiveClassPage agendaId="a1" />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+      });
+      expect((screen.getByRole('button', { name: 'Encerrar aula' }) as HTMLButtonElement).disabled).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6100);
+      });
+      expect((screen.getByRole('button', { name: 'Encerrar aula' }) as HTMLButtonElement).disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('o alerta some quando o estado da aula muda', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({ ok: false, json: async () => ({ success: false, error: 'A aula já foi iniciada.' }) })
+    );
+    const view = render(<LiveClassPage agendaId="a1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar aula' }));
+    await screen.findByRole('alert');
+    mocks.state = running(0);
+    view.rerender(<LiveClassPage agendaId="a1" />);
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
   it('último passo desabilita Próximo; primeiro desabilita Anterior', () => {

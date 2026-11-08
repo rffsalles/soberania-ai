@@ -112,7 +112,7 @@ The classroom is driven by an append-only `class_events` table (per-class `seq`,
 - `CLASS_EVENTS_NOTIFY_MODE=listen`: Postgres `LISTEN/NOTIFY`, one `pg.Client` per process. Needs a direct connection (no pooler).
 - `CLASS_EVENTS_STREAM_MAX_MS`: maximum duration of one stream connection. Default 8000 when `VERCEL` is set, 0 (unlimited) elsewhere. When it ends the browser reconnects with `Last-Event-ID`, so nothing is lost or repeated; on Vercel expect about 2 s of latency.
 
-To drive a class end to end in a browser (teacher panel and student page), run `npm run test:e2e:ui`. It needs the dev server (Playwright starts `npm run dev` or reuses port 3000), a `.env` pointing to the dev database, Chromium installed with `npx playwright install chromium`, and the demo seed (accounts and the agenda "Modelagem Conceitual e Álgebra Relacional (JOINs)"); the spec itself sets the roteiro and reopens the agenda. CI does not run this test.
+To drive a class end to end in a browser (teacher panel and student page), run `npm run test:e2e:ui`. It needs the dev server (Playwright starts `npm run dev` or reuses port 3000), a `.env` pointing to the dev database, Chromium installed with `npx playwright install chromium`, and the demo seed (accounts and the agenda "Modelagem Conceitual e Álgebra Relacional (JOINs)"); the spec itself sets the roteiro and reopens the agenda. With `PLAYWRIGHT_BASE_URL` set, the browser targets that server but Prisma still writes to the local `.env` database, so use it only when both point to the same environment. CI does not run this test.
 
 ## Evals
 

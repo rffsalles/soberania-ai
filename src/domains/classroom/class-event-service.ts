@@ -18,6 +18,7 @@ import {
   type ClassEventRow,
   type NewClassEvent,
 } from './class-event-repository';
+import { stepLabel } from './class-state';
 import {
   TEACHER_WRITABLE_TYPES,
   audiencesFor,
@@ -86,7 +87,7 @@ function stepEvent(
     type: 'STEP_CHANGED',
     stepIndex,
     payload: {
-      activity: item.activity.trim().slice(0, 200) || `Passo ${stepIndex + 1}`,
+      activity: item.activity.trim().slice(0, 200) || stepLabel(stepIndex),
       timeRange: item.timeRange.slice(0, 40),
       fromStepIndex,
     },
@@ -168,6 +169,22 @@ export async function appendTeacherEvent(
     }
   }
   return rows.map(toDTO);
+}
+
+/**
+ * Fecha a aula quando a agenda foi concluída/cancelada por fora do painel:
+ * grava SESSION_ENDED (SYSTEM) só se a aula está em andamento. Não conclui agenda nem gera atas.
+ */
+export async function closeClassIfRunning(
+  agendaId: string,
+  deps: ClassEventDeps = defaultDeps,
+): Promise<boolean> {
+  const rows = await deps.repo.appendEvents(agendaId, ({ phase }) =>
+    phase === 'RUNNING'
+      ? [{ type: 'SESSION_ENDED', stepIndex: null, payload: {}, audience: 'ALL', createdBy: 'SYSTEM' }]
+      : [],
+  );
+  return rows.length > 0;
 }
 
 function toDTO(row: ClassEventRow): ClassEventDTO {

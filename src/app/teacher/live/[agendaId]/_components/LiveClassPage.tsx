@@ -14,18 +14,46 @@ import { liveControls } from '@/domains/classroom/live-controls';
 import { ROUTES } from '@/lib/constants/routes';
 import { LessonScriptPanel } from './LessonScriptPanel';
 
+const AWAIT_EVENT_TIMEOUT_MS = 6000;
+
 const CONFIRM_END =
   'Encerrar a aula? A turma verá a aula como encerrada e as atas dos alunos serão geradas.';
 
 export default function LiveClassPage({ agendaId }: { agendaId: string }) {
   const { agenda, isLoading, error: agendaError, notFound } = useAgenda(agendaId);
   const { lesson, isLoading: lessonLoading } = useAgendaLesson(agendaId);
-  const { state, status } = useClassEvents(agendaId);
-  const { send, pending, error } = useLiveClassActions(agendaId);
+  const { state, status, lastSeq } = useClassEvents(agendaId);
+  const { send, pending, error, clearError } = useLiveClassActions(agendaId);
+  const [awaitedSeq, setAwaitedSeq] = React.useState<number | null>(null);
+
+  // Após o POST, mantém os controles travados até o evento chegar pelo stream/polling (ou 6 s).
+  const run = React.useCallback(
+    async (cmd: Parameters<typeof send>[0]) => {
+      const seq = await send(cmd);
+      if (seq !== null) setAwaitedSeq(seq);
+    },
+    [send]
+  );
+  const waiting = awaitedSeq !== null && lastSeq < awaitedSeq;
+
+  React.useEffect(() => {
+    if (awaitedSeq === null) return;
+    if (lastSeq >= awaitedSeq) {
+      setAwaitedSeq(null);
+      return;
+    }
+    const t = setTimeout(() => setAwaitedSeq(null), AWAIT_EVENT_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [awaitedSeq, lastSeq]);
+
+  // Um erro de ação deixa de valer quando o estado da aula muda.
+  React.useEffect(() => {
+    clearError();
+  }, [state.phase, state.currentStepIndex, clearError]);
 
   const script = lesson?.timeScript ?? [];
-  const controls = liveControls(state, script.length, pending !== null);
-  const busy = pending !== null;
+  const controls = liveControls(state, script.length, pending !== null || waiting);
+  const busy = pending !== null || waiting;
 
   if (isLoading || !agenda) {
     return (
@@ -64,7 +92,7 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
   }
 
   const endClass = () => {
-    if (window.confirm(CONFIRM_END)) void send({ type: 'SESSION_ENDED' });
+    if (window.confirm(CONFIRM_END)) void run({ type: 'SESSION_ENDED' });
   };
 
   return (
@@ -82,7 +110,7 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {state.phase === 'NOT_STARTED' ? (
-              <Button type="button" disabled={!controls.canStart} onClick={() => void send({ type: 'SESSION_STARTED' })}>
+              <Button type="button" disabled={!controls.canStart} onClick={() => void run({ type: 'SESSION_STARTED' })}>
                 {pending === 'SESSION_STARTED' ? 'Iniciando...' : 'Iniciar aula'}
               </Button>
             ) : (
@@ -92,7 +120,7 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
                   variant="outline"
                   disabled={controls.prevIndex === null}
                   onClick={() =>
-                    controls.prevIndex !== null && void send({ type: 'STEP_CHANGED', stepIndex: controls.prevIndex })
+                    controls.prevIndex !== null && void run({ type: 'STEP_CHANGED', stepIndex: controls.prevIndex })
                   }
                 >
                   Anterior
@@ -102,7 +130,7 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
                   variant="outline"
                   disabled={controls.nextIndex === null}
                   onClick={() =>
-                    controls.nextIndex !== null && void send({ type: 'STEP_CHANGED', stepIndex: controls.nextIndex })
+                    controls.nextIndex !== null && void run({ type: 'STEP_CHANGED', stepIndex: controls.nextIndex })
                   }
                 >
                   Próximo
@@ -138,7 +166,7 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
             <LessonScriptPanel
               script={script}
               controls={controls}
-              onGoTo={(i) => void send({ type: 'STEP_CHANGED', stepIndex: i })}
+              onGoTo={(i) => void run({ type: 'STEP_CHANGED', stepIndex: i })}
             />
           )}
         </section>

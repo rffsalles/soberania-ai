@@ -1,17 +1,19 @@
 import { expect, test, type Page } from '@playwright/test';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, type AgendaStatus } from '@prisma/client';
 import { DEMO_CREDENTIALS } from '../../src/lib/constants/demo-credentials';
 import { DEMO_LIVE_TIME_SCRIPT } from '../../prisma/seed-data/academic';
 
 const prisma = new PrismaClient();
 let agendaId: string;
 let steps: string[];
+let original: { status: AgendaStatus; startTime: Date; endTime: Date };
 
 test.beforeAll(async () => {
   const agenda = await prisma.agenda.findFirstOrThrow({
     where: { title: 'Modelagem Conceitual e Álgebra Relacional (JOINs)', type: 'CLASSROOM' },
   });
   agendaId = agenda.id;
+  original = { status: agenda.status, startTime: agenda.startTime, endTime: agenda.endTime };
   if (!agenda.lessonPlanId) {
     throw new Error('A agenda de demonstração não tem plano de aula; rode o seed de demonstração.');
   }
@@ -29,6 +31,10 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  // Devolve a agenda ao estado anterior (os eventos apagados e o roteiro continuam como o teste deixou).
+  if (agendaId && original) {
+    await prisma.agenda.update({ where: { id: agendaId }, data: original });
+  }
   await prisma.$disconnect();
 });
 

@@ -16,8 +16,9 @@ export function useLiveClassActions(agendaId: string) {
   const inFlight = useRef(false);
 
   const send = useCallback(
-    async (cmd: TeacherClassCommand): Promise<boolean> => {
-      if (inFlight.current) return false;
+    /** Devolve o maior seq dos eventos gravados (0 se nenhum) ou null em falha. */
+    async (cmd: TeacherClassCommand): Promise<number | null> => {
+      if (inFlight.current) return null;
       inFlight.current = true;
       setPending(cmd.type);
       setError(null);
@@ -30,12 +31,15 @@ export function useLiveClassActions(agendaId: string) {
         const body = await res.json().catch(() => null);
         if (!res.ok || !body?.success) {
           setError(typeof body?.error === 'string' ? body.error : LIVE_ACTION_ERROR);
-          return false;
+          return null;
         }
-        return true;
+        const events: unknown = body.events;
+        return Array.isArray(events)
+          ? events.reduce<number>((max, e) => (typeof e?.seq === 'number' ? Math.max(max, e.seq) : max), 0)
+          : 0;
       } catch {
         setError(LIVE_ACTION_ERROR);
-        return false;
+        return null;
       } finally {
         inFlight.current = false;
         setPending(null);
@@ -44,5 +48,7 @@ export function useLiveClassActions(agendaId: string) {
     [agendaId]
   );
 
-  return { send, pending, error };
+  const clearError = useCallback(() => setError(null), []);
+
+  return { send, pending, error, clearError };
 }
