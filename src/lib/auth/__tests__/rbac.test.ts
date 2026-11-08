@@ -90,6 +90,12 @@ describe('canAccessRoute', () => {
     expect(canAccessRoute('/admin', TEACHER)).toBe(false);
   });
 
+  it('painel ao vivo é só de staff', () => {
+    expect(canAccessRoute('/teacher/live/abc', TEACHER)).toBe(true);
+    expect(canAccessRoute('/teacher/live/abc', ADMIN)).toBe(true);
+    expect(canAccessRoute('/teacher/live/abc', STUDENT)).toBe(false);
+  });
+
   it('não confunde prefixos parecidos', () => {
     expect(canAccessRoute('/teachers-lounge', STUDENT)).toBe(true);
   });

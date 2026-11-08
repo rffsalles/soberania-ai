@@ -29,6 +29,7 @@ export const ROUTES = {
   TEACHER_SCHEDULES: '/teacher/schedules',
   TEACHER_ASSESSMENTS: '/teacher/assessments',
   TEACHER_MATERIALS: '/teacher/materials',
+  TEACHER_LIVE: '/teacher/live',
   ADMIN: '/admin',
   ADMIN_SUBJECTS: '/admin/subjects',
   ADMIN_CLASSES: '/admin/classes',
@@ -73,6 +74,11 @@ export const API_ROUTES = {
 /** Página de matrícula dos alunos de uma turma. */
 export function adminClassStudentsPath(classId: string): string {
   return `/admin/classes/${classId}/students`;
+}
+
+/** Painel ao vivo do professor para uma agenda. */
+export function teacherLivePath(agendaId: string): string {
+  return `${ROUTES.TEACHER_LIVE}/${agendaId}`;
 }
 
 /** Link da página de uma agenda, conforme o seu tipo. */
