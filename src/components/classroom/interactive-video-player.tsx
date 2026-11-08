@@ -19,7 +19,8 @@ interface InteractiveVideoPlayerProps {
   checkpoints: SocraticCheckpoint[];
   onTriggerCheckpoint?: (checkpoint: SocraticCheckpoint) => void;
   stepTimes?: number[];
-  onStepCross?: (videoSeconds: number) => void;
+  /** Resolve true quando o servidor gravou o passo; só então o passo conta como reportado. */
+  onStepCross?: (videoSeconds: number) => Promise<boolean>;
   className?: string;
 }
 
@@ -86,6 +87,14 @@ export function InteractiveVideoPlayer({
   stepTimesRef.current = stepTimes;
   onStepCrossRef.current = onStepCross;
   const lastStepIndex = React.useRef(-1);
+  const pendingStep = React.useRef<{ index: number; token: number } | null>(null);
+  const reportToken = React.useRef(0);
+
+  // Outro vídeo ou outro roteiro: nenhum passo reportado ainda; respostas em voo do anterior são ignoradas.
+  React.useEffect(() => {
+    lastStepIndex.current = -1;
+    pendingStep.current = null;
+  }, [videoUrl, stepTimes]);
 
   const sorted = React.useMemo(() => [...checkpoints].sort((a, b) => a.timeSeconds - b.timeSeconds), [checkpoints]);
 
@@ -104,9 +113,15 @@ export function InteractiveVideoPlayer({
       const reportStep = onStepCrossRef.current;
       if (reportStep && stepTimesRef.current) {
         const stepIndex = stepTimeIndex(stepTimesRef.current, now);
-        if (stepIndex >= 0 && stepIndex !== lastStepIndex.current) {
-          lastStepIndex.current = stepIndex;
-          reportStep(Math.floor(now));
+        if (stepIndex >= 0 && stepIndex !== lastStepIndex.current && stepIndex !== pendingStep.current?.index) {
+          const token = ++reportToken.current;
+          pendingStep.current = { index: stepIndex, token };
+          // Só avança depois do 2xx: um POST que falhou é tentado de novo no próximo timeupdate.
+          void reportStep(Math.floor(now)).then((ok) => {
+            if (pendingStep.current?.token !== token) return;
+            pendingStep.current = null;
+            if (ok) lastStepIndex.current = stepIndex;
+          });
         }
       }
       const passed = sorted.filter((cp) => cp.timeSeconds <= now);

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   videoUrl: null as string | null,
   mediaType: 'NONE' as string,
   playerProps: null as null | { stepTimes?: number[]; onStepCross?: unknown },
+  now: '2026-11-08T14:00:00.000Z',
 }));
 
 vi.mock('@/components/agendas/use-agenda', () => ({
@@ -49,7 +50,7 @@ vi.mock('@/components/classroom/use-class-events', () => ({
   useClassEvents: () => ({ events: mocks.events, status: 'live', lastSeq: 0, state: mocks.state }),
 }));
 vi.mock('@/components/classroom/use-session-clock', () => ({
-  useSessionClock: () => new Date('2026-11-08T14:00:00.000Z'),
+  useSessionClock: () => new Date(mocks.now),
 }));
 vi.mock('@/components/classroom/use-fill-viewport-height', () => ({ useFillViewportHeight: () => undefined }));
 vi.mock('@/components/classroom/interactive-video-player', () => ({
@@ -84,6 +85,7 @@ beforeEach(() => {
   mocks.videoUrl = null;
   mocks.mediaType = 'NONE';
   mocks.playerProps = null;
+  mocks.now = '2026-11-08T14:00:00.000Z';
 });
 afterEach(cleanup);
 
@@ -130,13 +132,24 @@ describe('ClassroomPage faixa Agora na aula', () => {
 });
 
 describe('ClassroomPage aula gravada', () => {
-  it('NOT_STARTED com vídeo e roteiro passa onStepCross e stepTimes', () => {
+  it('NOT_STARTED com vídeo e roteiro, depois do fim da janela, passa onStepCross e stepTimes', () => {
     mocks.videoUrl = 'https://youtu.be/abcdefghijk';
     mocks.mediaType = 'YOUTUBE';
+    mocks.now = '2026-11-08T15:00:00.001Z';
     render(<ClassroomPage sessionId="a1" />);
     expect(typeof mocks.playerProps?.onStepCross).toBe('function');
     expect(mocks.playerProps?.stepTimes).toEqual([0, 60, 120]);
   });
+  it.each(['2026-11-08T12:00:00.000Z', '2026-11-08T14:00:00.000Z', '2026-11-08T15:00:00.000Z'])(
+    'NOT_STARTED com vídeo antes do fim da janela (%s): onStepCross indefinido',
+    (now) => {
+      mocks.videoUrl = 'https://youtu.be/abcdefghijk';
+      mocks.mediaType = 'YOUTUBE';
+      mocks.now = now;
+      render(<ClassroomPage sessionId="a1" />);
+      expect(mocks.playerProps?.onStepCross).toBeUndefined();
+    },
+  );
   it('sem vídeo onStepCross é indefinido', () => {
     render(<ClassroomPage sessionId="a1" />);
     expect(mocks.playerProps?.onStepCross).toBeUndefined();
@@ -144,6 +157,7 @@ describe('ClassroomPage aula gravada', () => {
   it('fase RUNNING passa onStepCross indefinido', () => {
     mocks.videoUrl = 'https://youtu.be/abcdefghijk';
     mocks.mediaType = 'YOUTUBE';
+    mocks.now = '2026-11-08T16:00:00.000Z';
     mocks.state = { ...base, phase: 'RUNNING', currentStepIndex: 0, currentStepActivity: 'x' };
     render(<ClassroomPage sessionId="a1" />);
     expect(mocks.playerProps?.onStepCross).toBeUndefined();

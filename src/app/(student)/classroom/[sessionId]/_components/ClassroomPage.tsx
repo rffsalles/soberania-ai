@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { useVideoStepReporter } from '@/components/classroom/use-video-step-reporter';
 import { InteractiveVideoPlayer, type SocraticCheckpoint } from '@/components/classroom/interactive-video-player';
 import { SocraticChatPanel } from '@/components/classroom/socratic-chat-panel';
 import { DynamicFaqAccordion } from '@/components/classroom/dynamic-faq-accordion';
@@ -12,15 +11,15 @@ import { useAgenda } from '@/components/agendas/use-agenda';
 import { useFillViewportHeight } from '@/components/classroom/use-fill-viewport-height';
 import { useAgendaFaqs, useAgendaLesson } from '@/components/classroom/use-agenda-lesson';
 import { resolveMediaType } from '@/domains/teaching/media-type';
-import { LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
+import { INSTITUTION_TIMEZONE, LESSON_MEDIA_TYPE } from '@/lib/constants/teaching';
 import { Skeleton } from '@/components/ui/skeleton';
 import { deriveAgendaStatus } from '@/domains/agendas/agenda-validator';
-import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 import { useClassEvents } from '@/components/classroom/use-class-events';
 import { NowInClassStrip } from '@/components/classroom/now-in-class-strip';
 import { useTutorAnswers } from '@/components/classroom/use-tutor-answers';
 import { reduceStudentView } from '@/domains/classroom/class-state';
 import { useSessionClock } from '@/components/classroom/use-session-clock';
+import { useVideoStepReporter } from '@/components/classroom/use-video-step-reporter';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 
 const AGENDA_STATUS_LIVE = 'LIVE';
@@ -78,8 +77,11 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
   const lessonVideoUrl = lesson?.videoUrl ?? session?.videoUrl ?? null;
   const lessonMediaType = lesson?.mediaType ?? resolveMediaType(session?.videoUrl);
   const stepTimes = React.useMemo(() => (lesson?.timeScript ?? []).map((s) => s.timeSeconds), [lesson]);
+  // Aula gravada só na reprise: até o fim da janela a aula ainda pode acontecer ao vivo (o servidor dá 409 CLASS_NOT_OVER).
+  const afterClassWindow = session ? now.getTime() > new Date(session.endTime).getTime() : false;
   const reportStepEnabled =
     state.phase === 'NOT_STARTED' &&
+    afterClassWindow &&
     Boolean(lessonVideoUrl) &&
     lessonMediaType !== LESSON_MEDIA_TYPE.NONE &&
     stepTimes.length > 0;
