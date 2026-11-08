@@ -141,6 +141,15 @@ export function parseClassEvent(
   return { ok: true, payload: parsed.data };
 }
 
+export type AnswerResult = { wasCorrect: boolean | null; correctKey: string | null; rationale: string | null };
+export type PulseEntry = {
+  seq: number;
+  stepIndex: number;
+  kind: 'MULTIPLE_CHOICE' | 'OPEN';
+  answered: number;
+  correct: number | null;
+};
+
 /** Remove o gabarito (correctKey, rationale) da pergunta de múltipla escolha. */
 export function projectForStudent(e: ClassEventDTO): ClassEventDTO {
   if (e.type !== 'TUTOR_QUESTION') return e;
