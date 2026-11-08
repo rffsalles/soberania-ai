@@ -2,6 +2,7 @@ import { Prisma, type ClassEventActor, type ClassEventType } from '@prisma/clien
 import { db } from '@/lib/db';
 import { DomainError } from '@/lib/api/domain-error';
 import type { SessionPhase } from './class-state';
+import { parseClassEvent } from './class-event-schema';
 
 export const CLASS_EVENTS_PAGE = 200;
 
@@ -161,6 +162,16 @@ export async function appendTutorEvents(
   stepIndex: number,
   events: NewTutorEvent[],
 ): Promise<ClassEventRow[]> {
+  // Valida na escrita: um payload inválido seria descartado em toda leitura e deixaria o passo "parado".
+  events = events.map((e) => {
+    const parsed = parseClassEvent(e.type, e.payload, stepIndex);
+    if (!parsed.ok) {
+      throw new DomainError(400, `Evento da tutora inválido (${e.type}): ${parsed.error}`, {
+        code: 'INVALID_TUTOR_EVENT',
+      });
+    }
+    return { ...e, payload: parsed.payload as Prisma.InputJsonValue };
+  });
   const requested = events.map((e) => e.type);
   try {
     return await db.$transaction(async (tx) => {

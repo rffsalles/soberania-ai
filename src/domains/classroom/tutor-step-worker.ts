@@ -24,7 +24,8 @@ export type TutorStepContext = {
 };
 
 export type TutorWorkerDeps = {
-  loadContext(agendaId: string): Promise<TutorStepContext | null>;
+  /** null sem aula/roteiro; 'ENDED' quando a agenda foi cancelada ou concluída (mesmo sem SESSION_ENDED). */
+  loadContext(agendaId: string): Promise<TutorStepContext | 'ENDED' | null>;
   readEvents(agendaId: string): Promise<ClassEventDTO[]>;
   produce(input: StepContentInput): Promise<StepContent>;
   appendTutorEvents: typeof appendTutorEvents;
@@ -35,7 +36,9 @@ export type TutorRunResult = 'NO_STEP' | 'ENDED' | 'SILENT' | 'ALREADY_DONE' | '
 const defaultDeps: TutorWorkerDeps = {
   async loadContext(agendaId) {
     const agenda = await findAgendaById(agendaId);
-    if (!agenda?.lessonPlanId) return null;
+    if (!agenda) return null;
+    if (agenda.status === 'CANCELLED' || agenda.status === 'COMPLETED') return 'ENDED';
+    if (!agenda.lessonPlanId) return null;
     const [lesson, scope] = await Promise.all([
       findLessonPlayerData(agenda.lessonPlanId),
       findLessonTutorScope(agenda.lessonPlanId),
@@ -70,6 +73,7 @@ export async function runTutorForStep(
   deps: TutorWorkerDeps = defaultDeps,
 ): Promise<TutorRunResult> {
   const ctx = await deps.loadContext(agendaId);
+  if (ctx === 'ENDED') return 'ENDED';
   const item = ctx?.script[stepIndex];
   if (!ctx || !item) return 'NO_STEP';
 
@@ -86,13 +90,15 @@ export async function runTutorForStep(
   if (content.card || content.skipped) return 'ALREADY_DONE';
 
   if (plan.question?.from === 'TEACHER' && !content.question) {
-    await deps.appendTutorEvents(agendaId, stepIndex, [
+    const published = await deps.appendTutorEvents(agendaId, stepIndex, [
       {
         type: 'TUTOR_QUESTION',
         payload: { kind: 'OPEN', text: plan.question.text, origin: 'TEACHER' },
         audience: 'ALL',
       },
     ]);
+    // Append vazio = a aula terminou entre a leitura e a trava: não gasta chamadas ao modelo.
+    if (published.length === 0) return 'ENDED';
   }
 
   const result = await deps.produce({

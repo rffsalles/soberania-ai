@@ -107,8 +107,28 @@ describe('findEventsAfter', () => {
 });
 
 describe('appendTutorEvents', () => {
-  const card = { type: 'TUTOR_CARD', payload: {}, audience: 'ALL' } as const;
-  const skip = { type: 'TUTOR_SKIPPED', payload: {}, audience: 'TEACHER' } as const;
+  const concept = (title: string) => ({
+    title,
+    explanation: 'Explicação',
+    citation: { chunkId: 'k1', label: 'Livro, p. 1', page: 1 },
+  });
+  const card = {
+    type: 'TUTOR_CARD',
+    payload: { concepts: [concept('A'), concept('B')], objectiveLink: 'Liga', source: 'GENERATED' },
+    audience: 'ALL',
+  } as const;
+  const skip = { type: 'TUTOR_SKIPPED', payload: { reason: 'NO_MATERIAL', kind: 'CARD' }, audience: 'TEACHER' } as const;
+
+  it('payload inválido: lança DomainError 400 sem abrir transação', async () => {
+    running();
+    const bad = { type: 'TUTOR_CARD', payload: { concepts: [] }, audience: 'ALL' } as const;
+    await expect(appendTutorEvents('a1', 0, [skip, bad])).rejects.toMatchObject({
+      status: 400,
+      details: { code: 'INVALID_TUTOR_EVENT' },
+    });
+    expect($transaction).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
   const running = () =>
     findFirst.mockImplementation(async (a: { where: { type: unknown } }) =>
       a.where.type === 'STEP_CHANGED' ? { stepIndex: 0 } : { type: 'SESSION_STARTED' },

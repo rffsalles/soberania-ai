@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+const findLessonPlayerData = vi.fn();
+vi.mock('@/domains/teaching/services/lesson-plan-repository', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  findLessonPlayerData: (...a: unknown[]) => findLessonPlayerData(...a),
+  findLessonTutorScope: vi.fn(async () => null),
+}));
 vi.mock('@/domains/agendas/services/agenda-repository', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   findAgendaById: vi.fn(async () => {
@@ -6,6 +12,7 @@ vi.mock('@/domains/agendas/services/agenda-repository', async (importOriginal) =
   }),
 }));
 
+import { findAgendaById } from '@/domains/agendas/services/agenda-repository';
 import type { ClassEventDTO } from '../class-event-schema';
 import type { NewTutorEvent } from '../class-event-repository';
 import type { StepContent } from '../tutor-step-content';
@@ -47,7 +54,11 @@ const done = (over: Partial<Extract<StepContent, { status: 'DONE' }>> = {}): Ste
   ...over,
 });
 
-function makeDeps(opts: { events?: ClassEventDTO[]; content?: StepContent; context?: TutorStepContext | null }) {
+function makeDeps(opts: {
+  events?: ClassEventDTO[];
+  content?: StepContent;
+  context?: TutorStepContext | 'ENDED' | null;
+}) {
   const events = opts.events ?? running();
   const calls: NewTutorEvent[][] = [];
   const deps = {
@@ -61,7 +72,7 @@ function makeDeps(opts: { events?: ClassEventDTO[]; content?: StepContent; conte
           events.push(ev(b.type, step, b.payload));
         }
       }
-      return [];
+      return events.filter((e) => e.stepIndex === step && batch.some((b) => b.type === e.type));
     }),
   } as unknown as TutorWorkerDeps & { produce: ReturnType<typeof vi.fn>; appendTutorEvents: ReturnType<typeof vi.fn> };
   return { deps, calls };
@@ -77,6 +88,35 @@ describe('runTutorForStep', () => {
     const { deps } = makeDeps({ events: [...running(), ev('SESSION_ENDED', null)] });
     expect(await runTutorForStep('ag', 0, deps)).toBe('ENDED');
     expect(deps.produce).not.toHaveBeenCalled();
+  });
+
+  it('ENDED quando o contexto diz que a agenda foi cancelada ou concluída', async () => {
+    const { deps } = makeDeps({ context: 'ENDED' });
+    expect(await runTutorForStep('ag', 0, deps)).toBe('ENDED');
+    expect(deps.produce).not.toHaveBeenCalled();
+  });
+
+  it('loadContext padrão: agenda CANCELLED ou COMPLETED vira ENDED sem ler o plano', async () => {
+    for (const status of ['CANCELLED', 'COMPLETED'] as const) {
+      vi.mocked(findAgendaById).mockResolvedValueOnce({
+        id: 'ag',
+        status,
+        lessonPlanId: 'lp',
+        startTime: new Date(),
+        endTime: new Date(),
+      } as never);
+      expect(await runTutorForStep('ag', 0)).toBe('ENDED');
+    }
+    expect(findLessonPlayerData).not.toHaveBeenCalled();
+  });
+
+  it('pergunta do professor com append vazio (aula encerrada): ENDED sem produce', async () => {
+    const script = [item({ socraticQuestion: 'Por quê?' }), item({ timeSeconds: 600 })];
+    const { deps } = makeDeps({ context: ctx(script) });
+    deps.appendTutorEvents.mockResolvedValueOnce([]);
+    expect(await runTutorForStep('ag', 0, deps)).toBe('ENDED');
+    expect(deps.produce).not.toHaveBeenCalled();
+    expect(deps.appendTutorEvents).toHaveBeenCalledTimes(1);
   });
 
   it('SILENT quando mudo', async () => {
@@ -105,7 +145,7 @@ describe('runTutorForStep', () => {
     });
     deps.appendTutorEvents.mockImplementationOnce(async () => {
       order.push('teacher');
-      return [];
+      return [ev('TUTOR_QUESTION', 0)];
     });
     expect(await runTutorForStep('ag', 0, deps)).toBe('PUBLISHED');
     expect(order).toEqual(['teacher', 'produce']);

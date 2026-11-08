@@ -53,13 +53,22 @@ describe('tutor-step-draft-repository', () => {
     expect(values.some((v: unknown) => typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v))).toBe(true);
   });
 
-  it('claimDraft: true só com 1 linha afetada', async () => {
-    expect(await claimDraft('d1')).toBe(true);
-    executeRaw.mockResolvedValueOnce(0);
-    expect(await claimDraft('d1')).toBe(false);
-    const [sql, values] = executeRaw.mock.calls[0];
+  it('ensureDraft devolve claimActive calculado no SQL', async () => {
+    await ensureDraft('lp1', 0, 'h');
+    const [sql, values] = queryRaw.mock.calls[0];
+    expect(sql).toContain('AS "claimActive"');
+    expect(values).toContain(TUTOR_CLAIM_TTL_SECONDS);
+  });
+
+  it('claimDraft: devolve o claimedAt reservado ou null', async () => {
+    queryRaw.mockResolvedValueOnce([{ claimedAt: '2026-11-08 10:00:00.123' }]);
+    expect(await claimDraft('d1')).toBe('2026-11-08 10:00:00.123');
+    queryRaw.mockResolvedValueOnce([]);
+    expect(await claimDraft('d1')).toBeNull();
+    const [sql, values] = queryRaw.mock.calls[0];
     expect(sql).toContain('calls < ');
     expect(sql).toContain('"claimedAt" IS NULL');
+    expect(sql).toContain('RETURNING "claimedAt"::text');
     expect(values).toEqual(expect.arrayContaining(['d1']));
   });
 
@@ -75,8 +84,11 @@ describe('tutor-step-draft-repository', () => {
   it('saveDraftContent, releaseDraft e listDrafts', async () => {
     await saveDraftContent('d1', { card: { x: 1 } });
     expect(update).toHaveBeenCalledWith({ where: { id: 'd1' }, data: { card: { x: 1 } } });
-    await releaseDraft('d1');
-    expect(executeRaw.mock.calls[0][0]).toContain('"claimedAt" = NULL');
+    await releaseDraft('d1', '2026-11-08 10:00:00.123');
+    const [releaseSql, releaseValues] = executeRaw.mock.calls[0];
+    expect(releaseSql).toContain('"claimedAt" = NULL');
+    expect(releaseSql).toContain('AND "claimedAt" = ?::timestamp');
+    expect(releaseValues).toEqual(['d1', '2026-11-08 10:00:00.123']);
     findMany.mockResolvedValue([row]);
     expect(await listDrafts('lp1')).toEqual([row]);
     expect(findMany.mock.calls[0][0].where).toEqual({ lessonPlanId: 'lp1' });

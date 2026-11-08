@@ -14,11 +14,21 @@ export type TutorDraftRow = {
   calls: number;
 };
 
+/** Rascunho devolvido por `ensureDraft`, com a reserva viva calculada no SQL (`now()`). */
+export type EnsuredDraftRow = TutorDraftRow & { claimActive: boolean };
+
+/** Prova de posse da reserva: o `claimedAt` gravado, em texto, para comparar sem perder precisão nem fuso. */
+export type DraftClaim = string;
+
 const DRAFT_SELECT = { id: true, stepIndex: true, stepHash: true, card: true, question: true, calls: true } as const;
 
 /** Cria o rascunho do passo; hash diferente zera conteúdo, chamadas e reserva. Uma única instrução. */
-export async function ensureDraft(lessonPlanId: string, stepIndex: number, stepHash: string): Promise<TutorDraftRow> {
-  const rows = await db.$queryRaw<TutorDraftRow[]>`
+export async function ensureDraft(
+  lessonPlanId: string,
+  stepIndex: number,
+  stepHash: string,
+): Promise<EnsuredDraftRow> {
+  const rows = await db.$queryRaw<EnsuredDraftRow[]>`
     INSERT INTO tutor_step_drafts (id, "lessonPlanId", "stepIndex", "stepHash", calls, "updatedAt")
     VALUES (${randomUUID()}, ${lessonPlanId}, ${stepIndex}, ${stepHash}, 0, now())
     ON CONFLICT ("lessonPlanId", "stepIndex") DO UPDATE SET
@@ -28,17 +38,22 @@ export async function ensureDraft(lessonPlanId: string, stepIndex: number, stepH
       "claimedAt" = CASE WHEN tutor_step_drafts."stepHash" <> EXCLUDED."stepHash" THEN NULL ELSE tutor_step_drafts."claimedAt" END,
       "stepHash" = EXCLUDED."stepHash",
       "updatedAt" = CASE WHEN tutor_step_drafts."stepHash" <> EXCLUDED."stepHash" THEN now() ELSE tutor_step_drafts."updatedAt" END
-    RETURNING id, "stepIndex", "stepHash", card, question, calls`;
+    RETURNING id, "stepIndex", "stepHash", card, question, calls,
+      ("claimedAt" IS NOT NULL AND "claimedAt" >= now() - make_interval(secs => ${TUTOR_CLAIM_TTL_SECONDS})) AS "claimActive"`;
   return rows[0];
 }
 
-/** Reserva atômica: só com chamadas sobrando e reserva livre ou vencida. */
-export async function claimDraft(id: string): Promise<boolean> {
-  const n = await db.$executeRaw`
+/**
+ * Reserva atômica: só com chamadas sobrando e reserva livre ou vencida.
+ * Devolve a prova de posse (o `claimedAt` gravado) ou null quando não reservou.
+ */
+export async function claimDraft(id: string): Promise<DraftClaim | null> {
+  const rows = await db.$queryRaw<{ claimedAt: string }[]>`
     UPDATE tutor_step_drafts SET "claimedAt" = now(), "updatedAt" = now()
     WHERE id = ${id} AND calls < ${TUTOR_STEP_MAX_CALLS}
-      AND ("claimedAt" IS NULL OR "claimedAt" < now() - make_interval(secs => ${TUTOR_CLAIM_TTL_SECONDS}))`;
-  return n === 1;
+      AND ("claimedAt" IS NULL OR "claimedAt" < now() - make_interval(secs => ${TUTOR_CLAIM_TTL_SECONDS}))
+    RETURNING "claimedAt"::text AS "claimedAt"`;
+  return rows[0]?.claimedAt ?? null;
 }
 
 /** Gasta uma das chamadas ao modelo do passo; false quando o teto foi atingido. */
@@ -56,8 +71,11 @@ export async function saveDraftContent(
   await db.tutorStepDraft.update({ where: { id }, data });
 }
 
-export async function releaseDraft(id: string): Promise<void> {
-  await db.$executeRaw`UPDATE tutor_step_drafts SET "claimedAt" = NULL, "updatedAt" = now() WHERE id = ${id}`;
+/** Libera só a própria reserva: se ela venceu e outro worker reservou, não mexe. */
+export async function releaseDraft(id: string, claim: DraftClaim): Promise<void> {
+  await db.$executeRaw`
+    UPDATE tutor_step_drafts SET "claimedAt" = NULL, "updatedAt" = now()
+    WHERE id = ${id} AND "claimedAt" = ${claim}::timestamp`;
 }
 
 export async function listDrafts(lessonPlanId: string): Promise<TutorDraftRow[]> {

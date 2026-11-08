@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DidacticChunk } from '@/domains/rag/types';
 import type { InferenceMeta } from '@/domains/telemetry/services/logged-stream-chat';
-import { produceStepContent, type StepContentDeps, type StepContentInput } from '../tutor-step-content';
+import { produceStepContent, type StepContent, type StepContentDeps, type StepContentInput } from '../tutor-step-content';
 import { stepHash } from '../tutor-step-hash';
 
 const item = { timeSeconds: 0, timeRange: '0-10', activity: 'Ato', description: 'Descrição do passo' };
@@ -56,7 +56,7 @@ type Script = Array<
 >;
 
 function makeDeps(opts: {
-  draft?: Partial<{ card: unknown; question: unknown; calls: number; stepHash: string }>;
+  draft?: Partial<{ card: unknown; question: unknown; calls: number; stepHash: string; claimActive: boolean }>;
   claim?: boolean;
   chunks?: DidacticChunk[];
   script?: Script;
@@ -73,8 +73,9 @@ function makeDeps(opts: {
       card: opts.draft?.card ?? null,
       question: opts.draft?.question ?? null,
       calls: state.calls,
+      claimActive: opts.draft?.claimActive ?? false,
     })),
-    claimDraft: vi.fn(async () => opts.claim ?? true),
+    claimDraft: vi.fn(async () => ((opts.claim ?? true) ? 'T1' : null)),
     spendCall: vi.fn(async () => {
       if (state.calls >= 2) return false;
       state.calls++;
@@ -146,7 +147,7 @@ describe('produceStepContent', () => {
     expect(r).toEqual({ status: 'DONE', noMaterial: true, card: null, question: null, failure: null });
     expect(m.drafts.spendCall).not.toHaveBeenCalled();
     expect(m.streamChat).not.toHaveBeenCalled();
-    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1');
+    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1', 'T1');
   });
 
   it('cartão e pergunta ok: 2 spendCall, metas e sem falha', async () => {
@@ -163,7 +164,7 @@ describe('produceStepContent', () => {
       { agendaId: 'ag1', purpose: 'TUTOR_QUESTION' },
     ]);
     expect(m.drafts.saveDraftContent).toHaveBeenCalledTimes(2);
-    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1');
+    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1', 'T1');
   });
 
   it('cartão inválido e depois ok: pergunta não tentada, BUDGET/QUESTION', async () => {
@@ -205,12 +206,49 @@ describe('produceStepContent', () => {
     const m = makeDeps({ script: [{ throws: true }, { throws: true }] });
     const r = await produceStepContent({ ...input, wantQuestion: false }, m.deps);
     expect(r).toMatchObject({ failure: { reason: 'PROVIDER_ERROR', kind: 'CARD' } });
-    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1');
+    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1', 'T1');
   });
 
-  it('exceção na busca propaga e ainda libera a reserva', async () => {
+  it('exceção na busca propaga e mantém a reserva (TTL vira backoff)', async () => {
     const m = makeDeps({ searchThrows: true });
     await expect(produceStepContent(input, m.deps)).rejects.toThrow('boom');
-    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1');
+    expect(m.drafts.claimDraft).toHaveBeenCalled();
+    expect(m.drafts.releaseDraft).not.toHaveBeenCalled();
+  });
+
+  it('exceção ao carregar o escopo também mantém a reserva', async () => {
+    const m = makeDeps();
+    (m.deps.loadScope as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('escopo'));
+    await expect(produceStepContent(input, m.deps)).rejects.toThrow('escopo');
+    expect(m.drafts.releaseDraft).not.toHaveBeenCalled();
+  });
+
+  it('calls=2 com reserva viva: BUSY, sem BUDGET nem reserva', async () => {
+    const m = makeDeps({ draft: { calls: 2, claimActive: true } });
+    expect(await produceStepContent(input, m.deps)).toEqual({ status: 'BUSY' });
+    expect(m.drafts.claimDraft).not.toHaveBeenCalled();
+    expect(m.search).not.toHaveBeenCalled();
+    expect(m.drafts.releaseDraft).not.toHaveBeenCalled();
+  });
+
+  it('calls=2 com reserva vencida ou ausente: BUDGET', async () => {
+    const m = makeDeps({ draft: { calls: 2, claimActive: false } });
+    expect(await produceStepContent(input, m.deps)).toMatchObject({
+      status: 'DONE',
+      failure: { reason: 'BUDGET', kind: 'BOTH' },
+    });
+  });
+
+  it('reserva viva com rascunho completo ainda promove o rascunho', async () => {
+    const first = makeDeps({ script: [{ text: cardJson }, { text: questionJson }] });
+    const g = (await produceStepContent(input, first.deps)) as Extract<StepContent, { status: 'DONE' }>;
+    const m = makeDeps({ draft: { card: g.card!.payload, question: g.question!.payload, claimActive: true } });
+    expect(await produceStepContent(input, m.deps)).toMatchObject({ status: 'DONE', failure: null });
+  });
+
+  it('reserva acontece antes da busca', async () => {
+    const m = makeDeps({ script: [{ text: cardJson }, { text: questionJson }] });
+    await produceStepContent(input, m.deps);
+    expect(m.drafts.claimDraft.mock.invocationCallOrder[0]).toBeLessThan(m.search.mock.invocationCallOrder[0]);
   });
 });

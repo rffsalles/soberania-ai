@@ -147,4 +147,12 @@ describe('GET /events: disparo sob demanda', () => {
     await get();
     expect(mocks.after).not.toHaveBeenCalled();
   });
+
+  it('aula encerrada (closed) nem checa passo parado', async () => {
+    mocks.listEventsAfter.mockResolvedValue({ events: [], lastSeq: 0, closed: true });
+    mocks.stalledTutorStepFor.mockResolvedValue(2);
+    await get();
+    expect(mocks.stalledTutorStepFor).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
 });

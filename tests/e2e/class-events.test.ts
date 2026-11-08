@@ -147,7 +147,12 @@ describe.skipIf(!TEST_DB_URL)('class-event-repository (banco)', () => {
   it('appends concorrentes publicam um cartão e um skip por passo', async () => {
     const { appendTutorEvents } = await import('@/domains/classroom/class-event-repository');
     const id = await freshAgenda();
-    const cardPayload = { title: 'Cartão', body: 'Texto' };
+    const concept = (title: string) => ({
+      title,
+      explanation: 'Texto',
+      citation: { chunkId: 'k1', label: 'Livro, p. 1', page: 1 },
+    });
+    const cardPayload = { concepts: [concept('A'), concept('B')], objectiveLink: 'Liga', source: 'GENERATED' };
     const card = { type: 'TUTOR_CARD', payload: cardPayload, audience: 'ALL' } as const;
     const skip = { type: 'TUTOR_SKIPPED', payload: { reason: 'NO_MATERIAL', kind: 'CARD' }, audience: 'TEACHER' } as const;
     await Promise.all([

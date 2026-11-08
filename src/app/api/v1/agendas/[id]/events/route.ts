@@ -40,7 +40,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const raw = Number.parseInt(new URL(req.url).searchParams.get('after') ?? '', 10);
     const after = Number.isFinite(raw) && raw > 0 ? raw : 0;
     const { events, lastSeq, closed } = await listEventsAfter(user, id, after);
-    const stalled = await stalledTutorStepFor(user, id, Date.now());
+    // Aula encerrada (SESSION_ENDED ou agenda cancelada/concluída): nada de tutora.
+    const stalled = closed ? null : await stalledTutorStepFor(user, id, Date.now());
     if (stalled !== null) runAfter(() => runTutorForStepSafely(id, stalled));
     return NextResponse.json({ success: true, events, lastSeq, closed });
   } catch (error) {

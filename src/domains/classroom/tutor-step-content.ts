@@ -119,101 +119,107 @@ export async function produceStepContent(
   const wantedMissing = () => missingKind(!card, wantQuestion && !question);
   const initialMissing = wantedMissing();
   if (!initialMissing) return { status: 'DONE', noMaterial: false, card, question, failure: null };
+  // Reserva viva vem antes do teto: o worker dono ainda pode publicar o que gerou (BUDGET só depois que vence).
+  if (draft.claimActive) return { status: 'BUSY' };
   if (draft.calls >= 2) {
     return { status: 'DONE', noMaterial: false, card, question, failure: { reason: 'BUDGET', kind: initialMissing } };
   }
-  if (!(await drafts.claimDraft(draft.id))) return { status: 'BUSY' };
+  const claim = await drafts.claimDraft(draft.id);
+  if (!claim) return { status: 'BUSY' };
 
-  try {
-    const scope = await deps.loadScope(lessonPlanId);
-    const found = await deps.search({
-      query: item.description.trim() || item.activity,
-      allowedChapterIds: scope?.allowedChapterIds,
-      allowedMaterialIds: scope?.allowedMaterialIds,
-      topK: TUTOR_TOP_K,
-    });
-    const chunks: DidacticChunk[] = found.chunks.filter(
-      (c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY,
-    );
-    if (chunks.length === 0) {
-      return { status: 'DONE', noMaterial: true, card: null, question: null, failure: null };
-    }
+  // Libera só nos caminhos normais. Numa exceção (busca, escopo, rótulos, gravação) a reserva fica
+  // e o TTL de 60 s serve de backoff: no máximo uma tentativa por minuto por passo.
+  const finish = async (content: StepContent): Promise<StepContent> => {
+    await drafts.releaseDraft(draft.id, claim);
+    return content;
+  };
 
-    const cardResults: CallResult[] = [];
-    if (!card) {
-      const labels = await deps.chapterLabels([
-        ...new Set(chunks.map((c) => c.chapterId).filter((id): id is string => !!id)),
-      ]);
-      const sources: CardSource[] = chunks.map((c) => ({ ...c, label: chunkLabel(c, labels) }));
-      const messages = buildTutorCardMessages({
-        activity: item.activity,
-        description: item.description,
-        dailyObjective,
-        sources,
-      });
-      while (!card && (await drafts.spendCall(draft.id))) {
-        let result: CallResult;
-        try {
-          const { text, fallback, fallbackReason } = await collectStream(
-            deps.streamChat({ agendaId, purpose: 'TUTOR_CARD' }),
-            messages,
-            { temperature: TUTOR_CARD_TEMPERATURE, maxTokens: TUTOR_CARD_MAX_TOKENS },
-          );
-          if (fallbackReason === 'rate_limit') result = 'rate_limit';
-          else if (fallback) result = 'provider_error';
-          else {
-            const parsed = parseTutorCard(text, sources);
-            if (parsed) {
-              const payload: TutorCardPayload = { ...parsed, source: 'GENERATED' };
-              await drafts.saveDraftContent(draft.id, { card: payload });
-              card = { payload, fromDraft: false };
-              result = 'ok';
-            } else result = 'invalid';
-          }
-        } catch {
-          result = 'provider_error';
-        }
-        cardResults.push(result);
-      }
-    }
-
-    const questionResults: CallResult[] = [];
-    if (wantQuestion && !question && (await drafts.spendCall(draft.id))) {
-      const generated = await generateQuestionsFromChunks(
-        chunks,
-        1,
-        (c) =>
-          buildLessonQuestionMessages({
-            activity: item.activity,
-            description: item.description,
-            dailyObjective,
-            chunks: c,
-          }),
-        { streamChat: deps.streamChat({ agendaId, purpose: 'TUTOR_QUESTION' }) },
-      );
-      if (generated.ok) {
-        const payload: MultipleChoicePayload = {
-          kind: 'MULTIPLE_CHOICE',
-          question: { ...generated.questions[0], id: `step-${stepIndex}` },
-          origin: 'TUTOR',
-          source: 'GENERATED',
-        };
-        await drafts.saveDraftContent(draft.id, { question: payload });
-        question = { payload, fromDraft: false };
-        questionResults.push('ok');
-      } else questionResults.push(generated.reason);
-    }
-
-    const kind = wantedMissing();
-    let failure: Failure | null = null;
-    if (kind) {
-      failure = {
-        reason: failureReason(!card ? cardResults : questionResults),
-        kind,
-      };
-    }
-    return { status: 'DONE', noMaterial: false, card, question, failure };
-  } finally {
-    await drafts.releaseDraft(draft.id);
+  const scope = await deps.loadScope(lessonPlanId);
+  const found = await deps.search({
+    query: item.description.trim() || item.activity,
+    allowedChapterIds: scope?.allowedChapterIds,
+    allowedMaterialIds: scope?.allowedMaterialIds,
+    topK: TUTOR_TOP_K,
+  });
+  const chunks: DidacticChunk[] = found.chunks.filter(
+    (c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY,
+  );
+  if (chunks.length === 0) {
+    return finish({ status: 'DONE', noMaterial: true, card: null, question: null, failure: null });
   }
+
+  const cardResults: CallResult[] = [];
+  if (!card) {
+    const labels = await deps.chapterLabels([
+      ...new Set(chunks.map((c) => c.chapterId).filter((id): id is string => !!id)),
+    ]);
+    const sources: CardSource[] = chunks.map((c) => ({ ...c, label: chunkLabel(c, labels) }));
+    const messages = buildTutorCardMessages({
+      activity: item.activity,
+      description: item.description,
+      dailyObjective,
+      sources,
+    });
+    while (!card && (await drafts.spendCall(draft.id))) {
+      let result: CallResult;
+      try {
+        const { text, fallback, fallbackReason } = await collectStream(
+          deps.streamChat({ agendaId, purpose: 'TUTOR_CARD' }),
+          messages,
+          { temperature: TUTOR_CARD_TEMPERATURE, maxTokens: TUTOR_CARD_MAX_TOKENS },
+        );
+        if (fallbackReason === 'rate_limit') result = 'rate_limit';
+        else if (fallback) result = 'provider_error';
+        else {
+          const parsed = parseTutorCard(text, sources);
+          if (parsed) {
+            const payload: TutorCardPayload = { ...parsed, source: 'GENERATED' };
+            await drafts.saveDraftContent(draft.id, { card: payload });
+            card = { payload, fromDraft: false };
+            result = 'ok';
+          } else result = 'invalid';
+        }
+      } catch {
+        result = 'provider_error';
+      }
+      cardResults.push(result);
+    }
+  }
+
+  const questionResults: CallResult[] = [];
+  if (wantQuestion && !question && (await drafts.spendCall(draft.id))) {
+    const generated = await generateQuestionsFromChunks(
+      chunks,
+      1,
+      (c) =>
+        buildLessonQuestionMessages({
+          activity: item.activity,
+          description: item.description,
+          dailyObjective,
+          chunks: c,
+        }),
+      { streamChat: deps.streamChat({ agendaId, purpose: 'TUTOR_QUESTION' }) },
+    );
+    if (generated.ok) {
+      const payload: MultipleChoicePayload = {
+        kind: 'MULTIPLE_CHOICE',
+        question: { ...generated.questions[0], id: `step-${stepIndex}` },
+        origin: 'TUTOR',
+        source: 'GENERATED',
+      };
+      await drafts.saveDraftContent(draft.id, { question: payload });
+      question = { payload, fromDraft: false };
+      questionResults.push('ok');
+    } else questionResults.push(generated.reason);
+  }
+
+  const kind = wantedMissing();
+  let failure: Failure | null = null;
+  if (kind) {
+    failure = {
+      reason: failureReason(!card ? cardResults : questionResults),
+      kind,
+    };
+  }
+  return finish({ status: 'DONE', noMaterial: false, card, question, failure });
 }

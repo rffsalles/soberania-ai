@@ -55,13 +55,23 @@ describe.skipIf(!TEST_DB_URL)('tutor_step_drafts (banco)', () => {
   it('reserva: segunda tentativa falha; expira em 60 s; teto de 2 chamadas bloqueia', async () => {
     const { ensureDraft, claimDraft, spendCall, releaseDraft } = repo;
     const d = await ensureDraft(planId, 0, 'h1');
-    expect(await claimDraft(d.id)).toBe(true);
-    expect(await claimDraft(d.id)).toBe(false);
+    expect(d.claimActive).toBe(false);
+    const first = await claimDraft(d.id);
+    expect(first).not.toBeNull();
+    expect(await claimDraft(d.id)).toBeNull();
+    expect((await ensureDraft(planId, 0, 'h1')).claimActive).toBe(true);
     await db.$executeRaw`UPDATE tutor_step_drafts SET "claimedAt" = now() - interval '61 seconds' WHERE id = ${d.id}`;
-    expect(await claimDraft(d.id)).toBe(true);
+    expect((await ensureDraft(planId, 0, 'h1')).claimActive).toBe(false);
+    const second = await claimDraft(d.id);
+    expect(second).not.toBeNull();
+    // Dono antigo (reserva vencida) não libera a reserva do novo dono.
+    const staleClaim = await db.$queryRaw<{ t: string }[]>`SELECT (now() - interval '61 seconds')::timestamp(3)::text AS t`;
+    await releaseDraft(d.id, staleClaim[0].t);
+    expect((await ensureDraft(planId, 0, 'h1')).claimActive).toBe(true);
     expect([await spendCall(d.id), await spendCall(d.id), await spendCall(d.id)]).toEqual([true, true, false]);
-    await releaseDraft(d.id);
-    expect(await claimDraft(d.id)).toBe(false); // calls = 2
+    await releaseDraft(d.id, second!);
+    expect((await ensureDraft(planId, 0, 'h1')).claimActive).toBe(false);
+    expect(await claimDraft(d.id)).toBeNull(); // calls = 2
   });
 
   it('hash novo zera calls e conteúdo; hash igual preserva', async () => {
