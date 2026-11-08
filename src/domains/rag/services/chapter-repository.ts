@@ -1,6 +1,7 @@
 import type { ChapterSource, Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { numberChapters, type ChapterLinks, type ChapterRow, type ChunkAssignment } from '@/domains/rag/chapters';
+import { formatChapterLabel } from '@/domains/rag/chapter-label';
 
 export type ChapterDTO = {
   id: string;
@@ -170,6 +171,38 @@ export async function chapterNumbersFor(chapterIds: string[]): Promise<Map<strin
   }
   for (const group of byMaterial.values()) {
     for (const c of numberChapters(group)) result.set(c.id, c.number);
+  }
+  return result;
+}
+
+/** id → rótulo completo ("Cap. 2.3: Título — Livro (Autor), p. 10 a 20") dos capítulos informados. */
+export async function findChapterLabels(chapterIds: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (chapterIds.length === 0) return result;
+  const [rows, numbers] = await Promise.all([
+    db.materialChapter.findMany({
+      where: { id: { in: chapterIds } },
+      select: {
+        id: true,
+        title: true,
+        startPage: true,
+        endPage: true,
+        material: { select: { title: true, author: true } },
+      },
+    }),
+    chapterNumbersFor(chapterIds),
+  ]);
+  for (const c of rows) {
+    result.set(
+      c.id,
+      formatChapterLabel({
+        number: numbers.get(c.id) ?? '',
+        title: c.title,
+        book: c.material,
+        startPage: c.startPage,
+        endPage: c.endPage,
+      }),
+    );
   }
   return result;
 }
