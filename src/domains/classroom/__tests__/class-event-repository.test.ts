@@ -7,6 +7,7 @@ const queryRaw = vi.fn();
 const create = vi.fn();
 const findFirst = vi.fn();
 const findMany = vi.fn();
+const txFindMany = vi.fn();
 const tx = {
   $queryRaw: (strings: TemplateStringsArray) => {
     calls.push(strings.join('?').includes('FOR UPDATE') ? 'lock' : 'max');
@@ -17,6 +18,7 @@ const tx = {
       calls.push('read');
       return findFirst(a);
     },
+    findMany: (a: unknown) => txFindMany(a),
     create: (a: { data: { seq: number } }) => {
       calls.push(`insert:${a.data.seq}`);
       return create(a);
@@ -25,10 +27,10 @@ const tx = {
 };
 const $transaction = vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx));
 vi.mock('@/lib/db', () => ({
-  db: { $transaction: (fn: never) => $transaction(fn), classEvent: { findMany: (a: never) => findMany(a) } },
+  db: { $transaction: (fn: never) => $transaction(fn), classEvent: { findMany: (a: never) => findMany(a), findFirst: (a: never) => findFirst(a) } },
 }));
 
-import { appendEvents, findEventsAfter } from '../class-event-repository';
+import { appendEvents, appendTutorEvents, findEventBySeq, findEventsAfter } from '../class-event-repository';
 
 const ev = { type: 'TEACHER_NOTE', stepIndex: null, payload: {}, audience: 'TEACHER', createdBy: 'TEACHER' } as const;
 const p2002 = () => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
@@ -38,6 +40,7 @@ beforeEach(() => {
   calls.length = 0;
   queryRaw.mockImplementation(async (sql: string) => (sql.includes('FOR UPDATE') ? [{ id: 'a1' }] : [{ next: 5 }]));
   findFirst.mockResolvedValue(null);
+  txFindMany.mockResolvedValue([]);
   create.mockImplementation(async ({ data }: { data: { seq: number } }) => ({ ...data }));
 });
 
@@ -99,6 +102,58 @@ describe('findEventsAfter', () => {
         orderBy: { seq: 'asc' },
         take: 50,
       }),
+    );
+  });
+});
+
+describe('appendTutorEvents', () => {
+  const card = { type: 'TUTOR_CARD', payload: {}, audience: 'ALL' } as const;
+  const skip = { type: 'TUTOR_SKIPPED', payload: {}, audience: 'TEACHER' } as const;
+  const running = () =>
+    findFirst.mockImplementation(async (a: { where: { type: unknown } }) =>
+      a.where.type === 'STEP_CHANGED' ? { stepIndex: 0 } : { type: 'SESSION_STARTED' },
+    );
+
+  it('insere os tipos ausentes com createdBy TUTOR e stepIndex', async () => {
+    running();
+    const rows = await appendTutorEvents('a1', 0, [card, skip]);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[0][0].data).toMatchObject({ seq: 5, type: 'TUTOR_CARD', stepIndex: 0, createdBy: 'TUTOR' });
+    expect(rows.map((r) => r.type)).toEqual(['TUTOR_CARD', 'TUTOR_SKIPPED']);
+  });
+
+  it('tipo já existente não é reinserido e volta a linha antiga', async () => {
+    running();
+    const old = { seq: 2, type: 'TUTOR_CARD', stepIndex: 0, payload: { old: true }, audience: 'ALL', createdBy: 'TUTOR' };
+    txFindMany.mockResolvedValue([old]);
+    const rows = await appendTutorEvents('a1', 0, [card]);
+    expect(create).not.toHaveBeenCalled();
+    expect(rows).toEqual([old]);
+  });
+
+  it('fase ENDED: não insere', async () => {
+    findFirst.mockResolvedValue({ type: 'SESSION_ENDED' });
+    expect(await appendTutorEvents('a1', 0, [card])).toEqual([]);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('P2002 no create: resolve com as linhas relidas', async () => {
+    running();
+    create.mockRejectedValueOnce(p2002());
+    const winner = { seq: 3, type: 'TUTOR_CARD', stepIndex: 0, payload: {}, audience: 'ALL', createdBy: 'TUTOR' };
+    findMany.mockResolvedValue([winner, { ...winner, seq: 4, type: 'TUTOR_QUESTION' }]);
+    const rows = await appendTutorEvents('a1', 0, [card]);
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(rows).toEqual([winner]);
+  });
+});
+
+describe('findEventBySeq', () => {
+  it('filtra por agenda, seq e audiência', async () => {
+    findFirst.mockResolvedValue(null);
+    await findEventBySeq('a1', 9, ['ALL']);
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { agendaId: 'a1', seq: 9, audience: { in: ['ALL'] } } }),
     );
   });
 });

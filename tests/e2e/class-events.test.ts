@@ -143,4 +143,20 @@ describe.skipIf(!TEST_DB_URL)('class-event-repository (banco)', () => {
       await client.end();
     }
   });
+
+  it('appends concorrentes publicam um cartão e um skip por passo', async () => {
+    const { appendTutorEvents } = await import('@/domains/classroom/class-event-repository');
+    const id = await freshAgenda();
+    const cardPayload = { title: 'Cartão', body: 'Texto' };
+    const card = { type: 'TUTOR_CARD', payload: cardPayload, audience: 'ALL' } as const;
+    const skip = { type: 'TUTOR_SKIPPED', payload: { reason: 'NO_MATERIAL', kind: 'CARD' }, audience: 'TEACHER' } as const;
+    await Promise.all([
+      appendTutorEvents(id, 0, [card]),
+      appendTutorEvents(id, 0, [card]),
+      appendTutorEvents(id, 0, [skip]),
+      appendTutorEvents(id, 0, [skip]),
+    ]);
+    const rows = await db.classEvent.findMany({ where: { agendaId: id, stepIndex: 0 } });
+    expect(rows.map((r) => r.type).sort()).toEqual(['TUTOR_CARD', 'TUTOR_SKIPPED']);
+  });
 });
