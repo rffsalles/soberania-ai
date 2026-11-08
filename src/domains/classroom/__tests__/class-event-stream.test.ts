@@ -178,7 +178,7 @@ describe('createClassEventStream', () => {
         new AbortController().signal
       )
     );
-    expect(text).toBe('retry: 1000\n\n');
+    expect(text).toBe('retry: 1000\n\nretry: 5000\n\n');
     expect(onClose).toHaveBeenCalledTimes(1);
     error.mockRestore();
   });

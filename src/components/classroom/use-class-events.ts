@@ -34,6 +34,7 @@ export function useClassEvents(
     let errorTimer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let ended = false;
 
     lastSeqRef.current = after;
     setEvents([]);
@@ -57,6 +58,14 @@ export function useClassEvents(
       retryTimer = null;
     };
 
+    const finishClass = () => {
+      ended = true;
+      clearErrorTimer();
+      stopPolling();
+      source?.close();
+      setStatus('live');
+    };
+
     const poll = async () => {
       try {
         const res = await fetch(`/api/v1/agendas/${agendaId}/events?after=${lastSeqRef.current}`);
@@ -66,6 +75,10 @@ export function useClassEvents(
         const incoming = body.events ?? [];
         setEvents((prev) => merge(prev, incoming));
         advance(Math.max(body.lastSeq ?? 0, ...incoming.map((e) => e.seq)));
+        if (incoming.some((e) => e.type === 'SESSION_ENDED')) {
+          finishClass();
+          return;
+        }
         setStatus((s) => (s === 'live' ? s : 'polling'));
       } catch {
         if (!disposed) setStatus((s) => (s === 'live' ? s : 'offline'));
@@ -82,23 +95,29 @@ export function useClassEvents(
       }
     };
 
+    const armErrorTimer = (es: EventSource) => {
+      if (errorTimer) return;
+      errorTimer = setTimeout(() => {
+        errorTimer = null;
+        es.close();
+        setStatus('polling');
+        startPolling();
+      }, ERROR_GRACE_MS);
+    };
+
     const connect = () => {
+      if (ended) return;
       source?.close();
       const es = new EventSource(`/api/v1/agendas/${agendaId}/events/stream?after=${lastSeqRef.current}`);
       source = es;
+      armErrorTimer(es);
       es.addEventListener('open', () => {
         clearErrorTimer();
         stopPolling();
         setStatus('live');
       });
       es.addEventListener('error', () => {
-        if (errorTimer) return;
-        errorTimer = setTimeout(() => {
-          errorTimer = null;
-          es.close();
-          setStatus('polling');
-          startPolling();
-        }, ERROR_GRACE_MS);
+        if (!ended) armErrorTimer(es);
       });
       for (const type of CLASS_EVENT_TYPES) {
         es.addEventListener(type, (raw) => {
@@ -107,6 +126,7 @@ export function useClassEvents(
             if (typeof dto?.seq !== 'number') return;
             setEvents((prev) => merge(prev, [dto]));
             advance(dto.seq);
+            if (dto.type === 'SESSION_ENDED') finishClass();
           } catch {
             // frame malformado: ignora
           }

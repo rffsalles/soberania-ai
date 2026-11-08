@@ -108,3 +108,11 @@ export function findEventsAfter(
     select: ROW_SELECT,
   });
 }
+
+export async function hasEventUpTo(agendaId: string, type: ClassEventType, upToSeq: number): Promise<boolean> {
+  const row = await db.classEvent.findFirst({
+    where: { agendaId, type, audience: 'ALL', seq: { lte: upToSeq } },
+    select: { seq: true },
+  });
+  return row !== null;
+}

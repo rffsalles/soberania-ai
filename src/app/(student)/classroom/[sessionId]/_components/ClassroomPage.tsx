@@ -83,7 +83,8 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
     );
   }
 
-  const status = state.phase === 'ENDED' ? 'COMPLETED' : deriveAgendaStatus(session, now);
+  const status =
+    state.phase === 'ENDED' ? 'COMPLETED' : state.phase === 'RUNNING' ? 'LIVE' : deriveAgendaStatus(session, now);
   const statusBadge = STATUS_BADGE[status] ?? STATUS_BADGE.SCHEDULED;
   const endsAt = END_TIME_FORMAT.format(new Date(session.endTime));
 

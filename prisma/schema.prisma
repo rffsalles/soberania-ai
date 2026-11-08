@@ -199,6 +199,9 @@ model Agenda {
   @@map("agendas")
 }
 
+// ATENÇÃO: o índice único parcial `class_events_tutor_step_uq` existe só no SQL da
+// migration (o Prisma não modela índices parciais). `prisma migrate dev` pode gerar um
+// `DROP INDEX "class_events_tutor_step_uq"` espúrio: remova-o da migration gerada.
 model ClassEvent {
   id        String          @id @default(cuid())
   agendaId  String

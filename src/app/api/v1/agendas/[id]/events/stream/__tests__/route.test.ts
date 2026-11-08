@@ -5,6 +5,7 @@ import { DomainError } from '@/lib/api/domain-error';
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   openEventReader: vi.fn(),
+  isClassClosed: vi.fn(),
   subscribe: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ vi.mock('@/lib/auth/request-user', async (importOriginal) => ({
 }));
 vi.mock('@/domains/classroom/class-event-service', () => ({
   openEventReader: mocks.openEventReader,
+  isClassClosed: mocks.isClassClosed,
 }));
 
 vi.mock('@/domains/classroom/class-event-listener', () => ({
@@ -33,6 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('CLASS_EVENTS_STREAM_MAX_MS', '0');
   mocks.requireUser.mockResolvedValue(user);
+  mocks.isClassClosed.mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -59,6 +62,21 @@ describe('GET /api/v1/agendas/:id/events/stream', () => {
     expect(res.headers.get('X-Accel-Buffering')).toBe('no');
     expect(await res.text()).toContain('retry: 1000');
     expect(read.mock.calls[0][0]).toBe(9);
+  });
+
+  it('aula encerrada devolve 204 sem corpo e não abre o leitor', async () => {
+    mocks.isClassClosed.mockResolvedValue(true);
+    const res = await get('?after=4', { 'Last-Event-ID': '6' });
+    expect(res.status).toBe(204);
+    expect(res.body).toBeNull();
+    expect(mocks.isClassClosed).toHaveBeenCalledWith(user, 'ag1', 6);
+    expect(mocks.openEventReader).not.toHaveBeenCalled();
+  });
+
+  it('escopo negado em isClassClosed devolve 404 JSON', async () => {
+    mocks.isClassClosed.mockRejectedValue(new DomainError(404, 'Agenda não encontrada'));
+    const res = await get();
+    expect(res.status).toBe(404);
   });
 
   it('fora de escopo devolve 404 JSON antes de abrir o stream', async () => {

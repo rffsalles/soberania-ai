@@ -161,4 +161,36 @@ describe('useClassEvents', () => {
     expect(latest().closed).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('SESSION_ENDED fecha o stream, para o polling e mantém live sem reconectar', async () => {
+    const fetchMock = mockFetch([], 0);
+    const { result } = renderHook(() => useClassEvents('ag1'));
+    act(() => latest().open());
+    act(() => latest().error());
+    act(() => latest().emit('SESSION_ENDED', dto(4, 'SESSION_ENDED')));
+    expect(latest().closed).toBe(true);
+    expect(result.current.status).toBe('live');
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(result.current.status).toBe('live');
+  });
+
+  it('sem open nem error por 10 s cai para polling e faz fetch', async () => {
+    const fetchMock = mockFetch([dto(1)], 1);
+    const { result } = renderHook(() => useClassEvents('ag1'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(FakeEventSource.instances[0].closed).toBe(true);
+    expect(result.current.status).toBe('polling');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/agendas/ag1/events?after=0');
+    expect(result.current.events.map((e) => e.seq)).toEqual([1]);
+  });
 });

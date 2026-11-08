@@ -6,6 +6,7 @@ import type { TimeScriptItem } from '@/domains/teaching/time-script';
 import type { ClassEventRow, NewClassEvent, AppendContext } from '../class-event-repository';
 import {
   appendTeacherEvent,
+  isClassClosed,
   listEventsAfter,
   openEventReader,
   type ClassEventDeps,
@@ -20,7 +21,7 @@ const script: TimeScriptItem[] = [
   { timeSeconds: 1200, timeRange: '20-30', activity: 'Prática', description: 'd2' },
 ];
 
-function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | null } = {}) {
+function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | null; storedStatus?: string } = {}) {
   const rows: ClassEventRow[] = [];
   let chain: Promise<unknown> = Promise.resolve();
   const findEventsAfter = vi.fn(async (_id: string, after: number, audiences: string[], limit: number) =>
@@ -52,7 +53,14 @@ function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | nul
   const deps: ClassEventDeps = {
     getAgenda,
     findTimeScript: vi.fn(async () => opts.script ?? script),
-    repo: { appendEvents, findEventsAfter },
+    findStoredStatus: vi.fn(async () => (opts.storedStatus ?? 'SCHEDULED') as never),
+    repo: {
+      appendEvents,
+      findEventsAfter,
+      hasEventUpTo: vi.fn(async (_id: string, type: string, upTo: number) =>
+        rows.some((r) => r.type === type && r.seq <= upTo),
+      ),
+    },
     completeAgenda,
   };
   return { deps, rows, completeAgenda, getAgenda, findEventsAfter };
@@ -69,6 +77,12 @@ async function expectDomain(p: Promise<unknown>, status: number, code?: string) 
 }
 
 describe('appendTeacherEvent', () => {
+  it.each(['COMPLETED', 'CANCELLED'])('agenda %s rejeita evento com 409 CLASS_ENDED antes do lock', async (storedStatus) => {
+    const { deps, rows } = makeDeps({ storedStatus });
+    await expectDomain(appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps), 409, 'CLASS_ENDED');
+    expect(rows).toHaveLength(0);
+  });
+
   it('rejeita aluno com 403', async () => {
     const { deps } = makeDeps();
     await expectDomain(appendTeacherEvent(student, 'a1', { type: 'SESSION_STARTED' }, deps), 403);
@@ -288,5 +302,27 @@ describe('leitura', () => {
     await reader.read(1);
     expect(getAgenda).toHaveBeenCalledTimes(1);
     expect(first).toEqual({ events: expect.any(Array), lastSeq: expect.any(Number) });
+  });
+});
+
+describe('isClassClosed', () => {
+  it.each(['COMPLETED', 'CANCELLED'])('true quando a agenda está %s', async (storedStatus) => {
+    const { deps } = makeDeps({ storedStatus });
+    expect(await isClassClosed(student, 'a1', 0, deps)).toBe(true);
+  });
+
+  it('true quando SESSION_ENDED está no cursor ou abaixo; false acima ou sem fim', async () => {
+    const { deps } = makeDeps();
+    expect(await isClassClosed(student, 'a1', 99, deps)).toBe(false);
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    expect(await isClassClosed(student, 'a1', 99, deps)).toBe(true);
+    expect(await isClassClosed(student, 'a1', 1, deps)).toBe(false);
+  });
+
+  it('propaga 404 do escopo', async () => {
+    const { deps, getAgenda } = makeDeps();
+    getAgenda.mockRejectedValueOnce(new DomainError(404, 'Agenda não encontrada.'));
+    await expectDomain(isClassClosed(student, 'a1', 0, deps), 404);
   });
 });

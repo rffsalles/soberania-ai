@@ -92,7 +92,10 @@ export function createClassEventStream(
           await deps.waitForChange(signal, wait);
         }
       } catch (err) {
-        if (!signal.aborted) console.error('[aula] erro no stream de eventos', err);
+        if (!signal.aborted) {
+          console.error('[aula] erro no stream de eventos', err);
+          send('retry: 5000\n\n');
+        }
       } finally {
         signal.removeEventListener('abort', onAbort);
         finish(controller);

@@ -6,12 +6,14 @@ import {
   type AgendaActor,
   type AgendaDTO,
 } from '@/domains/agendas/services/agenda-service';
+import { findAgendaById } from '@/domains/agendas/services/agenda-repository';
 import { generateMinutesForAgenda } from '@/domains/pedagogy/services/minutes-service';
 import { findLessonPlayerData } from '@/domains/teaching/services/lesson-plan-repository';
 import { timeScriptSchema, type TimeScriptItem } from '@/domains/teaching/time-script';
 import {
   appendEvents,
   findEventsAfter,
+  hasEventUpTo,
   CLASS_EVENTS_PAGE,
   type ClassEventRow,
   type NewClassEvent,
@@ -30,7 +32,12 @@ export type TeacherEventInput = { type: string; stepIndex?: number; payload?: un
 export type ClassEventDeps = {
   getAgenda(id: string, user: AgendaActor): Promise<AgendaDTO>;
   findTimeScript(lessonPlanId: string): Promise<TimeScriptItem[]>;
-  repo: { appendEvents: typeof appendEvents; findEventsAfter: typeof findEventsAfter };
+  findStoredStatus(agendaId: string): Promise<AgendaStatus | null>;
+  repo: {
+    appendEvents: typeof appendEvents;
+    findEventsAfter: typeof findEventsAfter;
+    hasEventUpTo: typeof hasEventUpTo;
+  };
   completeAgenda(agendaId: string, user: AgendaActor): Promise<void>;
 };
 
@@ -43,7 +50,10 @@ const defaultDeps: ClassEventDeps = {
     const parsed = timeScriptSchema.safeParse(plan?.timeScript);
     return parsed.success ? parsed.data : [];
   },
-  repo: { appendEvents, findEventsAfter },
+  async findStoredStatus(agendaId) {
+    return (await findAgendaById(agendaId))?.status ?? null;
+  },
+  repo: { appendEvents, findEventsAfter, hasEventUpTo },
   async completeAgenda(agendaId, user) {
     await setAgendaStatus(agendaId, user, AgendaStatus.COMPLETED);
     try {
@@ -91,6 +101,10 @@ export async function appendTeacherEvent(
     throw new DomainError(403, 'Apenas o professor da aula pode registrar eventos.');
   }
   const agenda = await deps.getAgenda(agendaId, user);
+  const stored = await deps.findStoredStatus(agendaId);
+  if (stored === AgendaStatus.CANCELLED || stored === AgendaStatus.COMPLETED) {
+    throw conflict('CLASS_ENDED', 'A aula já foi encerrada.');
+  }
   if (!(TEACHER_WRITABLE_TYPES as readonly string[]).includes(input.type)) {
     throw badRequest('EVENT_TYPE_NOT_ALLOWED', 'Tipo de evento não permitido para o professor.');
   }
@@ -210,4 +224,17 @@ export async function listEventsAfter(
 ): Promise<{ events: ClassEventDTO[]; lastSeq: number }> {
   const pages = await openPageReader(user, agendaId, deps);
   return pages.readPage(after);
+}
+
+/** True quando a aula não aceita mais eventos: agenda concluída/cancelada ou SESSION_ENDED no cursor ou abaixo. */
+export async function isClassClosed(
+  user: AgendaActor,
+  agendaId: string,
+  after: number,
+  deps: ClassEventDeps = defaultDeps,
+): Promise<boolean> {
+  await deps.getAgenda(agendaId, user);
+  const stored = await deps.findStoredStatus(agendaId);
+  if (stored === AgendaStatus.CANCELLED || stored === AgendaStatus.COMPLETED) return true;
+  return deps.repo.hasEventUpTo(agendaId, 'SESSION_ENDED', after);
 }
