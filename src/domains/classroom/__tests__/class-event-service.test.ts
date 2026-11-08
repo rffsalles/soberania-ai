@@ -278,8 +278,18 @@ describe('leitura', () => {
     const t = await listEventsAfter(teacher, 'a1', 0, deps);
     expect(t.events.map((e) => e.seq)).toEqual([1, 3]);
     const none = await listEventsAfter(teacher, 'a1', 3, deps);
-    expect(none).toEqual({ events: [], lastSeq: 3 });
+    expect(none).toEqual({ events: [], lastSeq: 3, closed: false });
     warn.mockRestore();
+  });
+
+  it('closed usa o lastSeq resultante: true com SESSION_ENDED lido, true se CANCELLED', async () => {
+    const { deps } = makeDeps();
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    expect((await listEventsAfter(student, 'a1', 0, deps)).closed).toBe(false);
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    expect((await listEventsAfter(student, 'a1', 0, deps)).closed).toBe(true);
+    const cancelled = { ...deps, findStoredStatus: vi.fn(async () => 'CANCELLED' as never) };
+    expect((await listEventsAfter(student, 'a1', 0, cancelled)).closed).toBe(true);
   });
 
   it('lastSeq avança até a última linha crua mesmo se ela for inválida', async () => {
@@ -306,9 +316,19 @@ describe('leitura', () => {
 });
 
 describe('isClassClosed', () => {
-  it.each(['COMPLETED', 'CANCELLED'])('true quando a agenda está %s', async (storedStatus) => {
-    const { deps } = makeDeps({ storedStatus });
+  it('CANCELLED é sempre true', async () => {
+    const { deps } = makeDeps({ storedStatus: 'CANCELLED' });
     expect(await isClassClosed(student, 'a1', 0, deps)).toBe(true);
+  });
+
+  it('COMPLETED respeita o cursor: antes do SESSION_ENDED false, no cursor ou depois true', async () => {
+    const { deps } = makeDeps();
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    const completed = { ...deps, findStoredStatus: vi.fn(async () => 'COMPLETED' as never) };
+    expect(await isClassClosed(student, 'a1', 1, completed)).toBe(false);
+    expect(await isClassClosed(student, 'a1', 3, completed)).toBe(true);
+    expect(await isClassClosed(student, 'a1', 99, completed)).toBe(true);
   });
 
   it('true quando SESSION_ENDED está no cursor ou abaixo; false acima ou sem fim', async () => {

@@ -10,6 +10,7 @@ export type ClassEventsStatus = 'live' | 'polling' | 'offline';
 const ERROR_GRACE_MS = 10_000;
 const POLL_INTERVAL_MS = 5_000;
 const RETRY_STREAM_MS = 30_000;
+const EVENT_SOURCE_CLOSED = 2; // EventSource.CLOSED
 
 function merge(prev: ClassEventDTO[], incoming: ClassEventDTO[]): ClassEventDTO[] {
   const known = new Set(prev.map((e) => e.seq));
@@ -70,12 +71,12 @@ export function useClassEvents(
       try {
         const res = await fetch(`/api/v1/agendas/${agendaId}/events?after=${lastSeqRef.current}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = (await res.json()) as { events?: ClassEventDTO[]; lastSeq?: number };
+        const body = (await res.json()) as { events?: ClassEventDTO[]; lastSeq?: number; closed?: boolean };
         if (disposed) return;
         const incoming = body.events ?? [];
         setEvents((prev) => merge(prev, incoming));
         advance(Math.max(body.lastSeq ?? 0, ...incoming.map((e) => e.seq)));
-        if (incoming.some((e) => e.type === 'SESSION_ENDED')) {
+        if (body.closed === true || incoming.some((e) => e.type === 'SESSION_ENDED')) {
           finishClass();
           return;
         }
@@ -117,7 +118,15 @@ export function useClassEvents(
         setStatus('live');
       });
       es.addEventListener('error', () => {
-        if (!ended) armErrorTimer(es);
+        if (ended) return;
+        if (es.readyState === EVENT_SOURCE_CLOSED) {
+          // 204 (aula fechada) ou falha fatal: o navegador não reconecta; consulta uma vez antes do fallback.
+          void poll().then(() => {
+            if (!ended && !disposed) armErrorTimer(es);
+          });
+          return;
+        }
+        armErrorTimer(es);
       });
       for (const type of CLASS_EVENT_TYPES) {
         es.addEventListener(type, (raw) => {

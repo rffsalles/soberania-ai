@@ -73,10 +73,10 @@ describe('POST /api/v1/agendas/:id/events', () => {
 
 describe('GET /api/v1/agendas/:id/events', () => {
   it('usa requireUser sem papéis e after inválido vira 0', async () => {
-    mocks.listEventsAfter.mockResolvedValue({ events: [], lastSeq: 0 });
+    mocks.listEventsAfter.mockResolvedValue({ events: [], lastSeq: 0, closed: true });
     const res = await get('?after=abc');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ success: true, events: [], lastSeq: 0 });
+    expect(await res.json()).toEqual({ success: true, events: [], lastSeq: 0, closed: true });
     expect(mocks.requireUser).toHaveBeenCalledWith(expect.any(Request));
     expect(mocks.listEventsAfter).toHaveBeenCalledWith(user, 'ag1', 0);
   });

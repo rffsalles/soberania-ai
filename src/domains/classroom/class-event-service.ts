@@ -221,9 +221,10 @@ export async function listEventsAfter(
   agendaId: string,
   after: number,
   deps: ClassEventDeps = defaultDeps,
-): Promise<{ events: ClassEventDTO[]; lastSeq: number }> {
+): Promise<{ events: ClassEventDTO[]; lastSeq: number; closed: boolean }> {
   const pages = await openPageReader(user, agendaId, deps);
-  return pages.readPage(after);
+  const page = await pages.readPage(after);
+  return { ...page, closed: await isClassClosed(user, agendaId, page.lastSeq, deps) };
 }
 
 /** True quando a aula não aceita mais eventos: agenda concluída/cancelada ou SESSION_ENDED no cursor ou abaixo. */
@@ -235,6 +236,7 @@ export async function isClassClosed(
 ): Promise<boolean> {
   await deps.getAgenda(agendaId, user);
   const stored = await deps.findStoredStatus(agendaId);
-  if (stored === AgendaStatus.CANCELLED || stored === AgendaStatus.COMPLETED) return true;
+  if (stored === AgendaStatus.CANCELLED) return true;
+  // COMPLETED respeita o cursor: quem ainda não viu o SESSION_ENDED precisa recebê-lo pelo stream.
   return deps.repo.hasEventUpTo(agendaId, 'SESSION_ENDED', after);
 }

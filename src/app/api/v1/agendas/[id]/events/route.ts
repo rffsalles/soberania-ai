@@ -31,8 +31,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params;
     const raw = Number.parseInt(new URL(req.url).searchParams.get('after') ?? '', 10);
     const after = Number.isFinite(raw) && raw > 0 ? raw : 0;
-    const { events, lastSeq } = await listEventsAfter(user, id, after);
-    return NextResponse.json({ success: true, events, lastSeq });
+    const { events, lastSeq, closed } = await listEventsAfter(user, id, after);
+    return NextResponse.json({ success: true, events, lastSeq, closed });
   } catch (error) {
     return apiError(error);
   }

@@ -48,8 +48,8 @@ const dto = (seq: number, type: ClassEventDTO['type'] = 'TEACHER_NOTE', stepInde
 
 const latest = () => FakeEventSource.instances[FakeEventSource.instances.length - 1];
 
-function mockFetch(events: ClassEventDTO[], lastSeq: number) {
-  const fn = vi.fn(async () => ({ ok: true, json: async () => ({ success: true, events, lastSeq }) }));
+function mockFetch(events: ClassEventDTO[], lastSeq: number, closed = false) {
+  const fn = vi.fn(async () => ({ ok: true, json: async () => ({ success: true, events, lastSeq, closed }) }));
   vi.stubGlobal('fetch', fn);
   return fn;
 }
@@ -192,5 +192,37 @@ describe('useClassEvents', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/agendas/ag1/events?after=0');
     expect(result.current.events.map((e) => e.seq)).toEqual([1]);
+  });
+
+  it('error com readyState CLOSED (204) faz um poll imediato e closed:true encerra tudo', async () => {
+    const fetchMock = mockFetch([], 5, true);
+    const { result } = renderHook(() => useClassEvents('ag1'));
+    latest().readyState = 2;
+    await act(async () => {
+      latest().error();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe('live');
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(result.current.status).toBe('live');
+  });
+
+  it('error CLOSED com closed:false mantém o comportamento de polling', async () => {
+    const fetchMock = mockFetch([], 0, false);
+    renderHook(() => useClassEvents('ag1'));
+    latest().readyState = 2;
+    await act(async () => {
+      latest().error();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000 + 5000);
+    });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
   });
 });
