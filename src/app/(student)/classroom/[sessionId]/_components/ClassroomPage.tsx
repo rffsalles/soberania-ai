@@ -16,6 +16,8 @@ import { deriveAgendaStatus } from '@/domains/agendas/agenda-validator';
 import { INSTITUTION_TIMEZONE } from '@/lib/constants/teaching';
 import { useClassEvents } from '@/components/classroom/use-class-events';
 import { NowInClassStrip } from '@/components/classroom/now-in-class-strip';
+import { useTutorAnswers } from '@/components/classroom/use-tutor-answers';
+import { reduceStudentView } from '@/domains/classroom/class-state';
 import { useSessionClock } from '@/components/classroom/use-session-clock';
 import { Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 
@@ -47,7 +49,11 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
 
   const { agenda: session, isLoading, error, notFound } = useAgenda(sessionId);
   const { lesson, isLoading: lessonLoading } = useAgendaLesson(sessionId);
-  const { state, lastSeq, status: eventsStatus } = useClassEvents(sessionId);
+  const { events, state, lastSeq, status: eventsStatus } = useClassEvents(sessionId);
+  const { answers, submit: submitAnswer, pendingSeq, error: answerError } = useTutorAnswers(sessionId);
+  const view = React.useMemo(() => reduceStudentView(events, answers), [events, answers]);
+  const [chatDraft, setChatDraft] = React.useState<{ text: string; nonce: number } | undefined>(undefined);
+  const onContinueInChat = React.useCallback((text: string) => setChatDraft({ text, nonce: Date.now() }), []);
   // '' antes de a sessão carregar: nextBoundaryDelay devolve null e nenhum timer é armado.
   const now = useSessionClock(session?.startTime ?? '', session?.endTime ?? '', state.phase);
   const [repliesDone, setRepliesDone] = React.useState(0);
@@ -130,9 +136,12 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
         </div>
 
         <NowInClassStrip
-          stepIndex={state.phase === 'RUNNING' ? state.currentStepIndex : null}
-          activity={state.currentStepActivity}
+          view={view}
           status={eventsStatus}
+          onAnswer={(seq, input) => void submitAnswer(seq, input)}
+          answerPending={pendingSeq !== null}
+          answerError={answerError}
+          onContinueInChat={onContinueInChat}
         />
 
         {/* 2-Column Responsive Workspace */}
@@ -165,6 +174,7 @@ export default function ClassroomPage({ sessionId }: ClassroomPageProps) {
               suggestions={activeCheckpoint ? [activeCheckpoint.question] : undefined}
               onOpenMinutesModal={() => setMinutesModalOpen(true)}
               onReplyDone={onReplyDone}
+              draft={chatDraft}
             />
           </div>
         </div>

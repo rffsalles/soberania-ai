@@ -3,8 +3,9 @@ import * as React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ClassState } from '@/domains/classroom/class-state';
+import type { ClassEventDTO } from '@/domains/classroom/class-event-schema';
 
-const mocks = vi.hoisted(() => ({ state: null as unknown as ClassState }));
+const mocks = vi.hoisted(() => ({ state: null as unknown as ClassState, events: [] as ClassEventDTO[] }));
 
 vi.mock('@/components/agendas/use-agenda', () => ({
   useAgenda: () => ({
@@ -39,7 +40,7 @@ vi.mock('@/components/classroom/use-agenda-lesson', () => ({
   useAgendaFaqs: () => ({ faqs: [], isLoading: false }),
 }));
 vi.mock('@/components/classroom/use-class-events', () => ({
-  useClassEvents: () => ({ events: [], status: 'live', lastSeq: 0, state: mocks.state }),
+  useClassEvents: () => ({ events: mocks.events, status: 'live', lastSeq: 0, state: mocks.state }),
 }));
 vi.mock('@/components/classroom/use-session-clock', () => ({
   useSessionClock: () => new Date('2026-11-08T14:00:00.000Z'),
@@ -60,8 +61,15 @@ const base: ClassState = {
   tutorByStep: {},
 };
 
+function ev(seq: number, type: ClassEventDTO['type'], stepIndex: number | null, payload: unknown = {}): ClassEventDTO {
+  return { seq, type, stepIndex, payload, createdBy: 'TEACHER', createdAt: '2026-11-08T00:00:00.000Z' };
+}
+const stepEv = (seq: number, i: number, activity: string) =>
+  ev(seq, 'STEP_CHANGED', i, { activity, timeRange: '', fromStepIndex: null });
+
 beforeEach(() => {
   mocks.state = base;
+  mocks.events = [];
 });
 afterEach(cleanup);
 
@@ -73,6 +81,7 @@ describe('ClassroomPage faixa Agora na aula', () => {
       currentStepIndex: 1,
       currentStepActivity: 'INNER JOIN e LEFT JOIN na prática',
     };
+    mocks.events = [ev(1, 'SESSION_STARTED', null), stepEv(2, 1, 'INNER JOIN e LEFT JOIN na prática')];
     render(<ClassroomPage sessionId="a1" />);
     expect(screen.getByTestId('now-in-class-strip').textContent).toContain('INNER JOIN e LEFT JOIN na prática');
     expect(screen.queryByText('Subqueries e operações de conjunto')).toBeNull();
@@ -83,7 +92,25 @@ describe('ClassroomPage faixa Agora na aula', () => {
   });
   it('fase ENDED esconde a faixa', () => {
     mocks.state = { ...base, phase: 'ENDED', currentStepIndex: 2, currentStepActivity: 'Subqueries' };
+    mocks.events = [ev(1, 'SESSION_STARTED', null), stepEv(2, 2, 'Subqueries'), ev(3, 'SESSION_ENDED', null)];
     render(<ClassroomPage sessionId="a1" />);
     expect(screen.queryByTestId('now-in-class-strip')).toBeNull();
+  });
+  it('cartão da tutora no passo atual aparece na faixa', () => {
+    mocks.state = { ...base, phase: 'RUNNING', currentStepIndex: 1, currentStepActivity: 'JOINs' };
+    mocks.events = [
+      ev(1, 'SESSION_STARTED', null),
+      stepEv(2, 1, 'JOINs'),
+      ev(3, 'TUTOR_CARD', 1, {
+        concepts: [
+          { title: 'LEFT JOIN', explanation: 'e1', citation: { chunkId: 'c', label: 'Livro', page: 1 } },
+          { title: 'INNER JOIN', explanation: 'e2', citation: { chunkId: 'd', label: 'Livro', page: null } },
+        ],
+        objectiveLink: 'obj',
+        source: 'GENERATED',
+      }),
+    ];
+    render(<ClassroomPage sessionId="a1" />);
+    expect(screen.getByTestId('now-in-class-strip').textContent).toContain('LEFT JOIN');
   });
 });

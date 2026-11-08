@@ -29,13 +29,15 @@ interface ChatComposerProps {
   disabled?: boolean;
   placeholder?: string;
   suggestions?: string[];
+  /** Texto sugerido para o campo; cada nonce novo preenche e foca, sem enviar. */
+  draft?: { text: string; nonce: number };
 }
 
 const DEFAULT_PLACEHOLDER = 'Digite sua dúvida, responda ou cole uma imagem (Ctrl+V)...';
 const RECORDING_PLACEHOLDER = 'Gravando áudio... Clique no microfone para encerrar';
 const MIC_ERROR = 'Não foi possível acessar o microfone. Verifique as permissões.';
 
-export function ChatComposer({ onSend, disabled, placeholder, suggestions }: ChatComposerProps) {
+export function ChatComposer({ onSend, disabled, placeholder, suggestions, draft }: ChatComposerProps) {
   const [input, setInput] = React.useState('');
   const [isRecording, setIsRecording] = React.useState(false);
   const [mediaRecorder, setMediaRecorder] = React.useState<MediaRecorder | null>(null);
@@ -44,6 +46,15 @@ export function ChatComposer({ onSend, disabled, placeholder, suggestions }: Cha
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
+  const textInputRef = React.useRef<HTMLInputElement>(null);
+
+  const draftText = draft?.text;
+  const draftNonce = draft?.nonce;
+  React.useEffect(() => {
+    if (draftNonce === undefined || draftText === undefined) return;
+    setInput(draftText);
+    textInputRef.current?.focus();
+  }, [draftNonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleRecording = async () => {
     if (isRecording && mediaRecorder) {
@@ -225,6 +236,7 @@ export function ChatComposer({ onSend, disabled, placeholder, suggestions }: Cha
           </Button>
 
           <Input
+            ref={textInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onPaste={handlePaste}

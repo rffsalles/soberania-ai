@@ -12,6 +12,7 @@ export interface SocraticChatPanelProps {
   onGuardrailBlock?: () => void;
   onReplyDone?: () => void;
   className?: string;
+  draft?: { text: string; nonce: number };
 }
 
 export function SocraticChatPanel({
@@ -22,6 +23,7 @@ export function SocraticChatPanel({
   onGuardrailBlock,
   onReplyDone,
   className,
+  draft,
 }: SocraticChatPanelProps) {
   return (
     <UniversalSocraticChat
@@ -32,6 +34,7 @@ export function SocraticChatPanel({
       onGuardrailBlock={onGuardrailBlock}
       onReplyDone={onReplyDone}
       className={className}
+      draft={draft}
     />
   );
 }

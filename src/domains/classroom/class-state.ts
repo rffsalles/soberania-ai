@@ -1,4 +1,4 @@
-import type { ClassEventDTO } from './class-event-schema';
+import type { AnswerResult, ClassEventDTO, TutorCardPayload } from './class-event-schema';
 
 export type SessionPhase = 'NOT_STARTED' | 'RUNNING' | 'ENDED';
 export type TutorContent = {
@@ -87,5 +87,53 @@ export function reduceClassState(events: ClassEventDTO[]): ClassState {
     currentStepActivity: typeof activity === 'string' ? activity : null,
     lessonMuted: lessonMuted(events),
     tutorByStep,
+  };
+}
+
+export type AnswerOutcome = AnswerResult | { alreadyAnswered: true };
+export type StudentQuestion =
+  | { seq: number; kind: 'MULTIPLE_CHOICE'; enunciation: string; options: { key: string; text: string }[] }
+  | { seq: number; kind: 'OPEN'; text: string };
+export type StudentView = {
+  stepIndex: number | null;
+  activity: string | null;
+  card: TutorCardPayload | null;
+  question: StudentQuestion | null;
+  answer: AnswerOutcome | null;
+};
+
+const EMPTY_VIEW: StudentView = { stepIndex: null, activity: null, card: null, question: null, answer: null };
+
+function toStudentQuestion(e: ClassEventDTO): StudentQuestion | null {
+  const p = e.payload as {
+    kind?: string;
+    text?: unknown;
+    question?: { enunciation?: unknown; options?: unknown };
+  } | null;
+  if (!p) return null;
+  if (p.kind === 'OPEN' && typeof p.text === 'string') return { seq: e.seq, kind: 'OPEN', text: p.text };
+  if (p.kind === 'MULTIPLE_CHOICE' && p.question && typeof p.question.enunciation === 'string') {
+    const options = Array.isArray(p.question.options)
+      ? (p.question.options as { key: string; text: string }[]).map((o) => ({ key: o.key, text: o.text }))
+      : [];
+    return { seq: e.seq, kind: 'MULTIPLE_CHOICE', enunciation: p.question.enunciation, options };
+  }
+  return null;
+}
+
+/** O que o aluno vê na faixa: passo atual (se a aula não acabou), cartão, pergunta e a própria resposta. */
+export function reduceStudentView(events: ClassEventDTO[], answers: Record<number, AnswerOutcome>): StudentView {
+  if (sessionPhase(events) === 'ENDED') return EMPTY_VIEW;
+  const step = currentStep(events);
+  if (!step || step.stepIndex === null) return EMPTY_VIEW;
+  const activity = (step.payload as { activity?: unknown } | null)?.activity;
+  const content = tutorContentForStep(events, step.stepIndex);
+  const question = content.question ? toStudentQuestion(content.question) : null;
+  return {
+    stepIndex: step.stepIndex,
+    activity: typeof activity === 'string' ? activity : null,
+    card: content.card ? (content.card.payload as TutorCardPayload) : null,
+    question,
+    answer: question ? (answers[question.seq] ?? null) : null,
   };
 }

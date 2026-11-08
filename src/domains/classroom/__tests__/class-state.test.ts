@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ClassEventDTO, ClassEventTypeName } from '../class-event-schema';
 import {
   isTutorMuted,
+  reduceStudentView,
   reduceClassState,
   sessionPhase,
   stepLabel,
@@ -56,5 +57,43 @@ describe('stepLabel', () => {
   it('converte índice base 0 em Passo N', () => {
     expect(stepLabel(0)).toBe('Passo 1');
     expect(stepLabel(4)).toBe('Passo 5');
+  });
+
+  describe('reduceStudentView', () => {
+    const step = (seq: number, i: number) => ev(seq, 'STEP_CHANGED', i, { activity: `Passo ${i}`, timeRange: '', fromStepIndex: null });
+    const card = { concepts: [], objectiveLink: 'x', source: 'GENERATED' };
+    it('passo atual com cartão e pergunta; resposta vem do mapa', () => {
+      const es = [
+        ev(1, 'SESSION_STARTED'),
+        step(2, 1),
+        ev(3, 'TUTOR_CARD', 1, card),
+        ev(4, 'TUTOR_QUESTION', 1, {
+          kind: 'MULTIPLE_CHOICE',
+          question: { id: 'q', enunciation: 'Qual JOIN?', options: [{ key: 'A', text: 'x' }, { key: 'B', text: 'y' }], topic: 't' },
+          origin: 'TUTOR',
+          source: 'GENERATED',
+        }),
+      ];
+      const v = reduceStudentView(es, { 4: { wasCorrect: true, correctKey: 'B', rationale: 'r' } });
+      expect(v.stepIndex).toBe(1);
+      expect(v.activity).toBe('Passo 1');
+      expect(v.card).toEqual(card);
+      expect(v.question).toEqual({
+        seq: 4,
+        kind: 'MULTIPLE_CHOICE',
+        enunciation: 'Qual JOIN?',
+        options: [{ key: 'A', text: 'x' }, { key: 'B', text: 'y' }],
+      });
+      expect(v.answer).toEqual({ wasCorrect: true, correctKey: 'B', rationale: 'r' });
+      expect(reduceStudentView(es, {}).answer).toBeNull();
+    });
+    it('pergunta aberta do professor', () => {
+      const es = [ev(1, 'SESSION_STARTED'), step(2, 0), ev(3, 'TUTOR_QUESTION', 0, { kind: 'OPEN', text: 'Por quê?', origin: 'TEACHER' })];
+      expect(reduceStudentView(es, {}).question).toEqual({ seq: 3, kind: 'OPEN', text: 'Por quê?' });
+    });
+    it('ENDED não tem passo', () => {
+      const es = [ev(1, 'SESSION_STARTED'), step(2, 1), ev(3, 'SESSION_ENDED')];
+      expect(reduceStudentView(es, {}).stepIndex).toBeNull();
+    });
   });
 });

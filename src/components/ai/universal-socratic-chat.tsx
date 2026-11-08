@@ -27,6 +27,7 @@ export interface UniversalSocraticChatProps {
   className?: string;
   title?: string;
   subtitle?: string;
+  draft?: { text: string; nonce: number };
 }
 
 const GREETINGS = {
@@ -105,6 +106,7 @@ function SocraticChatBody({
   onGuardrailBlock,
   onReplyDone,
   className,
+  draft,
   title = 'Tutora Lucy Virtual',
   subtitle = 'Apoio Socrático Multimodal · On-Premises',
 }: UniversalSocraticChatProps & { restored: ChatMessage[] }) {
@@ -177,6 +179,7 @@ function SocraticChatBody({
           disabled={isStreaming}
           placeholder={placeholder}
           suggestions={suggestions}
+          draft={draft}
         />
       )}
     </div>
