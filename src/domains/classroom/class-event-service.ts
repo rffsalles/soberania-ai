@@ -34,7 +34,7 @@ export type ClassEventDeps = {
   completeAgenda(agendaId: string, user: AgendaActor): Promise<void>;
 };
 
-export type EventReader = { read(after: number): Promise<ClassEventDTO[]> };
+export type EventReader = { read(after: number): Promise<{ events: ClassEventDTO[]; lastSeq: number }> };
 
 const defaultDeps: ClassEventDeps = {
   getAgenda: (id, user) => getAgendaForUser(id, user),
@@ -199,7 +199,7 @@ export async function openEventReader(
   deps: ClassEventDeps = defaultDeps,
 ): Promise<EventReader> {
   const pages = await openPageReader(user, agendaId, deps);
-  return { read: async (after) => (await pages.readPage(after)).events };
+  return { read: (after) => pages.readPage(after) };
 }
 
 export async function listEventsAfter(

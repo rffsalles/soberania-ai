@@ -284,8 +284,9 @@ describe('leitura', () => {
     seed(rows);
     const reader = await openEventReader(teacher, 'a1', deps);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await reader.read(0);
+    const first = await reader.read(0);
     await reader.read(1);
     expect(getAgenda).toHaveBeenCalledTimes(1);
+    expect(first).toEqual({ events: expect.any(Array), lastSeq: expect.any(Number) });
   });
 });
