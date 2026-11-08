@@ -14,11 +14,14 @@ import {
   appendEvents,
   findEventsAfter,
   hasEventUpTo,
+  findLatestStepChanged,
+  findStallEvents,
   CLASS_EVENTS_PAGE,
   type ClassEventRow,
   type NewClassEvent,
 } from './class-event-repository';
 import { stepLabel } from './class-state';
+import { stalledTutorStep, TUTOR_STALL_MS } from './tutor-policy';
 import {
   TEACHER_WRITABLE_TYPES,
   audiencesFor,
@@ -27,6 +30,11 @@ import {
   type ClassEventDTO,
   type ClassEventTypeName,
 } from './class-event-schema';
+
+export const CLASS_END_MINUTES_WARNING =
+  'Aula encerrada, mas não foi possível gerar as atas dos alunos. O erro foi registrado no servidor.';
+export const CLASS_END_AGENDA_WARNING =
+  'Aula encerrada, mas a agenda não foi marcada como concluída. Conclua pelo relatório da turma.';
 
 export type TeacherEventInput = { type: string; stepIndex?: number; payload?: unknown };
 
@@ -38,8 +46,10 @@ export type ClassEventDeps = {
     appendEvents: typeof appendEvents;
     findEventsAfter: typeof findEventsAfter;
     hasEventUpTo: typeof hasEventUpTo;
+    findLatestStepChanged: typeof findLatestStepChanged;
+    findStallEvents: typeof findStallEvents;
   };
-  completeAgenda(agendaId: string, user: AgendaActor): Promise<void>;
+  completeAgenda(agendaId: string, user: AgendaActor): Promise<{ minutesGenerated: boolean }>;
 };
 
 export type EventReader = { read(after: number): Promise<{ events: ClassEventDTO[]; lastSeq: number }> };
@@ -54,13 +64,15 @@ const defaultDeps: ClassEventDeps = {
   async findStoredStatus(agendaId) {
     return (await findAgendaById(agendaId))?.status ?? null;
   },
-  repo: { appendEvents, findEventsAfter, hasEventUpTo },
+  repo: { appendEvents, findEventsAfter, hasEventUpTo, findLatestStepChanged, findStallEvents },
   async completeAgenda(agendaId, user) {
     await setAgendaStatus(agendaId, user, AgendaStatus.COMPLETED);
     try {
       await generateMinutesForAgenda(agendaId, user);
+      return { minutesGenerated: true };
     } catch (err) {
       console.error('[aula] falha ao gerar atas ao encerrar a aula', err);
+      return { minutesGenerated: false };
     }
   },
 };
@@ -101,7 +113,7 @@ export async function appendTeacherEvent(
   agendaId: string,
   input: TeacherEventInput,
   deps: ClassEventDeps = defaultDeps,
-): Promise<ClassEventDTO[]> {
+): Promise<{ events: ClassEventDTO[]; warning: string | null }> {
   if (!isTeacherRole(user)) {
     throw new DomainError(403, 'Apenas o professor da aula pode registrar eventos.');
   }
@@ -161,14 +173,17 @@ export async function appendTeacherEvent(
     ];
   });
 
+  let warning: string | null = null;
   if (type === 'SESSION_ENDED') {
     try {
-      await deps.completeAgenda(agendaId, user);
+      const { minutesGenerated } = await deps.completeAgenda(agendaId, user);
+      if (!minutesGenerated) warning = CLASS_END_MINUTES_WARNING;
     } catch (err) {
       console.error('[aula] falha ao concluir a agenda após SESSION_ENDED', err);
+      warning = CLASS_END_AGENDA_WARNING;
     }
   }
-  return rows.map(toClassEventDTO);
+  return { events: rows.map(toClassEventDTO), warning };
 }
 
 /**
@@ -260,4 +275,26 @@ export async function isClassClosed(
   if (stored === AgendaStatus.CANCELLED) return true;
   // COMPLETED respeita o cursor: quem ainda não viu o SESSION_ENDED precisa recebê-lo pelo stream.
   return deps.repo.hasEventUpTo(agendaId, 'SESSION_ENDED', after);
+}
+
+/**
+ * Passo atual parado (sem cartão nem TUTOR_SKIPPED há mais de 20 s), ou null. Barata: sai antes de qualquer
+ * outra consulta quando o último STEP_CHANGED é recente; qualquer falha só loga.
+ */
+export async function stalledTutorStepFor(
+  _user: AgendaActor,
+  agendaId: string,
+  now: number,
+  deps: ClassEventDeps = defaultDeps,
+): Promise<number | null> {
+  try {
+    const latest = await deps.repo.findLatestStepChanged(agendaId);
+    if (!latest || latest.stepIndex === null) return null;
+    if (now - latest.createdAt.getTime() <= TUTOR_STALL_MS) return null;
+    const rows = await deps.repo.findStallEvents(agendaId, latest.stepIndex);
+    return stalledTutorStep([toClassEventDTO(latest), ...rows.map(toClassEventDTO)], now);
+  } catch (err) {
+    console.error('[aula] falha ao checar passo parado da tutora', err);
+    return null;
+  }
 }

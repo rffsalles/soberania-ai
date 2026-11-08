@@ -7,6 +7,17 @@ const mocks = vi.hoisted(() => ({
   openEventReader: vi.fn(),
   isClassClosed: vi.fn(),
   subscribe: vi.fn(),
+  stalledTutorStepFor: vi.fn(),
+  runTutorForStepSafely: vi.fn(),
+  after: vi.fn(),
+}));
+
+vi.mock('next/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/server')>()),
+  after: mocks.after,
+}));
+vi.mock('@/domains/classroom/tutor-step-worker', () => ({
+  runTutorForStepSafely: mocks.runTutorForStepSafely,
 }));
 
 vi.mock('@/lib/auth/request-user', async (importOriginal) => ({
@@ -16,6 +27,7 @@ vi.mock('@/lib/auth/request-user', async (importOriginal) => ({
 vi.mock('@/domains/classroom/class-event-service', () => ({
   openEventReader: mocks.openEventReader,
   isClassClosed: mocks.isClassClosed,
+  stalledTutorStepFor: mocks.stalledTutorStepFor,
 }));
 
 vi.mock('@/domains/classroom/class-event-listener', () => ({
@@ -36,6 +48,7 @@ beforeEach(() => {
   vi.stubEnv('CLASS_EVENTS_STREAM_MAX_MS', '0');
   mocks.requireUser.mockResolvedValue(user);
   mocks.isClassClosed.mockResolvedValue(false);
+  mocks.stalledTutorStepFor.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -121,5 +134,31 @@ describe('GET /api/v1/agendas/:id/events/stream', () => {
     });
     await (await get('', {}, ac.signal)).text();
     expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
+  it('passo parado dispara o worker direto, sem after()', async () => {
+    mocks.stalledTutorStepFor.mockResolvedValue(2);
+    const ac = new AbortController();
+    mocks.openEventReader.mockResolvedValue({
+      read: async (after: number) => {
+        ac.abort();
+        return { events: [], lastSeq: after };
+      },
+    });
+    await (await get('', {}, ac.signal)).text();
+    expect(mocks.runTutorForStepSafely).toHaveBeenCalledWith('ag1', 2);
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it('sem passo parado não dispara o worker', async () => {
+    const ac = new AbortController();
+    mocks.openEventReader.mockResolvedValue({
+      read: async (after: number) => {
+        ac.abort();
+        return { events: [], lastSeq: after };
+      },
+    });
+    await (await get('', {}, ac.signal)).text();
+    expect(mocks.runTutorForStepSafely).not.toHaveBeenCalled();
   });
 });

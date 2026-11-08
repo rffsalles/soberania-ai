@@ -191,3 +191,25 @@ export async function appendTutorEvents(
     return rows.filter((r) => requested.includes(r.type as TutorEventType));
   }
 }
+
+/** Último STEP_CHANGED da aula (o passo atual), para a checagem barata de passo parado. */
+export function findLatestStepChanged(agendaId: string): Promise<ClassEventRow | null> {
+  return db.classEvent.findFirst({
+    where: { agendaId, type: 'STEP_CHANGED' },
+    orderBy: { seq: 'desc' },
+    select: ROW_SELECT,
+  });
+}
+
+/** SESSION_ENDED, notas do professor e eventos da tutora do passo: o necessário para decidir se o passo está parado. */
+export function findStallEvents(agendaId: string, stepIndex: number): Promise<ClassEventRow[]> {
+  return db.classEvent.findMany({
+    where: {
+      agendaId,
+      OR: [{ type: { in: ['SESSION_ENDED', 'TEACHER_NOTE'] } }, { stepIndex, type: { in: TUTOR_TYPES } }],
+    },
+    orderBy: { seq: 'asc' },
+    take: TUTOR_EVENTS_SCAN,
+    select: ROW_SELECT,
+  });
+}

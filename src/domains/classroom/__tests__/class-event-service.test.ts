@@ -11,6 +11,9 @@ import {
   isClassClosed,
   listEventsAfter,
   openEventReader,
+  stalledTutorStepFor,
+  CLASS_END_AGENDA_WARNING,
+  CLASS_END_MINUTES_WARNING,
   type ClassEventDeps,
 } from '../class-event-service';
 
@@ -47,7 +50,7 @@ function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | nul
     chain = p.catch(() => undefined);
     return p;
   };
-  const completeAgenda = vi.fn(async () => {});
+  const completeAgenda = vi.fn(async () => ({ minutesGenerated: true }));
   const getAgenda = vi.fn(async () => ({
     id: 'a1',
     ...(opts.lessonPlanId === null ? {} : { lessonPlanId: opts.lessonPlanId ?? 'lp1' }),
@@ -61,6 +64,15 @@ function makeDeps(opts: { script?: TimeScriptItem[]; lessonPlanId?: string | nul
       findEventsAfter,
       hasEventUpTo: vi.fn(async (_id: string, type: string, upTo: number) =>
         rows.some((r) => r.type === type && r.seq <= upTo),
+      ),
+      findLatestStepChanged: vi.fn(async () => [...rows].reverse().find((r) => r.type === 'STEP_CHANGED') ?? null),
+      findStallEvents: vi.fn(async (_id: string, step: number) =>
+        rows.filter(
+          (r) =>
+            r.type === 'SESSION_ENDED' ||
+            r.type === 'TEACHER_NOTE' ||
+            (r.stepIndex === step && r.type.startsWith('TUTOR_')),
+        ),
       ),
     },
     completeAgenda,
@@ -146,7 +158,7 @@ describe('appendTeacherEvent', () => {
 
   it('SESSION_STARTED devolve [SESSION_STARTED, STEP_CHANGED] com dados do roteiro', async () => {
     const { deps } = makeDeps();
-    const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    const { events: out } = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
     expect(out.map((e) => e.type)).toEqual(['SESSION_STARTED', 'STEP_CHANGED']);
     expect(out[1].seq).toBe(out[0].seq + 1);
     expect(out[1].stepIndex).toBe(0);
@@ -155,20 +167,20 @@ describe('appendTeacherEvent', () => {
 
   it('SESSION_STARTED com roteiro vazio devolve só 1 evento', async () => {
     const { deps } = makeDeps({ script: [] });
-    const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    const { events: out } = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
     expect(out.map((e) => e.type)).toEqual(['SESSION_STARTED']);
   });
 
   it('sem plano de aula trata o roteiro como vazio', async () => {
     const { deps } = makeDeps({ lessonPlanId: null });
-    const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
+    const { events: out } = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
     expect(out).toHaveLength(1);
   });
 
   it('STEP_CHANGED monta o payload no servidor e ignora o do cliente', async () => {
     const { deps } = makeDeps();
     await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
-    const [ev] = await appendTeacherEvent(
+    const { events: [ev] } = await appendTeacherEvent(
       teacher,
       'a1',
       { type: 'STEP_CHANGED', stepIndex: 2, payload: { activity: 'hack' } },
@@ -184,10 +196,10 @@ describe('appendTeacherEvent', () => {
     ];
     const { deps } = makeDeps({ script: longScript });
     await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
-    const [e0] = await appendTeacherEvent(teacher, 'a1', { type: 'STEP_CHANGED', stepIndex: 0 }, deps);
+    const { events: [e0] } = await appendTeacherEvent(teacher, 'a1', { type: 'STEP_CHANGED', stepIndex: 0 }, deps);
     expect((e0.payload as { activity: string }).activity).toHaveLength(200);
     expect((e0.payload as { timeRange: string }).timeRange).toHaveLength(40);
-    const [e1] = await appendTeacherEvent(teacher, 'a1', { type: 'STEP_CHANGED', stepIndex: 1 }, deps);
+    const { events: [e1] } = await appendTeacherEvent(teacher, 'a1', { type: 'STEP_CHANGED', stepIndex: 1 }, deps);
     expect((e1.payload as { activity: string }).activity).toBe('Passo 2');
     expect(parseClassEvent('STEP_CHANGED', e0.payload, 0).ok).toBe(true);
   });
@@ -224,7 +236,7 @@ describe('appendTeacherEvent', () => {
     completeAgenda.mockRejectedValueOnce(new Error('boom'));
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, deps);
-    const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    const { events: out } = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
     expect(out[0].type).toBe('SESSION_ENDED');
     expect(rows.some((r) => r.type === 'SESSION_ENDED')).toBe(true);
     expect(spy).toHaveBeenCalled();
@@ -237,12 +249,12 @@ describe('appendTeacherEvent', () => {
     const results = await Promise.all(
       [1, 2, 1, 2, 1].map((i) => appendTeacherEvent(teacher, 'a1', { type: 'STEP_CHANGED', stepIndex: i }, deps)),
     );
-    const seqs = results.map((r) => r[0].seq);
+    const seqs = results.map((r) => r.events[0].seq);
     expect(new Set(seqs).size).toBe(5);
     expect(seqs).toEqual([seqs[0], seqs[0] + 1, seqs[0] + 2, seqs[0] + 3, seqs[0] + 4]);
-    const froms = results.map((r) => (r[0].payload as { fromStepIndex: number }).fromStepIndex);
+    const froms = results.map((r) => (r.events[0].payload as { fromStepIndex: number }).fromStepIndex);
     expect(froms[0]).toBe(0);
-    for (let i = 1; i < 5; i++) expect(froms[i]).toBe(results[i - 1][0].stepIndex);
+    for (let i = 1; i < 5; i++) expect(froms[i]).toBe(results[i - 1].events[0].stepIndex);
   });
 });
 
@@ -389,5 +401,95 @@ describe('closeClassIfRunning', () => {
     const before = rows.length;
     expect(await closeClassIfRunning('a1', deps)).toBe(false);
     expect(rows).toHaveLength(before);
+  });
+});
+
+describe('aviso ao encerrar a aula', () => {
+  async function started() {
+    const ctx = makeDeps();
+    await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_STARTED' }, ctx.deps);
+    return ctx;
+  }
+
+  it('completeAgenda lançando: evento gravado e warning da agenda', async () => {
+    const { deps, completeAgenda, rows } = await started();
+    completeAgenda.mockRejectedValueOnce(new Error('boom'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    expect(out.warning).toBe(CLASS_END_AGENDA_WARNING);
+    expect(rows.some((r) => r.type === 'SESSION_ENDED')).toBe(true);
+  });
+
+  it('minutesGenerated:false: warning das atas', async () => {
+    const { deps, completeAgenda } = await started();
+    completeAgenda.mockResolvedValueOnce({ minutesGenerated: false });
+    const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    expect(out.warning).toBe(CLASS_END_MINUTES_WARNING);
+  });
+
+  it('sucesso e outros tipos: warning null', async () => {
+    const { deps } = await started();
+    const note = await appendTeacherEvent(
+      teacher,
+      'a1',
+      { type: 'TEACHER_NOTE', payload: { scope: 'LESSON', tutor: 'MUTE' } },
+      deps,
+    );
+    expect(note.warning).toBeNull();
+    const out = await appendTeacherEvent(teacher, 'a1', { type: 'SESSION_ENDED' }, deps);
+    expect(out.warning).toBeNull();
+  });
+});
+
+describe('stalledTutorStepFor', () => {
+  const NOW = Date.parse('2026-11-08T12:00:00Z');
+  const base = { audience: 'ALL', stepIndex: null, payload: {} } as const;
+  function mk(over: Partial<ClassEventRow> & Pick<ClassEventRow, 'seq' | 'type'>): ClassEventRow {
+    return { ...base, createdBy: 'TEACHER', createdAt: new Date(NOW - 60_000), ...over } as ClassEventRow;
+  }
+  function depsWith(rows: ClassEventRow[]) {
+    const { deps } = makeDeps();
+    const latest = vi.fn(async () => [...rows].reverse().find((r) => r.type === 'STEP_CHANGED') ?? null);
+    const stall = vi.fn(async (_id: string, step: number) =>
+      rows.filter(
+        (r) =>
+          r.type === 'SESSION_ENDED' || r.type === 'TEACHER_NOTE' || (r.stepIndex === step && r.type.startsWith('TUTOR_')),
+      ),
+    );
+    deps.repo = { ...deps.repo, findLatestStepChanged: latest, findStallEvents: stall };
+    return { deps, latest, stall };
+  }
+  const step = (over: Partial<ClassEventRow> = {}) => mk({ seq: 2, type: 'STEP_CHANGED', stepIndex: 1, ...over });
+
+  it('passo recente: null sem outras consultas', async () => {
+    const { deps, stall } = depsWith([step({ createdAt: new Date(NOW - 5_000) })]);
+    expect(await stalledTutorStepFor(teacher, 'a1', NOW, deps)).toBeNull();
+    expect(stall).not.toHaveBeenCalled();
+  });
+
+  it('passo parado: devolve o índice', async () => {
+    const { deps } = depsWith([mk({ seq: 1, type: 'SESSION_STARTED' }), step()]);
+    expect(await stalledTutorStepFor(student, 'a1', NOW, deps)).toBe(1);
+  });
+
+  it('mudo, com cartão ou com TUTOR_SKIPPED: null', async () => {
+    const mute = mk({ seq: 3, type: 'TEACHER_NOTE', audience: 'TEACHER', payload: { scope: 'LESSON', tutor: 'MUTE' } });
+    expect(await stalledTutorStepFor(teacher, 'a1', NOW, depsWith([step(), mute]).deps)).toBeNull();
+    for (const type of ['TUTOR_CARD', 'TUTOR_SKIPPED'] as const) {
+      const t = mk({ seq: 3, type, stepIndex: 1, createdBy: 'TUTOR' });
+      expect(await stalledTutorStepFor(teacher, 'a1', NOW, depsWith([step(), t]).deps)).toBeNull();
+    }
+  });
+
+  it('aula encerrada: null', async () => {
+    const { deps } = depsWith([step(), mk({ seq: 3, type: 'SESSION_ENDED' })]);
+    expect(await stalledTutorStepFor(teacher, 'a1', NOW, deps)).toBeNull();
+  });
+
+  it('nunca lança', async () => {
+    const { deps } = makeDeps();
+    deps.repo = { ...deps.repo, findLatestStepChanged: vi.fn(async () => { throw new Error('db'); }) };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await stalledTutorStepFor(teacher, 'a1', NOW, deps)).toBeNull();
   });
 });

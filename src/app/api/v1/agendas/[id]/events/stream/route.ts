@@ -1,6 +1,7 @@
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
-import { isClassClosed, openEventReader } from '@/domains/classroom/class-event-service';
+import { isClassClosed, openEventReader, stalledTutorStepFor } from '@/domains/classroom/class-event-service';
+import { runTutorForStepSafely } from '@/domains/classroom/tutor-step-worker';
 import { createClassEventStream, readStreamConfig, resolveCursor } from '@/domains/classroom/class-event-stream';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // 204 faz o EventSource parar de reconectar depois do fim da aula.
     if (await isClassClosed(user, id, cursor)) return new Response(null, { status: 204 });
     const reader = await openEventReader(user, id);
+    // Sem after(): ele só rodaria quando a resposta longa fechasse; a função segue viva durante o stream.
+    const stalled = await stalledTutorStepFor(user, id, Date.now());
+    if (stalled !== null) void runTutorForStepSafely(id, stalled);
     const config = readStreamConfig();
     let waitForChange = abortableWait;
     let onClose: (() => void) | undefined;
