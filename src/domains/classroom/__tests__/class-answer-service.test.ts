@@ -33,11 +33,13 @@ function row(seq: number, type: string, payload: unknown, stepIndex = 1) {
 
 function makeDeps(over: Partial<ClassAnswerDeps> = {}) {
   const deps = {
-    getAgenda: vi.fn(async () => ({ id: 'ag1', type: 'CLASSROOM' }) as AgendaDTO),
+    getAgenda: vi.fn(async () => ({ id: 'ag1', type: 'CLASSROOM', status: 'LIVE' }) as AgendaDTO),
     findEventBySeq: vi.fn(async () => row(4, 'TUTOR_QUESTION', mcPayload)),
     findEventsAfter: vi.fn(async () => []),
     insertClassAnswer: vi.fn(async () => 'CREATED' as const),
     countClassAnswers: vi.fn(async () => []),
+    findClassAnswer: vi.fn(async () => ({ wasCorrect: false })),
+    hasSessionEnded: vi.fn(async () => false),
     ...over,
   } as unknown as ClassAnswerDeps;
   return deps;
@@ -131,13 +133,49 @@ describe('answerTutorQuestion', () => {
     await expect(answerTutorQuestion(student, 'ag1', 9, { text: 'x'.repeat(1000) }, deps)).resolves.toBeTruthy();
   });
 
-  it('DUPLICATE vira 409 ALREADY_ANSWERED', async () => {
+  it('DUPLICATE devolve o resultado da resposta gravada com alreadyAnswered', async () => {
     const deps = makeDeps({ insertClassAnswer: vi.fn(async () => 'DUPLICATE') as never });
+    const res = await answerTutorQuestion(student, 'ag1', 4, { optionKey: 'B' }, deps);
+    expect(res).toEqual({
+      wasCorrect: false,
+      correctKey: 'B',
+      rationale: 'Brasília é a capital.',
+      alreadyAnswered: true,
+    });
+    expect(deps.findClassAnswer).toHaveBeenCalledWith('ag1', 'stu1', 4);
+  });
+
+  it('DUPLICATE em pergunta aberta devolve nulos com alreadyAnswered', async () => {
+    const deps = makeDeps({
+      findEventBySeq: vi.fn(async () => row(9, 'TUTOR_QUESTION', openPayload)) as never,
+      insertClassAnswer: vi.fn(async () => 'DUPLICATE') as never,
+      findClassAnswer: vi.fn(async () => ({ wasCorrect: null })),
+    });
+    expect(await answerTutorQuestion(student, 'ag1', 9, { text: 'oi' }, deps)).toEqual({
+      wasCorrect: null,
+      correctKey: null,
+      rationale: null,
+      alreadyAnswered: true,
+    });
+  });
+
+  it('aula encerrada (SESSION_ENDED) vira 409 CLASS_ENDED sem gravar', async () => {
+    const deps = makeDeps({ hasSessionEnded: vi.fn(async () => true) });
     await expect(answerTutorQuestion(student, 'ag1', 4, { optionKey: 'B' }, deps)).rejects.toMatchObject({
       status: 409,
-      message: 'Você já respondeu esta pergunta.',
-      details: { code: 'ALREADY_ANSWERED' },
+      message: 'A aula já foi encerrada.',
+      details: { code: 'CLASS_ENDED' },
     });
+    expect(deps.insertClassAnswer).not.toHaveBeenCalled();
+  });
+
+  it.each(['COMPLETED', 'CANCELLED'])('agenda %s vira 409 CLASS_ENDED', async (status) => {
+    const deps = makeDeps({ getAgenda: vi.fn(async () => ({ id: 'ag1', type: 'CLASSROOM', status }) as AgendaDTO) });
+    await expect(answerTutorQuestion(student, 'ag1', 4, { optionKey: 'B' }, deps)).rejects.toMatchObject({
+      status: 409,
+      details: { code: 'CLASS_ENDED' },
+    });
+    expect(deps.insertClassAnswer).not.toHaveBeenCalled();
   });
 });
 

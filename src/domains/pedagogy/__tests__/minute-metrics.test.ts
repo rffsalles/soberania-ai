@@ -21,6 +21,7 @@ function make(o: Partial<MetricInteraction>): MetricInteraction {
     createdAt: at(0),
     ragSourceBook: null,
     ragSourcePage: null,
+    classEventSeq: null,
     ...o,
   };
 }
@@ -109,5 +110,44 @@ describe('minute-metrics', () => {
 
   it('sem intervalos (uma única interação) a hesitação vem só da taxa de erro', () => {
     expect(computeMetrics([make({ wasCorrect: false, latencyMs: 120_000 })]).hesitationIndex).toBe(40);
+  });
+  describe('respostas a perguntas da aula (classEventSeq)', () => {
+    const tutorAnswer = (seconds: number, seq: number, wasCorrect: boolean | null = true) =>
+      make({
+        createdAt: at(seconds),
+        type: InteractionType.SOCRATIC_CHALLENGE,
+        isSocraticChallenge: true,
+        wasCorrect,
+        classEventSeq: seq,
+      });
+
+    it('uma resposta à tutora sozinha conta 1 desafio respondido', () => {
+      expect(computeMetrics([tutorAnswer(0, 7)]).socraticChallengesAnswered).toBe(1);
+    });
+
+    it('duas respostas seguidas à tutora contam 2', () => {
+      expect(computeMetrics([tutorAnswer(0, 7), tutorAnswer(60, 9)]).socraticChallengesAnswered).toBe(2);
+    });
+
+    it('mensagem do chat depois de uma resposta à tutora não ganha crédito', () => {
+      const metrics = computeMetrics([tutorAnswer(0, 7), make({ createdAt: at(30) })]);
+      expect(metrics.socraticChallengesAnswered).toBe(1);
+      expect(metrics.totalQuestionsAsked).toBe(1);
+    });
+
+    it('desafio do chat seguido de resposta no chat ainda conta, mesmo com resposta à tutora no meio', () => {
+      const metrics = computeMetrics([
+        make({ createdAt: at(0), isSocraticChallenge: true, type: InteractionType.SOCRATIC_CHALLENGE }),
+        tutorAnswer(20, 7),
+        make({ createdAt: at(40) }),
+      ]);
+      expect(metrics.socraticChallengesAnswered).toBe(2);
+    });
+
+    it('reflexão ignora as respostas à tutora', () => {
+      const withEvent = computeMetrics([make({ createdAt: at(0) }), tutorAnswer(5, 7, null), make({ createdAt: at(60) })]);
+      const without = computeMetrics([make({ createdAt: at(0) }), make({ createdAt: at(60) })]);
+      expect(withEvent.hesitationIndex).toBe(without.hesitationIndex);
+    });
   });
 });

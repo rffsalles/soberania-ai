@@ -82,6 +82,18 @@ export async function insertClassAnswer(
   }
 }
 
+/** Resposta já gravada do aluno a uma pergunta da aula (para devolver o resultado numa segunda tentativa). */
+export function findClassAnswer(
+  agendaId: string,
+  studentId: string,
+  classEventSeq: number,
+): Promise<{ wasCorrect: boolean | null } | null> {
+  return db.studentInteraction.findFirst({
+    where: { agendaId, studentId, classEventSeq },
+    select: { wasCorrect: true },
+  });
+}
+
 export async function countClassAnswers(
   agendaId: string,
   seqs: number[],

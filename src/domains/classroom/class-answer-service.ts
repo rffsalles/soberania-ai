@@ -1,15 +1,17 @@
-import { InteractionType, Role } from '@prisma/client';
+import { AgendaStatus, InteractionType, Role } from '@prisma/client';
 import { DomainError } from '@/lib/api/domain-error';
 import { OPTION_KEYS } from '@/lib/constants/assessments';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from '@/domains/agendas/services/agenda-service';
 import {
   countClassAnswers,
+  findClassAnswer,
   insertClassAnswer,
   type InteractionInput,
 } from '@/domains/pedagogy/services/interaction-repository';
 import {
   findEventBySeq,
   findEventsAfter,
+  hasEventUpTo,
   TUTOR_EVENTS_SCAN,
   type ClassEventRow,
 } from './class-event-repository';
@@ -20,6 +22,7 @@ import {
   type PulseEntry,
   type TutorQuestionPayload,
 } from './class-event-schema';
+import type { AnswerOutcome } from './class-state';
 
 export type AnswerInput = { optionKey?: string; text?: string; videoSeconds?: number };
 
@@ -29,6 +32,9 @@ export type ClassAnswerDeps = {
   findEventsAfter: typeof findEventsAfter;
   insertClassAnswer(data: InteractionInput & { classEventSeq: number }): Promise<'CREATED' | 'DUPLICATE'>;
   countClassAnswers: typeof countClassAnswers;
+  findClassAnswer: typeof findClassAnswer;
+  /** SESSION_ENDED gravado na aula. */
+  hasSessionEnded(agendaId: string): Promise<boolean>;
 };
 
 const defaultDeps: ClassAnswerDeps = {
@@ -37,6 +43,8 @@ const defaultDeps: ClassAnswerDeps = {
   findEventsAfter,
   insertClassAnswer,
   countClassAnswers,
+  findClassAnswer,
+  hasSessionEnded: (agendaId) => hasEventUpTo(agendaId, 'SESSION_ENDED', Number.MAX_SAFE_INTEGER),
 };
 
 const NOT_FOUND = 'Pergunta não encontrada.';
@@ -58,11 +66,15 @@ export async function answerTutorQuestion(
   seq: number,
   input: AnswerInput,
   deps: ClassAnswerDeps = defaultDeps,
-): Promise<AnswerResult> {
+): Promise<AnswerOutcome> {
   if (user.role !== Role.STUDENT) {
     throw new DomainError(403, 'Apenas alunos respondem às perguntas da tutora.');
   }
   const agenda = await deps.getAgenda(agendaId, user);
+  const agendaClosed = agenda.status === AgendaStatus.COMPLETED || agenda.status === AgendaStatus.CANCELLED;
+  if (agendaClosed || (await deps.hasSessionEnded(agendaId))) {
+    throw new DomainError(409, 'A aula já foi encerrada.', { code: 'CLASS_ENDED' });
+  }
   const payload = questionPayload(await deps.findEventBySeq(agendaId, seq, audiencesFor(user)));
   if (!payload) throw new DomainError(404, NOT_FOUND);
 
@@ -104,7 +116,9 @@ export async function answerTutorQuestion(
     classEventSeq: seq,
   });
   if (outcome === 'DUPLICATE') {
-    throw new DomainError(409, 'Você já respondeu esta pergunta.', { code: 'ALREADY_ANSWERED' });
+    // Segunda tentativa (duas abas, recarga): devolve o resultado da resposta já gravada.
+    const existing = await deps.findClassAnswer(agendaId, user.id, seq);
+    return { ...result, wasCorrect: existing?.wasCorrect ?? null, alreadyAnswered: true };
   }
   return result;
 }

@@ -97,7 +97,8 @@ export function reduceClassState(events: ClassEventDTO[]): ClassState {
   };
 }
 
-export type AnswerOutcome = AnswerResult | { alreadyAnswered: true };
+/** Resultado da resposta; `alreadyAnswered` quando o aluno já tinha respondido (o resultado é o da resposta gravada). */
+export type AnswerOutcome = AnswerResult & { alreadyAnswered?: true };
 export type StudentQuestion =
   | { seq: number; kind: 'MULTIPLE_CHOICE'; enunciation: string; options: { key: string; text: string }[] }
   | { seq: number; kind: 'OPEN'; text: string };

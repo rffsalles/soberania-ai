@@ -38,6 +38,7 @@ function interaction(o: Partial<MetricInteraction> = {}): MetricInteraction {
     createdAt: NOW,
     ragSourceBook: 'BD',
     ragSourcePage: 5,
+    classEventSeq: null,
     ...o,
   };
 }

@@ -13,7 +13,11 @@ export type MetricInteraction = {
   createdAt: Date;
   ragSourceBook: string | null;
   ragSourcePage: number | null;
+  /** Preenchido só na resposta do aluno a uma pergunta publicada na aula (evento da tutora); null no chat. */
+  classEventSeq: number | null;
 };
+
+const isEventAnswer = (i: MetricInteraction) => i.classEventSeq != null;
 
 const SCORE_MIN = 0;
 const SCORE_MAX = 100;
@@ -77,25 +81,37 @@ export function splitTopics(interactions: MetricInteraction[]): { mastered: stri
 }
 
 /**
- * Tempo de reflexão do aluno em cada turno após o primeiro: do fim da resposta anterior (`createdAt` anterior)
+ * Tempo de reflexão do aluno em cada turno do chat após o primeiro: do fim da resposta anterior (`createdAt` anterior)
  * até a chegada da mensagem atual (`createdAt` atual menos a latência da tutora nesta resposta),
  * limitado a 0..10 min por intervalo. Espera interações ordenadas por `createdAt`.
+ * Respostas a perguntas da aula (`classEventSeq`) não têm latência nem turno de chat e ficam de fora.
  */
 export function reflectionGapsSeconds(ordered: MetricInteraction[]): number[] {
+  const chat = ordered.filter((i) => !isEventAnswer(i));
   const gaps: number[] = [];
-  for (let i = 1; i < ordered.length; i += 1) {
-    const sentAt = ordered[i].createdAt.getTime() - (ordered[i].latencyMs ?? 0);
-    const seconds = (sentAt - ordered[i - 1].createdAt.getTime()) / MS_PER_SECOND;
+  for (let i = 1; i < chat.length; i += 1) {
+    const sentAt = chat[i].createdAt.getTime() - (chat[i].latencyMs ?? 0);
+    const seconds = (sentAt - chat[i - 1].createdAt.getTime()) / MS_PER_SECOND;
     gaps.push(Math.min(REFLECTION_CAP_SECONDS, Math.max(0, seconds)));
   }
   return gaps;
 }
 
-/** Interações do aluno cuja interação anterior (por `createdAt`) era um desafio socrático persistido. */
+/**
+ * Desafios respondidos: cada resposta a uma pergunta da aula (`classEventSeq`) conta uma vez; no chat, conta a
+ * mensagem cuja interação de chat anterior (por `createdAt`) terminou em desafio socrático. A resposta a uma
+ * pergunta da aula nunca é tratada como desafio lançado para a mensagem seguinte.
+ */
 export function countAnsweredChallenges(ordered: MetricInteraction[]): number {
   let answered = 0;
-  for (let i = 1; i < ordered.length; i += 1) {
-    if (ordered[i - 1].isSocraticChallenge) answered += 1;
+  let previousChat: MetricInteraction | null = null;
+  for (const i of ordered) {
+    if (isEventAnswer(i)) {
+      answered += 1;
+      continue;
+    }
+    if (previousChat?.isSocraticChallenge) answered += 1;
+    previousChat = i;
   }
   return answered;
 }

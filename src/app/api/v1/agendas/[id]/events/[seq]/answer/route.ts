@@ -21,7 +21,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!Number.isSafeInteger(seq) || seq < 1) throw new DomainError(404, 'Pergunta não encontrada.');
     const input = answerSchema.parse(await req.json());
     const result = await answerTutorQuestion(user, id, seq, input);
-    return NextResponse.json({ success: true, result }, { status: 201 });
+    // Resposta já gravada antes: 200 com o resultado dela; resposta nova: 201.
+    return NextResponse.json({ success: true, result }, { status: result.alreadyAnswered ? 200 : 201 });
   } catch (error) {
     return apiError(error);
   }

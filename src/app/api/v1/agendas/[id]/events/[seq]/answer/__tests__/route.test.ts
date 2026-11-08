@@ -47,16 +47,22 @@ describe('POST /api/v1/agendas/:id/events/:seq/answer', () => {
     expect(res.status).toBe(400);
   });
 
-  it('409 traz details.code', async () => {
-    mocks.answerTutorQuestion.mockRejectedValue(
-      new DomainError(409, 'Você já respondeu esta pergunta.', { code: 'ALREADY_ANSWERED' }),
-    );
+  it('resposta já gravada devolve 200 com alreadyAnswered e o resultado', async () => {
+    const result = { wasCorrect: false, correctKey: 'B', rationale: 'ok', alreadyAnswered: true };
+    mocks.answerTutorQuestion.mockResolvedValue(result);
+    const res = await post('4', { optionKey: 'B' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, result });
+  });
+
+  it('409 CLASS_ENDED traz details.code', async () => {
+    mocks.answerTutorQuestion.mockRejectedValue(new DomainError(409, 'A aula já foi encerrada.', { code: 'CLASS_ENDED' }));
     const res = await post('4', { optionKey: 'B' });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       success: false,
-      error: 'Você já respondeu esta pergunta.',
-      details: { code: 'ALREADY_ANSWERED' },
+      error: 'A aula já foi encerrada.',
+      details: { code: 'CLASS_ENDED' },
     });
   });
 
