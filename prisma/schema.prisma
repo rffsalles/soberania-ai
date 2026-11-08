@@ -13,6 +13,28 @@ enum Role {
   ADMIN
 }
 
+enum ClassEventType {
+  STEP_CHANGED
+  TUTOR_CARD
+  TUTOR_QUESTION
+  TEACHER_NOTE
+  SESSION_STARTED
+  SESSION_ENDED
+  TUTOR_SKIPPED
+}
+
+enum ClassEventActor {
+  TEACHER
+  TUTOR
+  SYSTEM
+}
+
+enum InferencePurpose {
+  CHAT
+  TUTOR_CARD
+  TUTOR_QUESTION
+}
+
 enum AgendaType {
   CLASSROOM
   STUDY_GROUP
@@ -168,12 +190,30 @@ model Agenda {
   lessonPlan         LessonPlan?          @relation(fields: [lessonPlanId], references: [id])
   studyGroupMessages StudyGroupMessage[]
   draftSubmissions   DraftSubmission[]
+  events             ClassEvent[]
 
   @@index([classId])
   @@index([teacherId])
   @@index([subjectId])
   @@index([assessmentId])
   @@map("agendas")
+}
+
+model ClassEvent {
+  id        String          @id @default(cuid())
+  agendaId  String
+  seq       Int
+  type      ClassEventType
+  stepIndex Int?
+  payload   Json
+  audience  String // "ALL" | "TEACHER" | <studentId>
+  createdBy ClassEventActor
+  createdAt DateTime        @default(now())
+
+  agenda Agenda @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  @@unique([agendaId, seq])
+  @@map("class_events")
 }
 
 // ==========================================
@@ -575,7 +615,7 @@ model DraftSubmission {
 }
 
 model InferenceLog {
-  id                   String      @id @default(cuid())
+  id                   String            @id @default(cuid())
   provider             String
   model                String
   ttftMs               Int
@@ -583,11 +623,14 @@ model InferenceLog {
   tokensPerSecond      Float
   promptTokens         Int
   completionTokens     Int
-  externalTrafficBytes Int         @default(0)
-  fallback             Boolean     @default(false)
+  externalTrafficBytes Int               @default(0)
+  fallback             Boolean           @default(false)
   agendaType           AgendaType?
-  createdAt            DateTime    @default(now())
+  agendaId             String?
+  purpose              InferencePurpose?
+  createdAt            DateTime          @default(now())
 
   @@index([createdAt])
+  @@index([agendaId])
   @@map("inference_logs")
 }
