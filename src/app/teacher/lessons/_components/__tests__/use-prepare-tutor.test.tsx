@@ -45,18 +45,68 @@ describe('usePrepareTutor', () => {
     expect(result.current.running).toBe(false);
     expect(result.current.summary).toEqual([
       'Tutora preparada: 2 de 3 passos com conteúdo pronto.',
-      'Passo 2: não foi possível preparar.',
+      'Passo 2: não foi possível preparar. x',
+    ]);
+  });
+
+  it.each(['CLASS_ENDED', 'NO_AGENDA', 'LESSON_NOT_PUBLISHED'])(
+    '409 %s de nível de aula para o laço e resume numa linha com a mensagem',
+    async (code) => {
+      const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+        const idx = JSON.parse(init!.body as string).stepIndex as number;
+        if (idx === 0) return ok(0);
+        return new Response(JSON.stringify({ success: false, error: 'A aula já foi encerrada.', details: { code } }), {
+          status: 409,
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const { result } = renderHook(() => usePrepareTutor('l1'));
+      await act(async () => {
+        await result.current.run(4);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.current.summary).toEqual(['Tutora não preparada: A aula já foi encerrada.']);
+    },
+  );
+
+  it('409 de passo (sem código de aula) segue para o próximo passo como ERROR', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const idx = JSON.parse(init!.body as string).stepIndex as number;
+      if (idx === 0) {
+        return new Response(JSON.stringify({ success: false, error: 'Conflito.', details: { code: 'OUTRO' } }), {
+          status: 409,
+        });
+      }
+      return ok(idx);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => usePrepareTutor('l1'));
+    await act(async () => {
+      await result.current.run(2);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.summary).toEqual([
+      'Tutora preparada: 1 de 2 passos com conteúdo pronto.',
+      'Passo 1: não foi possível preparar. Conflito.',
     ]);
   });
 });
 
 describe('prepareSummary', () => {
+  it('ABORTED vira uma linha só com a mensagem', () => {
+    expect(
+      prepareSummary([
+        { stepIndex: 0, status: 'READY', card: true, question: true, message: null },
+        { status: 'ABORTED', message: 'A aula publicada não tem agenda.' },
+      ]),
+    ).toEqual(['Tutora não preparada: A aula publicada não tem agenda.']);
+  });
   it('resume READY, BUSY e ERROR', () => {
     expect(
       prepareSummary([
         { stepIndex: 0, status: 'READY', card: true, question: true, message: null },
         { stepIndex: 1, status: 'BUSY', card: false, question: false, message: null },
-        { stepIndex: 2, status: 'ERROR' },
+        { stepIndex: 2, status: 'ERROR', message: null },
       ]),
     ).toEqual([
       'Tutora preparada: 1 de 3 passos com conteúdo pronto.',

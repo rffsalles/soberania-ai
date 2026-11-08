@@ -351,4 +351,22 @@ describe('LessonEditor', () => {
     expect((screen.getByRole('button', { name: 'Preparar tutora' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Salve as alterações antes de preparar a tutora.')).toBeTruthy();
   });
+
+  it('o resumo de "Preparar tutora" some quando o formulário fica com alterações', async () => {
+    const steps = [{ timeSeconds: 0, timeRange: '00:00-10:00', activity: 'Abertura', description: 'D' }];
+    vi.stubGlobal(
+      'fetch',
+      routeFetch({
+        [`POST ${BASE}/tutor-drafts`]: {
+          success: true,
+          step: { stepIndex: 0, status: 'READY', card: true, question: false, message: null },
+        },
+      }),
+    );
+    render(<LessonEditor lesson={makeLesson({ status: 'PUBLISHED', timeScript: steps })} onSaved={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Preparar tutora' }));
+    await waitFor(() => expect(screen.getByText('Tutora preparada: 1 de 1 passos com conteúdo pronto.')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Atividade da etapa 1'), { target: { value: 'Outra' } });
+    expect(screen.queryByText('Tutora preparada: 1 de 1 passos com conteúdo pronto.')).toBeNull();
+  });
 });

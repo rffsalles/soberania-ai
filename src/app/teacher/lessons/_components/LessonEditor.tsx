@@ -110,8 +110,12 @@ export function LessonEditor({ lesson, onSaved }: Props) {
   });
   const busy = generating || changing;
   const published = lesson.status === LESSON_STATUS.PUBLISHED;
-  const { run: prepareTutor, running: preparing, progress, summary } = usePrepareTutor(lesson.id);
+  const { run: prepareTutor, running: preparing, progress, summary, clearSummary } = usePrepareTutor(lesson.id);
   const canPrepare = published && !dirty && steps.length > 0 && !busy && !preparing;
+  // O resumo vale para o roteiro salvo; alterar o formulário o torna obsoleto.
+  React.useEffect(() => {
+    if (dirty) clearSummary();
+  }, [dirty, clearSummary]);
 
   // Compara o formulário com a aula salva; publicar só vale para o que está salvo.
   function isDirty(): boolean {
