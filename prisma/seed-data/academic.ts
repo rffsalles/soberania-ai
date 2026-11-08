@@ -101,6 +101,18 @@ export const DEMO_LIVE_TIME_SCRIPT: TimeScriptItem[] = [
     activity: 'Subqueries e operações de conjunto',
     description: 'Reescrever uma junção como subquery e combinar consultas com UNION e EXCEPT.',
   },
+  {
+    timeSeconds: 3000,
+    timeRange: '50-53 min',
+    activity: 'Exercício relâmpago: propriedades ACID',
+    description: 'Em dupla, apontar qual propriedade ACID impede que uma transação deixe alterações parciais.',
+  },
+  {
+    timeSeconds: 3180,
+    timeRange: '53-90 min',
+    activity: 'Intervalo',
+    description: 'Pausa para café e alongamento.',
+  },
 ];
 
 /** Demo lessons follow the schedule's own calendar rules, so the sync never conflicts with them. */
