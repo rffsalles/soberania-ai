@@ -381,6 +381,7 @@ model LessonPlan {
   courseSchedule CourseSchedule      @relation(fields: [courseScheduleId], references: [id], onDelete: Cascade)
   agenda         Agenda?
   chapters       LessonPlanChapter[]
+  tutorDrafts    TutorStepDraft[]
 
   @@index([courseScheduleId])
   @@map("lesson_plans")
@@ -541,6 +542,9 @@ model PedagogicalMinute {
   @@map("pedagogical_minutes")
 }
 
+// ATENÇÃO: o índice único parcial `student_interactions_class_event_answer_uq`
+// (agendaId, studentId, classEventSeq) WHERE classEventSeq IS NOT NULL existe só no SQL da
+// migration. `prisma migrate dev` pode gerar um DROP INDEX espúrio: remova-o da migration gerada.
 model StudentInteraction {
   id                  String          @id @default(cuid())
   agendaId            String
@@ -556,6 +560,7 @@ model StudentInteraction {
   agendaType          AgendaType      @default(CLASSROOM)
   guardrailBlocked    Boolean         @default(false)
   latencyMs           Int?
+  classEventSeq       Int? // seq do TUTOR_QUESTION respondido (resposta a evento da aula)
   createdAt           DateTime        @default(now())
 
   agenda  Agenda @relation(fields: [agendaId], references: [id], onDelete: Cascade)
@@ -636,4 +641,21 @@ model InferenceLog {
   @@index([createdAt])
   @@index([agendaId])
   @@map("inference_logs")
+}
+
+model TutorStepDraft {
+  id           String    @id @default(cuid())
+  lessonPlanId String
+  stepIndex    Int
+  stepHash     String // sha256 de activity + description + socraticQuestion + capítulos da aula
+  card         Json? // payload de TUTOR_CARD já validado
+  question     Json? // payload de TUTOR_QUESTION já validado
+  calls        Int       @default(0) // chamadas ao modelo gastas neste passo (teto 2)
+  claimedAt    DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  lessonPlan LessonPlan @relation(fields: [lessonPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonPlanId, stepIndex])
+  @@map("tutor_step_drafts")
 }
