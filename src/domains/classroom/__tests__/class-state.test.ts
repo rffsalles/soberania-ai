@@ -5,6 +5,7 @@ import {
   isTutorMuted,
   reduceStudentView,
   reduceClassState,
+  reduceTeacherView,
   sessionPhase,
   stepLabel,
   tutorContentForStep,
@@ -94,6 +95,46 @@ describe('stepLabel', () => {
     it('ENDED não tem passo', () => {
       const es = [ev(1, 'SESSION_STARTED'), step(2, 1), ev(3, 'SESSION_ENDED')];
       expect(reduceStudentView(es, {}).stepIndex).toBeNull();
+    });
+  });
+
+  describe('reduceTeacherView', () => {
+    const started = [ev(1, 'SESSION_STARTED'), ev(2, 'STEP_CHANGED', 0, { activity: 'A' })];
+    const openQ = ev(3, 'TUTOR_QUESTION', 0, { kind: 'OPEN', text: 'Por quê?', origin: 'TEACHER' });
+    it('IDLE antes de iniciar', () => {
+      const v = reduceTeacherView([], [], 3);
+      expect(v.status).toBe('IDLE');
+      expect(v.canPublishNow).toBe(false);
+    });
+    it('GENERATING com só a pergunta do professor', () => {
+      const v = reduceTeacherView([...started, openQ], [], 3);
+      expect(v.status).toBe('GENERATING');
+      expect(v.questionSeq).toBe(3);
+      expect(v.canPublishNow).toBe(false);
+    });
+    it('READY com skip', () => {
+      const sk = ev(3, 'TUTOR_SKIPPED', 0, { reason: 'NO_MATERIAL', kind: 'BOTH' });
+      const v = reduceTeacherView([...started, sk], [], 3);
+      expect(v.status).toBe('READY');
+      expect(v.skipped).toEqual({ reason: 'NO_MATERIAL', kind: 'BOTH' });
+    });
+    it('MUTED com nota de passo; canPublishNow só sem conteúdo', () => {
+      const note = ev(3, 'TEACHER_NOTE', 0, { tutor: 'MUTE', scope: 'STEP' });
+      const v = reduceTeacherView([...started, note], [], 3);
+      expect(v.status).toBe('MUTED');
+      expect(v.canPublishNow).toBe(true);
+    });
+    it('nextStepMuted e nextStepIndex', () => {
+      const note = ev(3, 'TEACHER_NOTE', 1, { tutor: 'MUTE', scope: 'STEP' });
+      expect(reduceTeacherView([...started, note], [], 3)).toMatchObject({ nextStepIndex: 1, nextStepMuted: true });
+      expect(reduceTeacherView([...started, ev(3, 'STEP_CHANGED', 2)], [], 3).nextStepIndex).toBeNull();
+    });
+    it('pulse casado por questionSeq', () => {
+      const pulse = [
+        { seq: 9, stepIndex: 1, kind: 'OPEN' as const, answered: 1, correct: null },
+        { seq: 3, stepIndex: 0, kind: 'OPEN' as const, answered: 2, correct: null },
+      ];
+      expect(reduceTeacherView([...started, openQ], pulse, 3).pulse).toEqual(pulse[1]);
     });
   });
 });

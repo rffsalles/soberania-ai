@@ -33,6 +33,8 @@ vi.mock('@/components/classroom/use-class-events', () => ({
   useClassEvents: () => ({ events: [], status: mocks.status, lastSeq: mocks.lastSeq, state: mocks.state }),
 }));
 
+vi.mock('@/components/classroom/use-class-pulse', () => ({ useClassPulse: () => ({ pulse: [] }) }));
+
 import LiveClassPage from '../LiveClassPage';
 
 const script = [
@@ -245,5 +247,30 @@ describe('LiveClassPage', () => {
     mocks.status = 'polling';
     render(<LiveClassPage agendaId="a1" />);
     expect(screen.getByRole('status').textContent).toContain('Atualizando');
+  });
+
+  it('mostra a coluna da tutora com a aula em andamento', () => {
+    mocks.state = running(0);
+    render(<LiveClassPage agendaId="a1" />);
+    expect(screen.getByRole('region', { name: 'Tutora' })).toBeTruthy();
+  });
+
+  it('aviso do servidor aparece em role=status na fase ENDED', async () => {
+    mocks.state = running(0);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true, events: [], warning: 'As atas não foram geradas.' }),
+      })
+    );
+    const { rerender } = render(<LiveClassPage agendaId="a1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar aula' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    mocks.state = { ...base, phase: 'ENDED' };
+    rerender(<LiveClassPage agendaId="a1" />);
+    await waitFor(() => {
+      expect(screen.getAllByRole('status').map((e) => e.textContent)).toContain('As atas não foram geradas.');
+    });
   });
 });

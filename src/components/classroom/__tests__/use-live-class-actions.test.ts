@@ -117,4 +117,22 @@ describe('useLiveClassActions', () => {
     act(() => result.current.clearError());
     expect(result.current.error).toBeNull();
   });
+
+  it('TEACHER_NOTE vai com o corpo exato e warning vem do 201', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, events: [{ seq: 7 }], warning: 'Atas falharam.' }), { status: 201 })
+    );
+    const { result } = renderHook(() => useLiveClassActions('a1'));
+    const cmd = { type: 'TEACHER_NOTE', stepIndex: 2, payload: { tutor: 'MUTE', scope: 'STEP' } } as const;
+    await act(async () => {
+      await result.current.send(cmd);
+    });
+    expect((fetchMock.mock.calls[0][1] as { body: string }).body).toBe(JSON.stringify(cmd));
+    expect(result.current.warning).toBe('Atas falharam.');
+    fetchMock.mockResolvedValue(okResponse());
+    await act(async () => {
+      await result.current.send({ type: 'SESSION_STARTED' });
+    });
+    expect(result.current.warning).toBeNull();
+  });
 });

@@ -6,24 +6,26 @@ import { AgendaNotFound } from '@/components/agendas/agenda-not-found';
 import { useAgenda } from '@/components/agendas/use-agenda';
 import { useAgendaLesson } from '@/components/classroom/use-agenda-lesson';
 import { useClassEvents } from '@/components/classroom/use-class-events';
+import { useClassPulse } from '@/components/classroom/use-class-pulse';
 import { useLiveClassActions } from '@/components/classroom/use-live-class-actions';
 import { LiveStatusIndicator } from '@/components/classroom/live-status-indicator';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { reduceTeacherView } from '@/domains/classroom/class-state';
 import { liveControls } from '@/domains/classroom/live-controls';
 import { ROUTES } from '@/lib/constants/routes';
 import { LessonScriptPanel } from './LessonScriptPanel';
+import { TutorPanel } from './TutorPanel';
 
 const AWAIT_EVENT_TIMEOUT_MS = 6000;
 
-const CONFIRM_END =
-  'Encerrar a aula? A turma verá a aula como encerrada e as atas dos alunos serão geradas.';
+const CONFIRM_END = 'Encerrar a aula? A turma verá a aula como encerrada e as atas dos alunos serão geradas.';
 
 export default function LiveClassPage({ agendaId }: { agendaId: string }) {
   const { agenda, isLoading, error: agendaError, notFound } = useAgenda(agendaId);
   const { lesson, isLoading: lessonLoading } = useAgendaLesson(agendaId);
-  const { state, status, lastSeq } = useClassEvents(agendaId);
-  const { send, pending, error, clearError } = useLiveClassActions(agendaId);
+  const { events, state, status, lastSeq } = useClassEvents(agendaId);
+  const { send, pending, error, warning, clearError } = useLiveClassActions(agendaId);
   const [awaitedSeq, setAwaitedSeq] = React.useState<number | null>(null);
 
   // Após o POST, mantém os controles travados até o evento chegar pelo stream/polling (ou 6 s).
@@ -52,8 +54,11 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
   }, [state.phase, state.currentStepIndex, clearError]);
 
   const script = lesson?.timeScript ?? [];
+  const baseView = reduceTeacherView(events, [], script.length);
+  const { pulse } = useClassPulse(agendaId, lastSeq, baseView.questionSeq !== null);
   const controls = liveControls(state, script.length, pending !== null || waiting);
   const busy = pending !== null || waiting;
+  const view = reduceTeacherView(events, pulse, script.length);
 
   if (isLoading || !agenda) {
     return (
@@ -100,11 +105,18 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
       {header}
 
       {state.phase === 'ENDED' ? (
-        <div className="flex items-center gap-3">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Aula encerrada.</p>
-          <Link href={ROUTES.REPORTS} className="text-sm underline text-brand-orange">
-            Ver relatórios
-          </Link>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Aula encerrada.</p>
+            <Link href={ROUTES.REPORTS} className="text-sm underline text-brand-orange">
+              Ver relatórios
+            </Link>
+          </div>
+          {warning && (
+            <p role="status" className="text-sm text-amber-700 dark:text-amber-400">
+              {warning}
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -120,7 +132,11 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
                   variant="outline"
                   disabled={controls.prevIndex === null}
                   onClick={() =>
-                    controls.prevIndex !== null && void run({ type: 'STEP_CHANGED', stepIndex: controls.prevIndex })
+                    controls.prevIndex !== null &&
+                    void run({
+                      type: 'STEP_CHANGED',
+                      stepIndex: controls.prevIndex,
+                    })
                   }
                 >
                   Anterior
@@ -130,7 +146,11 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
                   variant="outline"
                   disabled={controls.nextIndex === null}
                   onClick={() =>
-                    controls.nextIndex !== null && void run({ type: 'STEP_CHANGED', stepIndex: controls.nextIndex })
+                    controls.nextIndex !== null &&
+                    void run({
+                      type: 'STEP_CHANGED',
+                      stepIndex: controls.nextIndex,
+                    })
                   }
                 >
                   Próximo
@@ -170,6 +190,14 @@ export default function LiveClassPage({ agendaId }: { agendaId: string }) {
             />
           )}
         </section>
+        <aside className="lg:col-span-5">
+          <TutorPanel
+            view={view}
+            nextActivity={view.nextStepIndex !== null ? (script[view.nextStepIndex]?.activity ?? null) : null}
+            disabled={busy || state.phase !== 'RUNNING'}
+            onNote={(cmd) => void run(cmd)}
+          />
+        </aside>
       </div>
     </main>
   );

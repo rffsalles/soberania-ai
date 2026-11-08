@@ -3,7 +3,14 @@
 import { useCallback, useRef, useState } from 'react';
 import { API_ROUTES } from '@/lib/constants/routes';
 
+export type TutorNoteCommand = {
+  type: 'TEACHER_NOTE';
+  stepIndex?: number;
+  payload: { tutor: 'MUTE' | 'UNMUTE' | 'PUBLISH_NOW'; scope: 'STEP' | 'LESSON' };
+};
+
 export type TeacherClassCommand =
+  | TutorNoteCommand
   | { type: 'SESSION_STARTED' }
   | { type: 'STEP_CHANGED'; stepIndex: number }
   | { type: 'SESSION_ENDED' };
@@ -13,6 +20,7 @@ export const LIVE_ACTION_ERROR = 'Não foi possível registrar a ação. Tente n
 export function useLiveClassActions(agendaId: string) {
   const [pending, setPending] = useState<TeacherClassCommand['type'] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   const send = useCallback(
@@ -22,6 +30,7 @@ export function useLiveClassActions(agendaId: string) {
       inFlight.current = true;
       setPending(cmd.type);
       setError(null);
+      setWarning(null);
       try {
         const res = await fetch(`${API_ROUTES.AGENDAS}/${encodeURIComponent(agendaId)}/events`, {
           method: 'POST',
@@ -33,6 +42,7 @@ export function useLiveClassActions(agendaId: string) {
           setError(typeof body?.error === 'string' ? body.error : LIVE_ACTION_ERROR);
           return null;
         }
+        setWarning(typeof body.warning === 'string' ? body.warning : null);
         const events: unknown = body.events;
         return Array.isArray(events)
           ? events.reduce<number>((max, e) => (typeof e?.seq === 'number' ? Math.max(max, e.seq) : max), 0)
@@ -50,5 +60,5 @@ export function useLiveClassActions(agendaId: string) {
 
   const clearError = useCallback(() => setError(null), []);
 
-  return { send, pending, error, clearError };
+  return { send, pending, error, warning, clearError };
 }

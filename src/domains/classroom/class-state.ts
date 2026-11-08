@@ -1,4 +1,11 @@
-import type { AnswerResult, ClassEventDTO, TutorCardPayload } from './class-event-schema';
+import type {
+  AnswerResult,
+  ClassEventDTO,
+  PulseEntry,
+  TutorCardPayload,
+  TutorQuestionPayload,
+  TutorSkippedPayload,
+} from './class-event-schema';
 
 export type SessionPhase = 'NOT_STARTED' | 'RUNNING' | 'ENDED';
 export type TutorContent = {
@@ -135,5 +142,64 @@ export function reduceStudentView(events: ClassEventDTO[], answers: Record<numbe
     card: content.card ? (content.card.payload as TutorCardPayload) : null,
     question,
     answer: question ? (answers[question.seq] ?? null) : null,
+  };
+}
+
+export type TeacherTutorView = {
+  stepIndex: number | null;
+  status: 'IDLE' | 'MUTED' | 'GENERATING' | 'READY';
+  card: TutorCardPayload | null;
+  question: TutorQuestionPayload | null;
+  questionSeq: number | null;
+  skipped: TutorSkippedPayload | null;
+  canPublishNow: boolean;
+  nextStepIndex: number | null;
+  nextStepMuted: boolean;
+  lessonMuted: boolean;
+  pulse: PulseEntry | null;
+};
+
+/** O que o professor vê na coluna da tutora: conteúdo do passo atual, controles e pulso da turma. */
+export function reduceTeacherView(events: ClassEventDTO[], pulse: PulseEntry[], stepCount: number): TeacherTutorView {
+  const phase = sessionPhase(events);
+  const step = currentStep(events);
+  const muteAll = lessonMuted(events);
+  const idx = step?.stepIndex ?? null;
+  if (phase !== 'RUNNING' || idx === null) {
+    return {
+      stepIndex: null,
+      status: 'IDLE',
+      card: null,
+      question: null,
+      questionSeq: null,
+      skipped: null,
+      canPublishNow: false,
+      nextStepIndex: null,
+      nextStepMuted: false,
+      lessonMuted: muteAll,
+      pulse: null,
+    };
+  }
+  const content = tutorContentForStep(events, idx);
+  const muted = isTutorMuted(events, idx);
+  const status: TeacherTutorView['status'] = muted
+    ? 'MUTED'
+    : content.card || content.skipped
+      ? 'READY'
+      : 'GENERATING';
+  const next = idx + 1 < stepCount ? idx + 1 : null;
+  const questionSeq = content.question?.seq ?? null;
+  return {
+    stepIndex: idx,
+    status,
+    card: content.card ? (content.card.payload as TutorCardPayload) : null,
+    question: content.question ? (content.question.payload as TutorQuestionPayload) : null,
+    questionSeq,
+    skipped: content.skipped ? (content.skipped.payload as TutorSkippedPayload) : null,
+    canPublishNow: !content.card && !content.question && !content.skipped,
+    nextStepIndex: next,
+    nextStepMuted: next !== null && isTutorMuted(events, next),
+    lessonMuted: muteAll,
+    pulse: questionSeq === null ? null : (pulse.find((p) => p.seq === questionSeq) ?? null),
   };
 }
