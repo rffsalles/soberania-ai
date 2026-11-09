@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { requireUser } from '@/lib/auth/request-user';
 import { apiError } from '@/lib/api/api-error';
 import { DomainError } from '@/lib/api/domain-error';
@@ -6,6 +6,8 @@ import { postStudyGroupMessageSchema } from '@/lib/validators/study-group.valida
 import { checkStalemate, listMessages, postMessage } from '@/domains/agendas/services/study-group-service';
 
 const HTTP_BAD_REQUEST = 400;
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,10 +21,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
     // Intervenção por silêncio é best-effort: falha não impede a leitura.
     const messages = await listMessages(user, id, since);
-    // Sem await: a resposta não espera o LLM; a intervenção aparece no próximo polling.
-    void checkStalemate(id, user, new Date()).catch((err) => {
-      console.warn('[study-group] falha ao verificar silêncio do grupo', err);
-    });
+    // after(): roda depois de enviar a resposta; a intervenção aparece no próximo polling.
+    after(() =>
+      checkStalemate(id, user, new Date()).catch((err) => {
+        console.warn('[study-group] falha ao verificar silêncio do grupo', err);
+      })
+    );
     return NextResponse.json({ success: true, messages });
   } catch (error) {
     return apiError(error);
