@@ -16,6 +16,27 @@ function messagesUrl(agendaId: string): string {
   return `${API_ROUTES.AGENDAS}/${encodeURIComponent(agendaId)}/messages`;
 }
 
+const SEQ_STORAGE_PREFIX = 'study-group-seq:';
+
+/** Último seq de GROUP_MESSAGE visto neste navegador para a agenda (0 se não houver ou o storage falhar). */
+function readKnownSeq(agendaId: string): number {
+  try {
+    const raw = window.sessionStorage.getItem(`${SEQ_STORAGE_PREFIX}${agendaId}`);
+    const n = Number.parseInt(raw ?? '', 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeKnownSeq(agendaId: string, seq: number): void {
+  try {
+    window.sessionStorage.setItem(`${SEQ_STORAGE_PREFIX}${agendaId}`, String(seq));
+  } catch {
+    // storage indisponível: o próximo mount apenas recebe o replay completo
+  }
+}
+
 /** Mescla por id e mantém a ordem cronológica (o POST pode trazer mensagens mais novas que as do polling). */
 function mergeById(current: MessageDTO[], incoming: MessageDTO[]): MessageDTO[] {
   const seen = new Set(current.map((m) => m.id));
@@ -48,7 +69,9 @@ export function useStudyGroupMessages(
   const baselineReady = React.useRef(false);
   const groupSeqRef = React.useRef(0);
   const stalemateEnabled = options.stalemateEnabled ?? false;
-  const { events } = useClassEvents(agendaId);
+  // Só eventos novos desde a última visita: o histórico vem do GET de mensagens, não do replay do canal.
+  const knownSeq = React.useMemo(() => (typeof window === 'undefined' ? 0 : readKnownSeq(agendaId)), [agendaId]);
+  const { events } = useClassEvents(agendaId, { after: knownSeq });
 
   /**
    * Aplica mensagens recebidas. Só o polling avança o cursor `lastCreatedAt`: o POST devolve a resposta da tutora,
@@ -126,6 +149,9 @@ export function useStudyGroupMessages(
     [events],
   );
   groupSeqRef.current = groupSeq;
+  React.useEffect(() => {
+    if (groupSeq > knownSeq) writeKnownSeq(agendaId, groupSeq);
+  }, [agendaId, groupSeq, knownSeq]);
   React.useEffect(() => {
     if (!baselineReady.current || groupSeq === prevGroupSeq.current) return;
     prevGroupSeq.current = groupSeq;

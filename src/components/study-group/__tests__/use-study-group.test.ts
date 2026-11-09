@@ -6,8 +6,14 @@ import type { ClassEventDTO } from '@/domains/classroom/class-event-schema';
 import { useStudyGroupMessages } from '../use-study-group';
 
 let mockEvents: ClassEventDTO[] = [];
+const useClassEventsMock = vi.fn((_agendaId: string, _options?: { after?: number }) => ({
+  events: mockEvents,
+  status: 'live',
+  lastSeq: 0,
+  state: {},
+}));
 vi.mock('@/components/classroom/use-class-events', () => ({
-  useClassEvents: () => ({ events: mockEvents, status: 'live', lastSeq: 0, state: {} }),
+  useClassEvents: (agendaId: string, options?: { after?: number }) => useClassEventsMock(agendaId, options),
 }));
 
 function ev(seq: number, type: ClassEventDTO['type'] = 'GROUP_MESSAGE'): ClassEventDTO {
@@ -23,6 +29,8 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200
 describe('useStudyGroupMessages', () => {
   beforeEach(() => {
     mockEvents = [];
+    useClassEventsMock.mockClear();
+    window.sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -119,6 +127,25 @@ describe('useStudyGroupMessages', () => {
     mockEvents = [ev(1), ev(2), ev(3), ev(4)];
     await act(async () => rerender());
     await waitFor(() => expect(gets(f)).toHaveLength(2));
+  });
+
+  it('passa ao canal o último seq de GROUP_MESSAGE conhecido (after) e não recarrega no mount', async () => {
+    const f = vi.fn(async () => json({ success: true, messages: [msg('m0', '2026-10-20T12:00:00.000Z')] }));
+    vi.stubGlobal('fetch', f);
+    const first = renderHook(() => useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }));
+    await waitFor(() => expect(first.result.current.isLoading).toBe(false));
+    expect(useClassEventsMock).toHaveBeenLastCalledWith('g1', { after: 0 });
+    mockEvents = [ev(7)];
+    await act(async () => first.rerender());
+    await waitFor(() => expect(gets(f)).toHaveLength(2));
+    first.unmount();
+
+    mockEvents = [];
+    f.mockClear();
+    const second = renderHook(() => useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }));
+    await waitFor(() => expect(second.result.current.isLoading).toBe(false));
+    expect(useClassEventsMock).toHaveBeenLastCalledWith('g1', { after: 7 });
+    expect(gets(f)).toHaveLength(1);
   });
 
   it('sem eventos e sem stalemateEnabled, o relógio não gera GET (sem polling)', async () => {
