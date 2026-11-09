@@ -129,6 +129,28 @@ export function relevantChunks(
   );
 }
 
+/** Uma linha por passo para calibrar TUTOR_MIN_SIMILARITY com embeddings reais (a suíte de evals não expõe a similaridade). */
+function logStepRetrieval(stepIndex: number, found: DidacticChunk[], kept: number): void {
+  const mode = found.some((c) => c.similarityScore != null) ? 'vector' : 'lexical';
+  const sims = found.map((c) => c.similarityScore).filter((s): s is number => s != null);
+  const round = (n: number) => Math.round(n * 1000) / 1000;
+  console.info(
+    `[tutor-step] ${JSON.stringify({
+      stepIndex,
+      mode,
+      bestSimilarity: sims.length > 0 ? round(Math.max(...sims)) : null,
+      before: found.length,
+      after: kept,
+      cut: mode === 'vector' ? TUTOR_MIN_SIMILARITY : TUTOR_MIN_TERM_COVERAGE,
+      chunks: found.map((c) => ({
+        sim: c.similarityScore != null ? round(c.similarityScore) : null,
+        lex: c.bm25Score != null,
+        chapter: c.chapter.slice(0, 40),
+      })),
+    })}`,
+  );
+}
+
 function missingKind(cardMissing: boolean, questionMissing: boolean): Failure['kind'] | null {
   if (cardMissing) return questionMissing ? 'BOTH' : 'CARD';
   return questionMissing ? 'QUESTION' : null;
@@ -182,6 +204,7 @@ export async function produceStepContent(
     topK: TUTOR_TOP_K,
   });
   const chunks: DidacticChunk[] = relevantChunks(found.chunks, item, searchQuery, stepIndex);
+  logStepRetrieval(stepIndex, found.chunks, chunks.length);
   if (chunks.length === 0) {
     // O que o rascunho já tinha continua valendo; noMaterial fala só do que falta.
     return finish({ status: 'DONE', noMaterial: true, card, question, failure: null });
