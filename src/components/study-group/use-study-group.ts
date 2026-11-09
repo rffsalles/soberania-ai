@@ -44,7 +44,9 @@ export function useStudyGroupMessages(
   const pollInFlight = React.useRef(false);
   const pendingReload = React.useRef(false);
   const loadRef = React.useRef<() => void>(() => {});
-  const prevGroupSeq = React.useRef<number | null>(null);
+  const prevGroupSeq = React.useRef<number>(0);
+  const baselineReady = React.useRef(false);
+  const groupSeqRef = React.useRef(0);
   const stalemateEnabled = options.stalemateEnabled ?? false;
   const { events } = useClassEvents(agendaId);
 
@@ -70,7 +72,8 @@ export function useStudyGroupMessages(
     lastCreatedAt.current = null;
     pollInFlight.current = false;
     pendingReload.current = false;
-    prevGroupSeq.current = null;
+    prevGroupSeq.current = 0;
+    baselineReady.current = false;
     setMessages([]);
     setIsLoading(true);
 
@@ -95,6 +98,11 @@ export function useStudyGroupMessages(
         if (!controller.signal.aborted) setError(LOAD_ERROR);
       } finally {
         pollInFlight.current = false;
+        if (!controller.signal.aborted && !baselineReady.current) {
+          // Linha de base: o que o canal já entregou (replay) até a primeira carga terminar não recarrega de novo.
+          baselineReady.current = true;
+          prevGroupSeq.current = groupSeqRef.current;
+        }
         if (!controller.signal.aborted) setIsLoading(false);
         if (pendingReload.current && !controller.signal.aborted) {
           pendingReload.current = false;
@@ -111,15 +119,17 @@ export function useStudyGroupMessages(
     };
   }, [agendaId, apply]);
 
-  // Recarrega quando chega um GROUP_MESSAGE novo. O primeiro valor observado (replay do canal) é só a linha de base.
+  // Recarrega quando chega um GROUP_MESSAGE novo. Mudanças antes da primeira carga terminar são ignoradas:
+  // ao terminar, o valor atual vira a linha de base.
   const groupSeq = React.useMemo(
     () => events.reduce((max, e) => (e.type === 'GROUP_MESSAGE' && e.seq > max ? e.seq : max), 0),
     [events],
   );
+  groupSeqRef.current = groupSeq;
   React.useEffect(() => {
-    const prev = prevGroupSeq.current;
+    if (!baselineReady.current || groupSeq === prevGroupSeq.current) return;
     prevGroupSeq.current = groupSeq;
-    if (prev !== null && groupSeq !== prev) loadRef.current();
+    loadRef.current();
   }, [groupSeq]);
 
   // Silêncio do grupo: a checagem roda no servidor dentro do GET; o cliente só o dispara no instante devido.
@@ -127,7 +137,6 @@ export function useStudyGroupMessages(
     for (let i = messages.length - 1; i >= 0; i--) if (!messages[i].id.startsWith(OPTIMISTIC_PREFIX)) return messages[i];
     return null;
   }, [messages]);
-  const lastRealId = lastReal?.id ?? null;
   const authorId = author?.id ?? null;
   React.useEffect(() => {
     if (!stalemateEnabled || !authorId || !lastReal) return;
@@ -144,8 +153,7 @@ export function useStudyGroupMessages(
     return () => {
       if (timer) clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reage à troca da última mensagem real (id), não ao objeto
-  }, [stalemateEnabled, authorId, lastRealId, agendaId]);
+  }, [stalemateEnabled, authorId, lastReal, agendaId]);
 
   const send = React.useCallback(
     async (content: string): Promise<boolean> => {

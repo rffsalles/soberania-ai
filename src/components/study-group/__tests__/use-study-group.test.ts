@@ -91,16 +91,34 @@ describe('useStudyGroupMessages', () => {
     expect(decodeURIComponent(String(gets(f)[1][0]))).toContain('since=2026-10-20T12:00:00.000Z');
   });
 
-  it('primeiro valor de groupSeq não dispara recarga', async () => {
-    mockEvents = [ev(3)];
-    const f = vi.fn(async () => json({ success: true, messages: [] }));
+  it('replay de GROUP_MESSAGE durante a primeira carga é só linha de base; evento novo depois recarrega', async () => {
+    let release: (r: Response) => void = () => {};
+    let n = 0;
+    const f = vi.fn(() => {
+      n += 1;
+      if (n === 1) return new Promise<Response>((r) => (release = r));
+      return Promise.resolve(json({ success: true, messages: [] }));
+    });
     vi.stubGlobal('fetch', f);
-    const { result } = renderHook(() => useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }));
+    const { result, rerender } = renderHook(() => useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    mockEvents = [ev(1), ev(2), ev(3)];
+    await act(async () => rerender());
+    await act(async () => {
+      release(json({ success: true, messages: [] }));
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(async () => {
       await Promise.resolve();
     });
     expect(gets(f)).toHaveLength(1);
+
+    mockEvents = [ev(1), ev(2), ev(3), ev(4)];
+    await act(async () => rerender());
+    await waitFor(() => expect(gets(f)).toHaveLength(2));
   });
 
   it('sem eventos e sem stalemateEnabled, o relógio não gera GET (sem polling)', async () => {
@@ -120,29 +138,28 @@ describe('useStudyGroupMessages', () => {
     let n = 0;
     const f = vi.fn(() => {
       n += 1;
-      if (n === 1) return new Promise<Response>((r) => (release = r));
+      if (n === 2) return new Promise<Response>((r) => (release = r));
       return Promise.resolve(json({ success: true, messages: [] }));
     });
     vi.stubGlobal('fetch', f);
-    const { rerender } = renderHook(() => useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    const { result, rerender } = renderHook(() => useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
     mockEvents = [ev(4)];
     await act(async () => rerender());
+    expect(f).toHaveBeenCalledTimes(2);
     mockEvents = [ev(4), ev(5)];
     await act(async () => rerender());
     mockEvents = [ev(4), ev(5), ev(6)];
     await act(async () => rerender());
-    expect(f).toHaveBeenCalledTimes(1);
+    expect(f).toHaveBeenCalledTimes(2);
     await act(async () => {
       release(json({ success: true, messages: [] }));
     });
-    await waitFor(() => expect(f).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(3));
     await act(async () => {
       await Promise.resolve();
     });
-    expect(f).toHaveBeenCalledTimes(2);
+    expect(f).toHaveBeenCalledTimes(3);
   });
 
   describe('temporizador de silêncio', () => {
@@ -172,6 +189,24 @@ describe('useStudyGroupMessages', () => {
       expect(gets(f)).toHaveLength(2);
       await advanceTo(T + 362_000);
       expect(gets(f)).toHaveLength(3);
+    });
+
+    it('desmontar cancela o temporizador: sem GET depois do prazo', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: false });
+      vi.setSystemTime(T + 1000);
+      const f = vi.fn(async () => json({ success: true, messages: [msg('m0', new Date(T).toISOString())] }));
+      vi.stubGlobal('fetch', f);
+      const { unmount } = renderHook(() =>
+        useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }, { stalemateEnabled: true }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(gets(f)).toHaveLength(1);
+      await advanceTo(T + 2000);
+      unmount();
+      await advanceTo(T + 302_000);
+      expect(gets(f)).toHaveLength(1);
     });
 
     it('última mensagem da IA não arma temporizador', async () => {
