@@ -43,6 +43,7 @@ function makeMessage(over: Partial<StudyGroupMessageRecord> & { id: string }): S
 function makeDeps(agenda: AgendaDTO, seed: StudyGroupMessageRecord[] = []) {
   const store = [...seed];
   let seq = 0;
+  const failures: Date[] = [];
   const chat = vi.fn<StudyGroupDeps['chatWithTutor']>(async () => ({ reply: 'E se separarmos o cliente?', fallback: false }));
   const deps: StudyGroupDeps = {
     now: () => NOW,
@@ -68,9 +69,22 @@ function makeDeps(agenda: AgendaDTO, seed: StudyGroupMessageRecord[] = []) {
       async findLastMessage() {
         return store.length ? store[store.length - 1] : null;
       },
+      async createMessageIfLast(data, expectedLastId) {
+        const last = store.length ? store[store.length - 1] : null;
+        if (!last || last.id !== expectedLastId) return null;
+        return deps.repo.createMessage(data);
+      },
+    },
+    stalemate: {
+      async lastFailureAt() {
+        return failures.length ? failures[failures.length - 1] : null;
+      },
+      async recordFailure() {
+        failures.push(deps.now());
+      },
     },
   };
-  return { deps, chat, store };
+  return { deps, chat, store, failures };
 }
 
 describe('study-group-service', () => {
@@ -91,12 +105,13 @@ describe('study-group-service', () => {
     expect(store.filter((m) => m.isAi)).toHaveLength(0);
   });
 
-  it('intervenção por silêncio com o provedor em fallback não grava nada', async () => {
-    const last = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - (STUDY_GROUP_STALEMATE_MINUTES + 1) * MINUTE) });
-    const { deps, chat, store } = makeDeps(makeAgenda(), [last]);
+  it('intervenção por silêncio com o provedor em fallback registra falha e não grava mensagem da IA', async () => {
+    const last = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - (STUDY_GROUP_STALEMATE_MINUTES + 1) * MINUTE) });
+    const { deps, chat, store, failures } = makeDeps(makeAgenda(), [last]);
     chat.mockResolvedValue({ reply: 'aviso', fallback: true });
     expect(await checkStalemate(AGENDA_ID, user, NOW, deps)).toBeNull();
-    expect(store).toHaveLength(1);
+    expect(store.filter((m) => m.isAi)).toHaveLength(0);
+    expect(failures).toHaveLength(1);
   });
 
   it('sem menção não chama a tutora', async () => {
@@ -109,7 +124,7 @@ describe('study-group-service', () => {
   });
 
   it('checkStalemate cria uma intervenção e a segunda chamada não cria outra', async () => {
-    const old = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - (STUDY_GROUP_STALEMATE_MINUTES + 1) * MINUTE) });
+    const old = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - (STUDY_GROUP_STALEMATE_MINUTES + 1) * MINUTE) });
     const { deps, chat, store } = makeDeps(makeAgenda(), [old]);
     const first = await checkStalemate(AGENDA_ID, user, NOW, deps);
     expect(first).toMatchObject({ isAi: true, authorId: null });
@@ -120,10 +135,10 @@ describe('study-group-service', () => {
   });
 
   it('checkStalemate não age com mensagem recente, grupo vazio ou agenda não LIVE', async () => {
-    const recent = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - MINUTE) });
+    const recent = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - MINUTE) });
     expect(await checkStalemate(AGENDA_ID, user, NOW, makeDeps(makeAgenda(), [recent]).deps)).toBeNull();
     expect(await checkStalemate(AGENDA_ID, user, NOW, makeDeps(makeAgenda()).deps)).toBeNull();
-    const old = makeMessage({ id: 'm2', createdAt: new Date(NOW.getTime() - HOUR) });
+    const old = makeMessage({ id: 'm2', authorId: user.id, createdAt: new Date(NOW.getTime() - HOUR) });
     const scheduled = makeAgenda({ status: AgendaStatus.SCHEDULED });
     expect(await checkStalemate(AGENDA_ID, user, NOW, makeDeps(scheduled, [old]).deps)).toBeNull();
   });
@@ -147,14 +162,14 @@ describe('study-group-service', () => {
   });
 
   it('intervenção por silêncio não grava interação do aluno', async () => {
-    const old = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - HOUR) });
+    const old = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - HOUR) });
     const { deps, chat } = makeDeps(makeAgenda(), [old]);
     await checkStalemate(AGENDA_ID, user, NOW, deps);
     expect(chat.mock.calls[0]?.[1].persistInteraction).toBe(false);
   });
 
   it('duas chamadas concorrentes de checkStalemate geram uma só intervenção', async () => {
-    const old = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - HOUR) });
+    const old = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - HOUR) });
     const { deps, chat, store } = makeDeps(makeAgenda(), [old]);
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
@@ -165,15 +180,17 @@ describe('study-group-service', () => {
       return { reply: 'Pergunta?', fallback: false };
     });
     const first = checkStalemate(AGENDA_ID, user, NOW, deps);
+    const second = checkStalemate(AGENDA_ID, user, NOW, deps);
     await new Promise((r) => setTimeout(r, 0));
-    expect(await checkStalemate(AGENDA_ID, user, NOW, deps)).toBeNull();
     release();
-    expect(await first).not.toBeNull();
+    const results = await Promise.all([first, second]);
+    expect(results.filter((r) => r !== null)).toHaveLength(1);
     expect(store.filter((m) => m.isAi)).toHaveLength(1);
+    expect(chat.mock.calls.length).toBeLessThanOrEqual(2);
   });
 
   it('checkStalemate aborta se chegou mensagem durante a geração', async () => {
-    const old = makeMessage({ id: 'm1', createdAt: new Date(NOW.getTime() - HOUR) });
+    const old = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - HOUR) });
     const { deps, chat, store } = makeDeps(makeAgenda(), [old]);
     chat.mockImplementation(async () => {
       await deps.repo.createMessage({ agendaId: AGENDA_ID, authorId: 'stu-2', content: 'voltei', isAi: false });
@@ -194,18 +211,40 @@ describe('study-group-service', () => {
     expect(store).toHaveLength(1);
   });
 
-  it('após falha da intervenção, aguarda o backoff antes de tentar de novo', async () => {
-    const agendaId = 'ag-backoff';
-    const old = makeMessage({ id: 'm1', agendaId, createdAt: new Date(NOW.getTime() - HOUR) });
-    const { deps, chat, store } = makeDeps(makeAgenda({ id: agendaId }), [old]);
+  it('após falha, aguarda a janela pelo evento antes de tentar de novo', async () => {
+    const old = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - HOUR) });
+    const { deps, chat, store, failures } = makeDeps(makeAgenda(), [old]);
     chat.mockRejectedValueOnce(new Error('provider fora'));
-    await expect(checkStalemate(agendaId, user, NOW, deps)).rejects.toThrow('provider fora');
-    expect(await checkStalemate(agendaId, user, NOW, deps)).toBeNull();
+    await expect(checkStalemate(AGENDA_ID, user, NOW, deps)).rejects.toThrow('provider fora');
+    expect(failures).toHaveLength(1);
+    expect(await checkStalemate(AGENDA_ID, user, NOW, deps)).toBeNull();
     expect(chat).toHaveBeenCalledTimes(1);
     const later = new Date(NOW.getTime() + STUDY_GROUP_STALEMATE_RETRY_MS + 1000);
-    expect(await checkStalemate(agendaId, user, later, deps)).not.toBeNull();
+    expect(await checkStalemate(AGENDA_ID, user, later, deps)).not.toBeNull();
     expect(chat).toHaveBeenCalledTimes(2);
     expect(store.filter((m) => m.isAi)).toHaveLength(1);
+  });
+
+  it('não autor espera a carência antes de intervir', async () => {
+    const early = makeMessage({ id: 'm1', authorId: 'stu-2', createdAt: new Date(NOW.getTime() - 5 * MINUTE - 30_000) });
+    const a = makeDeps(makeAgenda(), [early]);
+    expect(await checkStalemate(AGENDA_ID, user, NOW, a.deps)).toBeNull();
+    expect(a.chat).not.toHaveBeenCalled();
+    const late = makeMessage({ id: 'm1', authorId: 'stu-2', createdAt: new Date(NOW.getTime() - 6 * MINUTE - 1000) });
+    const b = makeDeps(makeAgenda(), [late]);
+    expect(await checkStalemate(AGENDA_ID, user, NOW, b.deps)).not.toBeNull();
+  });
+
+  it('falha ao registrar a falha não troca o erro original', async () => {
+    const old = makeMessage({ id: 'm1', authorId: user.id, createdAt: new Date(NOW.getTime() - HOUR) });
+    const { deps, chat } = makeDeps(makeAgenda(), [old]);
+    chat.mockRejectedValue(new Error('provider fora'));
+    deps.stalemate.recordFailure = async () => {
+      throw new Error('banco fora');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await expect(checkStalemate(AGENDA_ID, user, NOW, deps)).rejects.toThrow('provider fora');
+    warn.mockRestore();
   });
 
   it('menção respeita fronteira de palavra', () => {

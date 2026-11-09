@@ -20,6 +20,12 @@ export const STUDY_GROUP_STALEMATE_MINUTES = 5;
 /** Espera após uma intervenção que falhou antes de tentar novamente na mesma agenda. */
 export const STUDY_GROUP_STALEMATE_RETRY_MS = 60_000;
 
+/** Carência extra (ms) dos não autores antes de intervir por silêncio: o autor da última mensagem tem prioridade. */
+export const STUDY_GROUP_STALEMATE_GRACE_MS = 60_000;
+
+/** Folga (ms) do setTimeout do cliente após o prazo da intervenção. */
+export const STUDY_GROUP_STALEMATE_TIMER_SLACK_MS = 2_000;
+
 /** Intervalo de atualização do chat do grupo de estudos. */
 export const STUDY_GROUP_POLL_MS = 5000;
 

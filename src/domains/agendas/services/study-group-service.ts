@@ -16,6 +16,8 @@ import {
   TUTOR_MENTION_PATTERN,
 } from '@/lib/constants/tutor';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from './agenda-service';
+import { findLastStalemateFailureAt, appendStalemateFailure } from '@/domains/classroom/class-event-repository';
+import { isStalemateDue } from '@/domains/agendas/study-group-stalemate';
 import * as realRepo from './study-group-repository';
 import type { StudyGroupMessageRecord } from './study-group-repository';
 
@@ -36,6 +38,14 @@ export type StudyGroupDeps = {
     listRecentMessages(agendaId: string, limit: number): Promise<StudyGroupMessageRecord[]>;
     createMessage(data: realRepo.NewStudyGroupMessage): Promise<StudyGroupMessageRecord>;
     findLastMessage(agendaId: string): Promise<StudyGroupMessageRecord | null>;
+    createMessageIfLast(
+      data: realRepo.NewStudyGroupMessage,
+      expectedLastId: string
+    ): Promise<StudyGroupMessageRecord | null>;
+  };
+  stalemate: {
+    lastFailureAt(agendaId: string): Promise<Date | null>;
+    recordFailure(agendaId: string): Promise<void>;
   };
   chatWithTutor(user: AgendaActor, input: ChatInput): Promise<Pick<ChatResult, 'reply' | 'fallback'>>;
   now: () => Date;
@@ -44,18 +54,12 @@ export type StudyGroupDeps = {
 const defaultDeps: StudyGroupDeps = {
   getAgenda: (id, user) => getAgendaForUser(id, user),
   repo: realRepo,
+  stalemate: { lastFailureAt: findLastStalemateFailureAt, recordFailure: appendStalemateFailure },
   chatWithTutor: (user, input) => chatWithTutor(user, input),
   now: () => new Date(),
 };
 
 const NOT_STUDY_GROUP = 'Grupo de estudos não encontrado.';
-const MS_PER_MINUTE = 60_000;
-
-/** Agendas com intervenção em andamento neste processo (evita intervenções duplicadas). */
-const stalemateInFlight = new Set<string>();
-
-/** Última falha de intervenção por agenda: evita martelar o provider enquanto ele estiver indisponível. */
-const stalemateFailedAt = new Map<string, number>();
 
 function toDTO(m: StudyGroupMessageRecord): MessageDTO {
   return {
@@ -133,47 +137,43 @@ export async function checkStalemate(
 ): Promise<MessageDTO | null> {
   const agenda = await loadStudyGroup(agendaId, user, deps);
   if (agenda.status !== AgendaStatus.LIVE) return null;
-  if (stalemateInFlight.has(agendaId)) return null;
-  const failedAt = stalemateFailedAt.get(agendaId);
-  if (failedAt !== undefined && now.getTime() - failedAt < STUDY_GROUP_STALEMATE_RETRY_MS) return null;
-  stalemateInFlight.add(agendaId);
-  try {
-    const created = await intervene(agenda, user, now, deps);
-    stalemateFailedAt.delete(agendaId);
-    return created;
-  } catch (err) {
-    stalemateFailedAt.set(agendaId, now.getTime());
-    throw err;
-  } finally {
-    stalemateInFlight.delete(agendaId);
-  }
-}
-
-async function intervene(
-  agenda: AgendaDTO,
-  user: AgendaActor,
-  now: Date,
-  deps: StudyGroupDeps
-): Promise<MessageDTO | null> {
-  const agendaId = agenda.id;
   const last = await deps.repo.findLastMessage(agendaId);
-  if (!last || last.isAi) return null;
-  if (now.getTime() - last.createdAt.getTime() <= STUDY_GROUP_STALEMATE_MINUTES * MS_PER_MINUTE) return null;
+  if (!last || !isStalemateDue(last, user.id, now.getTime())) return null;
+  const failedAt = await deps.stalemate.lastFailureAt(agendaId);
+  if (failedAt && now.getTime() - failedAt.getTime() < STUDY_GROUP_STALEMATE_RETRY_MS) return null;
 
   const recent = await deps.repo.listRecentMessages(agendaId, STUDY_GROUP_CONTEXT_MESSAGES);
   const prompt =
     `O grupo está em silêncio há mais de ${STUDY_GROUP_STALEMATE_MINUTES} minutos. ` +
     `Faça uma pergunta socrática curta para destravar a discussão sobre: ${agenda.title}`;
-  const { reply, fallback } = await deps.chatWithTutor(user, {
-    agendaId,
-    message: prompt,
-    history: toHistory(recent),
-    persistInteraction: false,
-  });
-  if (fallback) return null;
-  // Outra mensagem pode ter chegado durante a geração: nesse caso a intervenção perdeu o sentido.
-  const latest = await deps.repo.findLastMessage(agendaId);
-  if (!latest || latest.id !== last.id) return null;
-  const saved = await deps.repo.createMessage({ agendaId, authorId: null, content: reply, isAi: true });
-  return toDTO(saved);
+  let result: Pick<ChatResult, 'reply' | 'fallback'>;
+  try {
+    result = await deps.chatWithTutor(user, {
+      agendaId,
+      message: prompt,
+      history: toHistory(recent),
+      persistInteraction: false,
+    });
+  } catch (err) {
+    await recordFailureSafely(agendaId, deps);
+    throw err;
+  }
+  if (result.fallback) {
+    await recordFailureSafely(agendaId, deps);
+    return null;
+  }
+  // Outra mensagem pode ter chegado durante a geração: a checagem acontece dentro da trava da agenda.
+  const saved = await deps.repo.createMessageIfLast(
+    { agendaId, authorId: null, content: result.reply, isAi: true },
+    last.id
+  );
+  return saved ? toDTO(saved) : null;
+}
+
+async function recordFailureSafely(agendaId: string, deps: StudyGroupDeps): Promise<void> {
+  try {
+    await deps.stalemate.recordFailure(agendaId);
+  } catch (err) {
+    console.warn('[study-group] não foi possível registrar a falha da intervenção', err);
+  }
 }
