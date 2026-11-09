@@ -11,6 +11,7 @@ export const CLASS_EVENT_TYPES = [
   'SESSION_STARTED',
   'SESSION_ENDED',
   'TUTOR_SKIPPED',
+  'GROUP_MESSAGE',
 ] as const;
 
 export type ClassEventTypeName = (typeof CLASS_EVENT_TYPES)[number];
@@ -77,14 +78,22 @@ const teacherNotePayload = z.object({
   text: z.string().max(500).optional(),
 });
 
-const tutorSkippedPayload = z.object({
+const tutorStepSkippedPayload = z.object({
   reason: z.enum(['NO_MATERIAL', 'RATE_LIMIT', 'BUDGET', 'PROVIDER_ERROR']),
   kind: z.enum(['CARD', 'QUESTION', 'BOTH']),
 });
 
+const stalemateFailedPayload = z.object({ reason: z.literal('STALEMATE_FAILED') }).strict();
+
+const tutorSkippedPayload = z.union([tutorStepSkippedPayload, stalemateFailedPayload]);
+
+const groupMessagePayload = z.object({ messageId: z.string().min(1).max(64) }).strict();
+
 export type TutorCardPayload = z.infer<typeof tutorCardPayload>;
 export type TutorQuestionPayload = z.infer<typeof tutorQuestionPayload>;
-export type TutorSkippedPayload = z.infer<typeof tutorSkippedPayload>;
+export type TutorSkippedPayload = z.infer<typeof tutorStepSkippedPayload>;
+export type StalemateFailedPayload = z.infer<typeof stalemateFailedPayload>;
+export type GroupMessagePayload = z.infer<typeof groupMessagePayload>;
 export type TeacherNotePayload = z.infer<typeof teacherNotePayload>;
 
 const PAYLOAD_SCHEMAS: Record<ClassEventTypeName, z.ZodType> = {
@@ -95,6 +104,7 @@ const PAYLOAD_SCHEMAS: Record<ClassEventTypeName, z.ZodType> = {
   SESSION_STARTED: emptyPayload,
   SESSION_ENDED: emptyPayload,
   TUTOR_SKIPPED: tutorSkippedPayload,
+  GROUP_MESSAGE: groupMessagePayload,
 };
 
 function isClassEventType(type: string): type is ClassEventTypeName {
@@ -113,6 +123,12 @@ function stepIndexError(
     stepIndex <= TIME_SCRIPT_MAX_ITEMS - 1;
 
   if (type === 'SESSION_STARTED' || type === 'SESSION_ENDED') {
+    return stepIndex === null ? null : 'stepIndex deve ser nulo neste tipo';
+  }
+  if (type === 'GROUP_MESSAGE') {
+    return stepIndex === null ? null : 'stepIndex deve ser nulo neste tipo';
+  }
+  if (type === 'TUTOR_SKIPPED' && (payload as { reason?: string }).reason === 'STALEMATE_FAILED') {
     return stepIndex === null ? null : 'stepIndex deve ser nulo neste tipo';
   }
   const required =

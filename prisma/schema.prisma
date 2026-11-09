@@ -21,6 +21,7 @@ enum ClassEventType {
   SESSION_STARTED
   SESSION_ENDED
   TUTOR_SKIPPED
+  GROUP_MESSAGE
 }
 
 enum ClassEventActor {

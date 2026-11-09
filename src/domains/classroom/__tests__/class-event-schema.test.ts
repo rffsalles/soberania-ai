@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CLASS_EVENT_TYPES,
+  TEACHER_WRITABLE_TYPES,
   audiencesFor,
   parseClassEvent,
   projectForStudent,
@@ -90,5 +92,26 @@ describe('class-event-schema', () => {
     expect(audiencesFor({ id: 's1', role: 'STUDENT' })).toEqual(['ALL', 's1']);
     expect(audiencesFor({ id: 't1', role: 'TEACHER' })).toEqual(['ALL', 'TEACHER']);
     expect(audiencesFor({ id: 'a1', role: 'ADMIN' })).toEqual(['ALL', 'TEACHER']);
+  });
+
+  it('GROUP_MESSAGE: payload estrito { messageId } e stepIndex nulo', () => {
+    expect(parseClassEvent('GROUP_MESSAGE', { messageId: 'm1' }, null).ok).toBe(true);
+    const withStep = parseClassEvent('GROUP_MESSAGE', { messageId: 'm1' }, 0);
+    expect(withStep).toEqual({ ok: false, error: 'stepIndex deve ser nulo neste tipo' });
+    expect(parseClassEvent('GROUP_MESSAGE', {}, null).ok).toBe(false);
+    expect(parseClassEvent('GROUP_MESSAGE', { messageId: 'm1', extra: 1 }, null).ok).toBe(false);
+  });
+
+  it('TUTOR_SKIPPED: STALEMATE_FAILED sem passo; forma de passo continua exigindo passo', () => {
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_FAILED' }, null).ok).toBe(true);
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_FAILED' }, 2).ok).toBe(false);
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_FAILED', kind: 'CARD' }, null).ok).toBe(false);
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'NO_MATERIAL', kind: 'CARD' }, null).ok).toBe(false);
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'NO_MATERIAL', kind: 'CARD' }, 1).ok).toBe(true);
+  });
+
+  it('GROUP_MESSAGE existe mas não é gravável pelo professor', () => {
+    expect(CLASS_EVENT_TYPES).toContain('GROUP_MESSAGE');
+    expect(TEACHER_WRITABLE_TYPES).not.toContain('GROUP_MESSAGE');
   });
 });

@@ -121,6 +121,22 @@ describe('appendTeacherEvent', () => {
     await expectDomain(appendTeacherEvent(teacher, 'a1', { type: 'TUTOR_CARD' }, deps), 400, 'EVENT_TYPE_NOT_ALLOWED');
   });
 
+  it('rejeita GROUP_MESSAGE e TUTOR_SKIPPED STALEMATE_FAILED vindos do professor', async () => {
+    const { deps } = makeDeps();
+    const appendSpy = vi.spyOn(deps.repo, 'appendEvents');
+    await expectDomain(
+      appendTeacherEvent(teacher, 'a1', { type: 'GROUP_MESSAGE', payload: { messageId: 'm1' } }, deps),
+      400,
+      'EVENT_TYPE_NOT_ALLOWED',
+    );
+    await expectDomain(
+      appendTeacherEvent(teacher, 'a1', { type: 'TUTOR_SKIPPED', payload: { reason: 'STALEMATE_FAILED' } }, deps),
+      400,
+      'EVENT_TYPE_NOT_ALLOWED',
+    );
+    expect(appendSpy).not.toHaveBeenCalled();
+  });
+
   it('STEP_CHANGED antes de iniciar -> CLASS_NOT_STARTED', async () => {
     const { deps } = makeDeps();
     await expectDomain(
