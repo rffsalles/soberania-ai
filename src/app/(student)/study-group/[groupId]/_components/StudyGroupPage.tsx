@@ -11,7 +11,7 @@ import { Users, MessageSquare, Bot, Send, FileCode2 } from 'lucide-react';
 import { useAgenda } from '@/components/agendas/use-agenda';
 import { useStudyGroupMessages } from '@/components/study-group/use-study-group';
 import { useCurrentUser } from '@/components/layout/use-current-user';
-import { validateAgendaTimeWindow } from '@/domains/agendas/agenda-validator';
+import { validateAgendaTimeWindow, deriveAgendaStatus } from '@/domains/agendas/agenda-validator';
 import type { AgendaSession } from '@/domains/agendas/types';
 import { TUTOR_DISPLAY_NAME } from '@/lib/constants/tutor';
 import { cn } from '@/lib/utils';
@@ -44,7 +44,10 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
   const windowState = agenda ? validateAgendaTimeWindow(agenda as unknown as AgendaSession) : null;
   const isOpen = windowState?.isWithinWindow ?? false;
 
-  const { messages, isSending, error, send } = useStudyGroupMessages(groupId, author, { stalemateEnabled: isOpen });
+  // A janela de envio (isOpen) segue só o horário e continua aberta após o professor encerrar (COMPLETED); a checagem de silêncio só faz sentido com a aula LIVE.
+  const isLive = agenda ? deriveAgendaStatus(agenda) === 'LIVE' : false;
+
+  const { messages, isSending, error, send } = useStudyGroupMessages(groupId, author, { stalemateEnabled: isLive });
 
   const [boardContent, setBoardContent] = React.useState('');
   const [inputMsg, setInputMsg] = React.useState('');

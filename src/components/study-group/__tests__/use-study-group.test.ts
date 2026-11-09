@@ -208,6 +208,25 @@ describe('useStudyGroupMessages', () => {
         await vi.advanceTimersByTimeAsync(t - Date.now());
       });
 
+    it('lista vazia: não agenda timer nem faz GET extra', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: false });
+      vi.setSystemTime(T + 1000);
+      const f = vi.fn(async () => json({ success: true, messages: [] }));
+      vi.stubGlobal('fetch', f);
+      const spy = vi.spyOn(globalThis, 'setTimeout');
+      renderHook(() => useStudyGroupMessages('g1', { id: 'u1', name: 'Ana' }, { stalemateEnabled: true }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const before = spy.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600_000);
+      });
+      expect(gets(f)).toHaveLength(1);
+      expect(spy.mock.calls.length).toBe(before);
+      spy.mockRestore();
+    });
+
     it('checa após o prazo e repete a cada 60 s', async () => {
       const f = await setup(msg('m0', new Date(T).toISOString()));
       await advanceTo(T + 301_999);
