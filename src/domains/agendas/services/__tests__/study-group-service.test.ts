@@ -44,6 +44,7 @@ function makeDeps(agenda: AgendaDTO, seed: StudyGroupMessageRecord[] = []) {
   const store = [...seed];
   let seq = 0;
   const failures: Date[] = [];
+  const attempts: Date[] = [];
   const chat = vi.fn<StudyGroupDeps['chatWithTutor']>(async () => ({ reply: 'E se separarmos o cliente?', fallback: false }));
   const deps: StudyGroupDeps = {
     now: () => NOW,
@@ -76,8 +77,13 @@ function makeDeps(agenda: AgendaDTO, seed: StudyGroupMessageRecord[] = []) {
       },
     },
     stalemate: {
-      async lastFailureAt() {
-        return failures.length ? failures[failures.length - 1] : null;
+      async claim(_id, expectedLastMessageId, retryMs, now) {
+        const last = store.length ? store[store.length - 1] : null;
+        if (last?.id !== expectedLastMessageId) return false;
+        const prev = attempts.length ? attempts[attempts.length - 1] : null;
+        if (prev && now.getTime() - prev.getTime() < retryMs) return false;
+        attempts.push(now);
+        return true;
       },
       async recordFailure() {
         failures.push(deps.now());
@@ -186,7 +192,29 @@ describe('study-group-service', () => {
     const results = await Promise.all([first, second]);
     expect(results.filter((r) => r !== null)).toHaveLength(1);
     expect(store.filter((m) => m.isAi)).toHaveLength(1);
-    expect(chat.mock.calls.length).toBeLessThanOrEqual(2);
+    expect(chat).toHaveBeenCalledTimes(1);
+  });
+
+  it('três leitores após o prazo: chat chamado exatamente 1 vez e 1 mensagem da IA', async () => {
+    const old = makeMessage({ id: 'm1', authorId: 'stu-9', createdAt: new Date(NOW.getTime() - HOUR) });
+    const { deps, chat, store } = makeDeps(makeAgenda(), [old]);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    chat.mockImplementation(async () => {
+      await gate;
+      return { reply: 'Pergunta?', fallback: false };
+    });
+    const readers = ['u1', 'u2', 'u3'].map((id) =>
+      checkStalemate(AGENDA_ID, { ...user, id }, NOW, deps),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    const results = await Promise.all(readers);
+    expect(results.filter((r) => r !== null)).toHaveLength(1);
+    expect(chat).toHaveBeenCalledTimes(1);
+    expect(store.filter((m) => m.isAi)).toHaveLength(1);
   });
 
   it('checkStalemate aborta se chegou mensagem durante a geração', async () => {

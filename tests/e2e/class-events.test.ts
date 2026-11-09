@@ -226,10 +226,11 @@ describe.skipIf(!TEST_DB_URL)('grupo de estudos por eventos (banco)', () => {
     expect(await db.classEvent.count({ where: { agendaId, type: 'GROUP_MESSAGE' } })).toBe(2);
   });
 
-  it('findLastStalemateFailureAt filtra pelo reason no JSON', async () => {
-    const { findLastStalemateFailureAt, appendStalemateFailure } = await import(
+  it('claimStalemate reserva uma vez por janela e findLastStalemateAttemptAt vê CLAIMED e FAILED', async () => {
+    const { claimStalemate, findLastStalemateAttemptAt, appendStalemateFailure } = await import(
       '@/domains/classroom/class-event-repository'
     );
+    const { createMessage } = await import('@/domains/agendas/services/study-group-repository');
     await db.classEvent.create({
       data: {
         agendaId,
@@ -241,8 +242,22 @@ describe.skipIf(!TEST_DB_URL)('grupo de estudos por eventos (banco)', () => {
         createdBy: 'TUTOR',
       },
     });
-    await expect(findLastStalemateFailureAt(agendaId)).resolves.toBeNull();
+    await expect(findLastStalemateAttemptAt(agendaId)).resolves.toBeNull();
+    const last = await createMessage({ agendaId, authorId: studentId, content: 'silêncio', isAi: false });
+    const claimed = () => db.classEvent.count({ where: { agendaId, payload: { path: ['reason'], equals: 'STALEMATE_CLAIMED' } } });
+
+    expect(await claimStalemate(agendaId, 'id-velho', 60_000, new Date())).toBe(false);
+    expect(await claimed()).toBe(0);
+    expect(await claimStalemate(agendaId, last.id, 60_000, new Date())).toBe(true);
+    expect(await claimed()).toBe(1);
+    expect(await claimStalemate(agendaId, last.id, 60_000, new Date())).toBe(false);
+    expect(await claimed()).toBe(1);
+    await expect(findLastStalemateAttemptAt(agendaId)).resolves.toBeInstanceOf(Date);
+
     await appendStalemateFailure(agendaId);
-    await expect(findLastStalemateFailureAt(agendaId)).resolves.toBeInstanceOf(Date);
+    const failure = await db.classEvent.findFirstOrThrow({
+      where: { agendaId, payload: { path: ['reason'], equals: 'STALEMATE_FAILED' } },
+    });
+    await expect(findLastStalemateAttemptAt(agendaId)).resolves.toEqual(failure.createdAt);
   });
 });

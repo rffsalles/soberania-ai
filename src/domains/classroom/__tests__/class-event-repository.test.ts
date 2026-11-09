@@ -37,7 +37,8 @@ import {
   appendTutorEvents,
   findEventBySeq,
   findEventsAfter,
-  findLastStalemateFailureAt,
+  findLastStalemateAttemptAt,
+  claimStalemate,
   hasEvent,
 } from '../class-event-repository';
 
@@ -248,25 +249,74 @@ describe('appendEventsWith', () => {
   });
 });
 
-describe('findLastStalemateFailureAt', () => {
-  it('consulta o reason no JSON e devolve createdAt', async () => {
+const attemptWhere = (agendaId: string) => ({
+  agendaId,
+  type: 'TUTOR_SKIPPED',
+  stepIndex: null,
+  OR: [
+    { payload: { path: ['reason'], equals: 'STALEMATE_FAILED' } },
+    { payload: { path: ['reason'], equals: 'STALEMATE_CLAIMED' } },
+  ],
+});
+
+describe('findLastStalemateAttemptAt', () => {
+  it('consulta CLAIMED ou FAILED no JSON e devolve createdAt', async () => {
     const at = new Date('2026-11-08T10:00:00Z');
     findFirst.mockResolvedValue({ createdAt: at });
-    await expect(findLastStalemateFailureAt('a1')).resolves.toBe(at);
+    await expect(findLastStalemateAttemptAt('a1')).resolves.toBe(at);
     expect(findFirst).toHaveBeenCalledWith({
-      where: {
-        agendaId: 'a1',
-        type: 'TUTOR_SKIPPED',
-        stepIndex: null,
-        payload: { path: ['reason'], equals: 'STALEMATE_FAILED' },
-      },
+      where: attemptWhere('a1'),
       orderBy: { seq: 'desc' },
       select: { createdAt: true },
     });
   });
 
-  it('sem falha: null', async () => {
-    await expect(findLastStalemateFailureAt('a1')).resolves.toBeNull();
+  it('sem tentativa: null', async () => {
+    await expect(findLastStalemateAttemptAt('a1')).resolves.toBeNull();
+  });
+});
+
+describe('claimStalemate', () => {
+  const NOW = new Date('2026-11-08T10:00:00Z');
+  const group = { findFirst: vi.fn() };
+  beforeEach(() => {
+    group.findFirst.mockReset();
+    (tx as unknown as { studyGroupMessage: typeof group }).studyGroupMessage = group;
+  });
+
+  it('última mensagem esperada e sem tentativa recente: reserva com STALEMATE_CLAIMED', async () => {
+    group.findFirst.mockResolvedValue({ id: 'm1' });
+    await expect(claimStalemate('a1', 'm1', 60_000, NOW)).resolves.toBe(true);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'TUTOR_SKIPPED',
+          stepIndex: null,
+          payload: { reason: 'STALEMATE_CLAIMED' },
+          audience: 'TEACHER',
+          createdBy: 'TUTOR',
+        }),
+      }),
+    );
+  });
+
+  it('tentativa dentro da janela: false e nada gravado', async () => {
+    group.findFirst.mockResolvedValue({ id: 'm1' });
+    findFirst.mockResolvedValue({ createdAt: new Date(NOW.getTime() - 30_000) });
+    await expect(claimStalemate('a1', 'm1', 60_000, NOW)).resolves.toBe(false);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('tentativa fora da janela: reserva de novo', async () => {
+    group.findFirst.mockResolvedValue({ id: 'm1' });
+    findFirst.mockResolvedValue({ createdAt: new Date(NOW.getTime() - 61_000) });
+    await expect(claimStalemate('a1', 'm1', 60_000, NOW)).resolves.toBe(true);
+  });
+
+  it('última mensagem mudou: false e nada gravado', async () => {
+    group.findFirst.mockResolvedValue({ id: 'm2' });
+    await expect(claimStalemate('a1', 'm1', 60_000, NOW)).resolves.toBe(false);
+    expect(create).not.toHaveBeenCalled();
   });
 });
 

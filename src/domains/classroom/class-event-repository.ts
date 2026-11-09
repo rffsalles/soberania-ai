@@ -137,19 +137,63 @@ export async function appendEvents(
   return rows;
 }
 
-/** Quando a tutora falhou pela última vez em destravar o grupo (STALEMATE_FAILED), ou null. */
-export async function findLastStalemateFailureAt(agendaId: string): Promise<Date | null> {
+const STALEMATE_ATTEMPT_WHERE = (agendaId: string) => ({
+  agendaId,
+  type: 'TUTOR_SKIPPED' as const,
+  stepIndex: null,
+  OR: [
+    { payload: { path: ['reason'], equals: 'STALEMATE_FAILED' } },
+    { payload: { path: ['reason'], equals: 'STALEMATE_CLAIMED' } },
+  ],
+});
+
+/** Quando a tutora tentou destravar o grupo pela última vez (STALEMATE_CLAIMED ou STALEMATE_FAILED), ou null. */
+export async function findLastStalemateAttemptAt(agendaId: string): Promise<Date | null> {
   const row = await db.classEvent.findFirst({
-    where: {
-      agendaId,
-      type: 'TUTOR_SKIPPED',
-      stepIndex: null,
-      payload: { path: ['reason'], equals: 'STALEMATE_FAILED' },
-    },
+    where: STALEMATE_ATTEMPT_WHERE(agendaId),
     orderBy: { seq: 'desc' },
     select: { createdAt: true },
   });
   return row?.createdAt ?? null;
+}
+
+/**
+ * Reserva, sob a trava da agenda, a tentativa de intervenção por silêncio: só uma chamada ganha
+ * por janela e só se a última mensagem ainda é a esperada. A chamada ao modelo acontece depois, fora da transação.
+ */
+export async function claimStalemate(
+  agendaId: string,
+  expectedLastMessageId: string,
+  retryMs: number,
+  now: Date,
+): Promise<boolean> {
+  const { value } = await appendEventsWith(agendaId, async (tx) => {
+    const last = await tx.studyGroupMessage.findFirst({
+      where: { agendaId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    const attempt = await tx.classEvent.findFirst({
+      where: STALEMATE_ATTEMPT_WHERE(agendaId),
+      orderBy: { seq: 'desc' },
+      select: { createdAt: true },
+    });
+    if (last?.id !== expectedLastMessageId) return { value: false, events: [] };
+    if (attempt && now.getTime() - attempt.createdAt.getTime() < retryMs) return { value: false, events: [] };
+    return {
+      value: true,
+      events: [
+        {
+          type: 'TUTOR_SKIPPED' as const,
+          stepIndex: null,
+          payload: { reason: 'STALEMATE_CLAIMED' },
+          audience: 'TEACHER',
+          createdBy: 'TUTOR' as const,
+        },
+      ],
+    };
+  });
+  return value;
 }
 
 export async function appendStalemateFailure(agendaId: string): Promise<void> {

@@ -16,7 +16,7 @@ import {
   TUTOR_MENTION_PATTERN,
 } from '@/lib/constants/tutor';
 import { getAgendaForUser, type AgendaActor, type AgendaDTO } from './agenda-service';
-import { findLastStalemateFailureAt, appendStalemateFailure } from '@/domains/classroom/class-event-repository';
+import { claimStalemate, appendStalemateFailure } from '@/domains/classroom/class-event-repository';
 import { isStalemateDue } from '@/domains/agendas/study-group-stalemate';
 import * as realRepo from './study-group-repository';
 import type { StudyGroupMessageRecord } from './study-group-repository';
@@ -44,7 +44,7 @@ export type StudyGroupDeps = {
     ): Promise<StudyGroupMessageRecord | null>;
   };
   stalemate: {
-    lastFailureAt(agendaId: string): Promise<Date | null>;
+    claim(agendaId: string, expectedLastMessageId: string, retryMs: number, now: Date): Promise<boolean>;
     recordFailure(agendaId: string): Promise<void>;
   };
   chatWithTutor(user: AgendaActor, input: ChatInput): Promise<Pick<ChatResult, 'reply' | 'fallback'>>;
@@ -54,7 +54,7 @@ export type StudyGroupDeps = {
 const defaultDeps: StudyGroupDeps = {
   getAgenda: (id, user) => getAgendaForUser(id, user),
   repo: realRepo,
-  stalemate: { lastFailureAt: findLastStalemateFailureAt, recordFailure: appendStalemateFailure },
+  stalemate: { claim: claimStalemate, recordFailure: appendStalemateFailure },
   chatWithTutor: (user, input) => chatWithTutor(user, input),
   now: () => new Date(),
 };
@@ -139,8 +139,9 @@ export async function checkStalemate(
   if (agenda.status !== AgendaStatus.LIVE) return null;
   const last = await deps.repo.findLastMessage(agendaId);
   if (!last || !isStalemateDue(last, user.id, now.getTime())) return null;
-  const failedAt = await deps.stalemate.lastFailureAt(agendaId);
-  if (failedAt && now.getTime() - failedAt.getTime() < STUDY_GROUP_STALEMATE_RETRY_MS) return null;
+  // Reserva em banco antes do modelo: só um leitor por janela chama a tutora.
+  const claimed = await deps.stalemate.claim(agendaId, last.id, STUDY_GROUP_STALEMATE_RETRY_MS, now);
+  if (!claimed) return null;
 
   const recent = await deps.repo.listRecentMessages(agendaId, STUDY_GROUP_CONTEXT_MESSAGES);
   const prompt =

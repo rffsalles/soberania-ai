@@ -83,16 +83,17 @@ const tutorStepSkippedPayload = z.object({
   kind: z.enum(['CARD', 'QUESTION', 'BOTH']),
 });
 
-const stalemateFailedPayload = z.object({ reason: z.literal('STALEMATE_FAILED') }).strict();
+const stalemateGroupPayload = z.object({ reason: z.enum(['STALEMATE_FAILED', 'STALEMATE_CLAIMED']) }).strict();
 
-const tutorSkippedPayload = z.union([tutorStepSkippedPayload, stalemateFailedPayload]);
+const tutorSkippedPayload = z.union([tutorStepSkippedPayload, stalemateGroupPayload]);
 
 const groupMessagePayload = z.object({ messageId: z.string().min(1).max(64) }).strict();
 
 export type TutorCardPayload = z.infer<typeof tutorCardPayload>;
 export type TutorQuestionPayload = z.infer<typeof tutorQuestionPayload>;
 export type TutorSkippedPayload = z.infer<typeof tutorStepSkippedPayload>;
-export type StalemateFailedPayload = z.infer<typeof stalemateFailedPayload>;
+export type StalemateGroupPayload = z.infer<typeof stalemateGroupPayload>;
+export type StalemateFailedPayload = StalemateGroupPayload;
 export type GroupMessagePayload = z.infer<typeof groupMessagePayload>;
 export type TeacherNotePayload = z.infer<typeof teacherNotePayload>;
 
@@ -128,7 +129,8 @@ function stepIndexError(
   if (type === 'GROUP_MESSAGE') {
     return stepIndex === null ? null : 'stepIndex deve ser nulo neste tipo';
   }
-  if (type === 'TUTOR_SKIPPED' && (payload as { reason?: string }).reason === 'STALEMATE_FAILED') {
+  const skippedReason = (payload as { reason?: string }).reason;
+  if (type === 'TUTOR_SKIPPED' && (skippedReason === 'STALEMATE_FAILED' || skippedReason === 'STALEMATE_CLAIMED')) {
     return stepIndex === null ? null : 'stepIndex deve ser nulo neste tipo';
   }
   const required =

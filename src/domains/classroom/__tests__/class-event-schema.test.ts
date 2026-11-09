@@ -106,6 +106,9 @@ describe('class-event-schema', () => {
     expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_FAILED' }, null).ok).toBe(true);
     expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_FAILED' }, 2).ok).toBe(false);
     expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_FAILED', kind: 'CARD' }, null).ok).toBe(false);
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_CLAIMED' }, null).ok).toBe(true);
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_CLAIMED' }, 2).ok).toBe(false);
+    expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'STALEMATE_CLAIMED', extra: 1 }, null).ok).toBe(false);
     expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'NO_MATERIAL', kind: 'CARD' }, null).ok).toBe(false);
     expect(parseClassEvent('TUTOR_SKIPPED', { reason: 'NO_MATERIAL', kind: 'CARD' }, 1).ok).toBe(true);
   });
