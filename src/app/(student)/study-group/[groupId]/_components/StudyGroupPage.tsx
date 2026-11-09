@@ -41,7 +41,10 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
   const { agenda, isLoading: agendaLoading, error: agendaError, notFound } = useAgenda(groupId);
   const { user } = useCurrentUser();
   const author = React.useMemo(() => (user ? { id: user.id, name: user.name } : null), [user]);
-  const { messages, isSending, error, send } = useStudyGroupMessages(groupId, author);
+  const windowState = agenda ? validateAgendaTimeWindow(agenda as unknown as AgendaSession) : null;
+  const isOpen = windowState?.isWithinWindow ?? false;
+
+  const { messages, isSending, error, send } = useStudyGroupMessages(groupId, author, { stalemateEnabled: isOpen });
 
   const [boardContent, setBoardContent] = React.useState('');
   const [inputMsg, setInputMsg] = React.useState('');
@@ -50,9 +53,6 @@ export default function StudyGroupPage({ groupId }: StudyGroupPageProps) {
   React.useEffect(() => {
     listEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages.length]);
-
-  const windowState = agenda ? validateAgendaTimeWindow(agenda as unknown as AgendaSession) : null;
-  const isOpen = windowState?.isWithinWindow ?? false;
 
   const members = React.useMemo(() => {
     const names = new Set<string>();

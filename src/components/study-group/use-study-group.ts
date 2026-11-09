@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 import { API_ROUTES } from '@/lib/constants/routes';
-import { STUDY_GROUP_POLL_MS } from '@/lib/constants/tutor';
+import { useClassEvents } from '@/components/classroom/use-class-events';
+import { nextStalemateCheckAt } from '@/domains/agendas/study-group-stalemate';
 import type { MessageDTO } from '@/domains/agendas/services/study-group-service';
 
 const LOAD_ERROR = 'Não foi possível carregar as mensagens do grupo.';
@@ -23,10 +24,11 @@ function mergeById(current: MessageDTO[], incoming: MessageDTO[]): MessageDTO[] 
   return [...current, ...added].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-/** Mensagens do grupo de estudos com atualização periódica (polling) e envio otimista. */
+/** Mensagens do grupo de estudos atualizadas pelo canal de eventos da aula, com envio otimista. */
 export function useStudyGroupMessages(
   agendaId: string,
   author: { id: string; name: string } | null,
+  options: { stalemateEnabled?: boolean } = {},
 ): {
   messages: MessageDTO[];
   isLoading: boolean;
@@ -40,6 +42,11 @@ export function useStudyGroupMessages(
   const [error, setError] = React.useState<string | null>(null);
   const lastCreatedAt = React.useRef<string | null>(null);
   const pollInFlight = React.useRef(false);
+  const pendingReload = React.useRef(false);
+  const loadRef = React.useRef<() => void>(() => {});
+  const prevGroupSeq = React.useRef<number | null>(null);
+  const stalemateEnabled = options.stalemateEnabled ?? false;
+  const { events } = useClassEvents(agendaId);
 
   /**
    * Aplica mensagens recebidas. Só o polling avança o cursor `lastCreatedAt`: o POST devolve a resposta da tutora,
@@ -62,11 +69,16 @@ export function useStudyGroupMessages(
     const controller = new AbortController();
     lastCreatedAt.current = null;
     pollInFlight.current = false;
+    pendingReload.current = false;
+    prevGroupSeq.current = null;
     setMessages([]);
     setIsLoading(true);
 
     async function load() {
-      if (pollInFlight.current) return;
+      if (pollInFlight.current) {
+        pendingReload.current = true;
+        return;
+      }
       pollInFlight.current = true;
       try {
         const since = lastCreatedAt.current ? `?since=${encodeURIComponent(lastCreatedAt.current)}` : '';
@@ -84,16 +96,56 @@ export function useStudyGroupMessages(
       } finally {
         pollInFlight.current = false;
         if (!controller.signal.aborted) setIsLoading(false);
+        if (pendingReload.current && !controller.signal.aborted) {
+          pendingReload.current = false;
+          void load();
+        }
       }
     }
 
+    loadRef.current = () => void load();
     void load();
-    const timer = setInterval(() => void load(), STUDY_GROUP_POLL_MS);
     return () => {
       controller.abort();
-      clearInterval(timer);
+      loadRef.current = () => {};
     };
   }, [agendaId, apply]);
+
+  // Recarrega quando chega um GROUP_MESSAGE novo. O primeiro valor observado (replay do canal) é só a linha de base.
+  const groupSeq = React.useMemo(
+    () => events.reduce((max, e) => (e.type === 'GROUP_MESSAGE' && e.seq > max ? e.seq : max), 0),
+    [events],
+  );
+  React.useEffect(() => {
+    const prev = prevGroupSeq.current;
+    prevGroupSeq.current = groupSeq;
+    if (prev !== null && groupSeq !== prev) loadRef.current();
+  }, [groupSeq]);
+
+  // Silêncio do grupo: a checagem roda no servidor dentro do GET; o cliente só o dispara no instante devido.
+  const lastReal = React.useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (!messages[i].id.startsWith(OPTIMISTIC_PREFIX)) return messages[i];
+    return null;
+  }, [messages]);
+  const lastRealId = lastReal?.id ?? null;
+  const authorId = author?.id ?? null;
+  React.useEffect(() => {
+    if (!stalemateEnabled || !authorId || !lastReal) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      const at = nextStalemateCheckAt(lastReal, authorId, Date.now());
+      if (at === null) return;
+      timer = setTimeout(() => {
+        loadRef.current();
+        schedule();
+      }, Math.max(0, at - Date.now()));
+    };
+    schedule();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reage à troca da última mensagem real (id), não ao objeto
+  }, [stalemateEnabled, authorId, lastRealId, agendaId]);
 
   const send = React.useCallback(
     async (content: string): Promise<boolean> => {

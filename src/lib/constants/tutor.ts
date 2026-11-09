@@ -26,9 +26,6 @@ export const STUDY_GROUP_STALEMATE_GRACE_MS = 60_000;
 /** Folga (ms) do setTimeout do cliente após o prazo da intervenção. */
 export const STUDY_GROUP_STALEMATE_TIMER_SLACK_MS = 2_000;
 
-/** Intervalo de atualização do chat do grupo de estudos. */
-export const STUDY_GROUP_POLL_MS = 5000;
-
 /** Quantidade máxima de mensagens retornadas por consulta. */
 export const STUDY_GROUP_LIST_LIMIT = 200;
 
