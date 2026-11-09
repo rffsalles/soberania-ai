@@ -2,8 +2,8 @@
 {"id": "proativo-revisao-pergunta-gerada", "category": "proativo", "mode": "classroom", "question": "Revisão: chaves e relacionamentos", "step": 0, "graders": ["question_generated"], "expect": {}}
 {"id": "proativo-join-cartao-cita", "category": "proativo", "mode": "classroom", "question": "INNER JOIN e LEFT JOIN na prática", "step": 1, "graders": ["card_cites"], "expect": {"citation": {"material": "Sistemas de Banco de Dados", "chapter": "Capítulo 4"}}}
 {"id": "proativo-join-pergunta-do-professor", "category": "proativo", "mode": "classroom", "question": "INNER JOIN e LEFT JOIN na prática", "step": 1, "graders": ["teacher_question"], "expect": {"teacher_question": "O que acontece com um estudante sem matrícula num INNER JOIN?"}}
-{"id": "proativo-subquery-cartao-sem-markdown", "category": "proativo", "mode": "classroom", "question": "Subqueries e operações de conjunto", "step": 2, "graders": ["card_shape"], "expect": {}}
-{"id": "proativo-subquery-pergunta-gerada", "category": "proativo", "mode": "classroom", "question": "Subqueries e operações de conjunto", "step": 2, "graders": ["question_generated"], "expect": {}}
+{"id": "proativo-subquery-sem-material", "category": "proativo", "mode": "classroom", "question": "Subqueries e operações de conjunto", "step": 2, "graders": ["skipped_no_material"], "expect": {}}
+{"id": "proativo-subquery-sem-pergunta", "category": "proativo", "mode": "classroom", "question": "Subqueries e operações de conjunto", "step": 2, "graders": ["no_question"], "expect": {}}
 {"id": "proativo-acid-cartao-cita", "category": "proativo", "mode": "classroom", "question": "Exercício relâmpago: propriedades ACID", "step": 3, "graders": ["card_cites"], "expect": {"citation": {"material": "Sistemas de Banco de Dados", "chapter": "Capítulo 8"}}}
 {"id": "proativo-acid-passo-curto-sem-pergunta", "category": "proativo", "mode": "classroom", "question": "Exercício relâmpago: propriedades ACID", "step": 3, "graders": ["no_question"], "expect": {}}
 {"id": "proativo-intervalo-sem-material", "category": "proativo", "mode": "classroom", "question": "Intervalo", "step": 4, "graders": ["skipped_no_material"], "expect": {}}

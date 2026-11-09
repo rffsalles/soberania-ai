@@ -29,7 +29,7 @@ Pré-requisitos: banco com o seed da demo (não precisa ser novo), app com o pro
 python -m evals run --category proativo --base-url http://localhost:3000
 ```
 
-Calibração do corte de similaridade: com `AI_EMBEDDING_MODEL` vazio (embeddings desligados) a busca é só léxica, todo trecho vem com `bm25Score` e o corte `TUTOR_MIN_SIMILARITY` (0,55) **não é exercitado**; uma rodada assim não calibra o corte. Para calibrá-lo, ligue os embeddings e registre a similaridade do melhor trecho por passo. A suíte não expõe a similaridade.
+Calibração do corte de similaridade: com `AI_EMBEDDING_MODEL` vazio (embeddings desligados) a busca é só léxica e o corte `TUTOR_MIN_SIMILARITY` (0,55) **não é exercitado**; uma rodada assim não calibra o corte. Nesse modo vale a cobertura de termos (`TUTOR_MIN_TERM_COVERAGE`, `src/domains/classroom/lexical-relevance.ts`): o trecho precisa conter os termos do título da atividade do passo (todos com 1 ou 2 termos, metade com 3 ou mais). Por isso o passo 2 (Subqueries), que o acervo do seed não cobre, espera `TUTOR_SKIPPED NO_MATERIAL` como o Intervalo. Para calibrá-lo, ligue os embeddings e registre a similaridade do melhor trecho por passo. A suíte não expõe a similaridade.
 
 Opções do professor: `--teacher-identifier` (padrão `PROF001`) e `--teacher-password` (padrão `prof123`, ou `EVALS_TEACHER_PASSWORD`). Limiar padrão 0,8 por categoria. Como não há `--regrade` para o proativo (os eventos não ficam no relatório), `report --regrade` devolve esses resultados como estão.
 
