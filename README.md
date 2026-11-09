@@ -88,10 +88,10 @@ flowchart LR
 
 Numbers measured on the current `main`:
 
-- About 48,000 lines of TypeScript/TSX in `src/`.
-- 160 test files, 1,300 passing tests (Vitest). End-to-end tests against a real Postgres live in `tests/e2e/` and run only when `DATABASE_URL_TEST` is set.
+- About 60,000 lines of TypeScript/TSX in `src/` (tests included).
+- 214 test files (210 run by default; 4 end-to-end files need `DATABASE_URL_TEST`), 1,894 passing tests (Vitest). End-to-end tests against a real Postgres live in `tests/e2e/`. 3 Playwright browser tests in `tests/playwright/` drive a live class (teacher panel, student page, two-student study group); CI does not run them.
 - `"strict": true` in TypeScript. `npm run test:ci` runs typecheck, lint, tests and production build.
-- 23 SQL migrations in `prisma/migrations/`, including the pgvector and full-text columns.
+- 25 SQL migrations in `prisma/migrations/`, including the pgvector and full-text columns.
 - Spec → plan → test-first workflow: design specs in [docs/superpowers/specs/](docs/superpowers/specs/) and step-by-step implementation plans in [docs/superpowers/plans/](docs/superpowers/plans/).
 - RBAC is a deny-by-default prefix matrix enforced in the middleware (`src/lib/auth/rbac.ts`), plus ownership checks in services (a teacher cannot overwrite chapter links used by another teacher's lessons without an admin override).
 
@@ -108,21 +108,34 @@ Example tests:
 
 The classroom is driven by an append-only `class_events` table (per-class `seq`, trigger `pg_notify`). Clients read it through `GET /api/v1/agendas/:id/events` (paged) and `GET /api/v1/agendas/:id/events/stream` (SSE with `retry: 1000`, `id: <seq>` and resume through `Last-Event-ID`); `POST` on the first route appends an event. The student page uses the `useClassEvents` hook and has no periodic `setInterval`: if the stream does not open within 10 s it falls back to polling every 5 s and retries the stream after 30 s.
 
+```mermaid
+flowchart LR
+  T["Teacher panel<br/>/teacher/live/[agendaId]"] -->|"POST /events"| E[("class_events<br/>append-only, seq per class")]
+  S["Students<br/>answers · group messages"] -->|"POST"| E
+  E -->|"pg_notify (listen mode)<br/>or 2 s poll"| N["SSE /events/stream<br/>Last-Event-ID resume"]
+  N --> ST["Student page<br/>'Agora na aula' strip, group chat"]
+  N --> W["Tutor worker per script step<br/>tutor-policy.ts · draft claim, TTL 60 s"]
+  W -->|"TUTOR_CARD · TUTOR_QUESTION · TUTOR_SKIPPED"| E
+```
+
 - `CLASS_EVENTS_NOTIFY_MODE=poll` (default): each open connection queries the table every 2 s. Works with any Postgres, including poolers.
 - `CLASS_EVENTS_NOTIFY_MODE=listen`: Postgres `LISTEN/NOTIFY`, one `pg.Client` per process. Needs a direct connection (no pooler).
 - `CLASS_EVENTS_STREAM_MAX_MS`: maximum duration of one stream connection. Default 8000 when `VERCEL` is set, 0 (unlimited) elsewhere. When it ends the browser reconnects with `Last-Event-ID`, so nothing is lost or repeated; on Vercel expect about 2 s of latency.
 
 To drive a class end to end in a browser (teacher panel and student page), run `npm run test:e2e:ui`. It needs the dev server (Playwright starts `npm run dev` or reuses port 3000), a `.env` pointing to the dev database, Chromium installed with `npx playwright install chromium`, and the demo seed (accounts and the agenda "Modelagem Conceitual e Álgebra Relacional (JOINs)"); the spec itself sets the roteiro and reopens the agenda. With `PLAYWRIGHT_BASE_URL` set, the browser targets that server but Prisma still writes to the local `.env` database, so use it only when both point to the same environment. CI does not run this test.
 
-The proactive tutor publishes, at each step, a cited card (and a check question when it fits) built from the lesson's chapters; a step costs at most 2 model calls, and a step prepared in advance (`tutor_step_drafts`) is published without calling the model. The Playwright spec covers this without a real provider: every run starts with the tutor muted for the whole class, releases only the step under test with a prepared draft, and asserts that no `TUTOR_CARD`/`TUTOR_QUESTION` rows were logged in `inference_logs`.
+The proactive tutor works per step of the lesson script. It publishes a cited card (chapter and page) and, when it fits, a multiple-choice check question built from the lesson's chapters; students' answers and a class pulse come back as events. The silence policy is explicit (`src/domains/classroom/tutor-policy.ts`): when it does not speak, it logs a `TUTOR_SKIPPED` event with a reason (`NO_MATERIAL`, `RATE_LIMIT`, `BUDGET`, `PROVIDER_ERROR`). A step costs at most 2 model calls, and concurrent workers are kept apart by a database claim with a 60 s TTL on `tutor_step_drafts`. The teacher can pre-generate every step from the lesson editor ("Preparar tutora"); a prepared step is published without calling the model, and recorded lessons use steps with video time. Without embeddings, search is lexical only and always returns something that matches one word, so `src/domains/classroom/lexical-relevance.ts` requires the step's topic terms to be covered by the chunk, otherwise the tutor stays silent with `NO_MATERIAL`. The Playwright spec covers this without a real provider: every run starts with the tutor muted for the whole class, releases only the step under test with a prepared draft, and asserts that no `TUTOR_CARD`/`TUTOR_QUESTION` rows were logged in `inference_logs`.
+
+The study group uses the same log: messages are `GROUP_MESSAGE` events and the client hook has no polling. The tutor's nudge after a stretch of silence keeps no state in memory: `claimStalemate` reserves the attempt in the database under the agenda lock (one winner per window, only if the last message is still the expected one) and the losers see a `STALEMATE_CLAIMED` event.
 
 ## Evals
 
 [`evals/`](evals/README.md) is a Python 3.11 harness that tests the tutor's behavior over HTTP, the way a student uses it: it logs in with the demo account, asks 40 questions derived from the seed corpus and grades the replies.
 
-- Five categories: grounded facts with the right chapter citation, answer-seeking during class (must stay Socratic), off-corpus questions (must refuse), style limits, and prompt injection.
+- Five categories (40 cases): grounded facts with the right chapter citation (10), answer-seeking during class (8, must stay Socratic), off-corpus questions (8, must refuse), style limits (6), and prompt injection (8).
 - Deterministic graders covered by pytest, plus an optional LLM judge on the same OpenAI-compatible gateway (`temperature=0`, closed rubric, JSON verdict).
-- Each run writes a Markdown and JSON report with per-category pass rates and exits non-zero below the threshold. Example: [`evals/reports/exemplo-2026-11-07.md`](evals/reports/exemplo-2026-11-07.md).
+- Each run writes a Markdown and JSON report with per-category pass rates and exits non-zero below the threshold. Latest full run with the Groq `openai/gpt-oss-120b` tutor and judge: 38/40 (95%), up from 29/40 before the fixes it motivated; the remaining failures are analysed in [`evals/reports/depois-2026-11-07.md`](evals/reports/depois-2026-11-07.md) (baseline: [`exemplo-2026-11-07.md`](evals/reports/exemplo-2026-11-07.md)).
+- A sixth, opt-in `proativo` category (10 cases, needs a real provider) logs in as the teacher, advances the seeded live lesson step by step and grades the proactive cards and questions. It scored 10/10 on 2026-11-09 (3 runs). It consumes the demo class; `node evals/reset-demo.cjs` resets only that agenda's events and drafts on a local database, with no fresh seed.
 
 ## Quick start
 
@@ -187,7 +200,10 @@ All variables are documented in [.env.example](.env.example). The essential ones
 
 ## Known limitations
 
-- The tutor's Socratic behavior is enforced by prompts, not by code. Only the exam guardrail is deterministic, and it is keyword-based, so paraphrased cheating requests can get through to the model.
+- Socratic behavior in class is mostly prompt-enforced. Deterministic parts: a regex detector for answer requests (`answer-request.ts`), a citation guard that strips chapter/page references not present in the retrieved chunks, and a no-material short-circuit. The exam guardrail is keyword-based, so paraphrased cheating requests can reach the model.
+- Retrieval takes only the top 2 chunks in the chat (3 for the proactive tutor) and has no reranking step.
+- `TUTOR_MIN_SIMILARITY=0.55`, the cutoff for the proactive tutor when embeddings are on, is not calibrated: embeddings are off in my Groq setup. In lexical mode the relevance gate is a term-coverage heuristic with a truncated stem (6 letters), which can merge unrelated words with the same prefix.
+- The `proativo` evals depend on the seed's corpus and lesson, and I have only run them against Groq.
 - RAG search filters by category, material and chapter, but not by subject yet: the subject parameter is ignored.
 - When the provider fails, chat falls back to a deterministic offline stream. Lesson and assessment generation return 429 on rate limits, but plan-unit and chapter-distribution generation report rate limits as 503.
 - Exam answers live only in browser memory until submission; reloading the page loses them.
