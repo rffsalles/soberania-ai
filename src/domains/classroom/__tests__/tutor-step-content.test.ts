@@ -154,6 +154,45 @@ describe('produceStepContent', () => {
     expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1', 'T1');
   });
 
+  it('busca só léxica com trecho fora do tópico do passo: noMaterial, sem chamadas, reserva liberada', async () => {
+    const lexical = chunk({
+      similarityScore: undefined,
+      bm25Score: 0.2,
+      chapter: 'Capítulo 4: Álgebra Relacional e SQL',
+      content: 'A cláusula INNER JOIN combina tuplas de duas tabelas com base em uma condição de junção.',
+    });
+    const m = makeDeps({ chunks: [lexical] });
+    const step = {
+      ...item,
+      activity: 'Subqueries e operações de conjunto',
+      description: 'Reescrever uma junção como subquery e combinar consultas com UNION e EXCEPT.',
+    };
+    const r = await produceStepContent({ ...input, item: step }, m.deps);
+    expect(r).toEqual({ status: 'DONE', noMaterial: true, card: null, question: null, failure: null });
+    expect(m.streamChat).not.toHaveBeenCalled();
+    expect(m.drafts.releaseDraft).toHaveBeenCalledWith('d1', 'T1');
+  });
+
+  it('busca só léxica com trecho que cobre o tópico do passo: gera o cartão', async () => {
+    const lexical = chunk({
+      similarityScore: undefined,
+      bm25Score: 0.2,
+      chapter: 'Capítulo 4: Álgebra Relacional e SQL',
+      content: 'A cláusula INNER JOIN combina tuplas; o LEFT OUTER JOIN preserva a tabela à esquerda.',
+    });
+    const m = makeDeps({ chunks: [lexical], script: [{ text: cardJson }] });
+    const step = { ...item, activity: 'INNER JOIN e LEFT JOIN na prática' };
+    const r = await produceStepContent({ ...input, item: step, wantQuestion: false }, m.deps);
+    expect(r).toMatchObject({ status: 'DONE', noMaterial: false, failure: null });
+    expect((r as Extract<StepContent, { status: 'DONE' }>).card?.payload.source).toBe('GENERATED');
+  });
+
+  it('com embeddings, trecho léxico abaixo do corte de similaridade continua passando (caminho inalterado)', async () => {
+    const m = makeDeps({ chunks: [chunk({ similarityScore: 0.3, bm25Score: 0.1 })], script: [{ text: cardJson }] });
+    const r = await produceStepContent({ ...input, wantQuestion: false }, m.deps);
+    expect(r).toMatchObject({ status: 'DONE', noMaterial: false });
+  });
+
   it('sem trechos com cartão do rascunho: devolve o cartão (fromDraft) e noMaterial só da pergunta', async () => {
     const first = makeDeps({ script: [{ text: cardJson }] });
     const g = (await produceStepContent({ ...input, wantQuestion: false }, first.deps)) as Extract<

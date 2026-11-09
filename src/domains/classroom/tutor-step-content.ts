@@ -21,6 +21,7 @@ import {
 import { parseClassEvent, type TutorCardPayload, type TutorQuestionPayload } from './class-event-schema';
 import { failureReason, type CallResult } from './tutor-policy';
 import { stepHash } from './tutor-step-hash';
+import { isLexicallyRelevant, stepTopicTerms } from './lexical-relevance';
 import {
   claimDraft,
   ensureDraft,
@@ -31,6 +32,8 @@ import {
 
 export const TUTOR_TOP_K = 3;
 export const TUTOR_MIN_SIMILARITY = 0.55;
+/** Busca só léxica (sem similaridade): fração mínima dos termos do tópico do passo que o trecho precisa conter. */
+export const TUTOR_MIN_TERM_COVERAGE = 0.5;
 export const TUTOR_CARD_TEMPERATURE = 0.3;
 export const TUTOR_CARD_MAX_TOKENS = 900;
 
@@ -94,6 +97,22 @@ export function parseDraftQuestion(raw: unknown, stepIndex: number): MultipleCho
   return payload.kind === 'MULTIPLE_CHOICE' ? { ...payload, source: 'DRAFT' } : null;
 }
 
+/**
+ * Com embeddings (algum trecho traz similaridade) vale o corte de similaridade, e trecho com casamento
+ * léxico passa como antes. Só léxica (nenhum trecho com similaridade), o casamento por OR não basta:
+ * o trecho precisa cobrir os termos do tópico do passo, senão o passo fica sem material.
+ */
+function relevantChunks(found: DidacticChunk[], item: TimeScriptItem): DidacticChunk[] {
+  const lexicalOnly = found.every((c) => c.similarityScore == null);
+  if (!lexicalOnly) {
+    return found.filter((c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY);
+  }
+  const topic = stepTopicTerms(item.activity, item.description);
+  return found.filter(
+    (c) => c.bm25Score != null && isLexicallyRelevant(topic, [c.chapter, c.section, c.content].join(' '), TUTOR_MIN_TERM_COVERAGE),
+  );
+}
+
 function missingKind(cardMissing: boolean, questionMissing: boolean): Failure['kind'] | null {
   if (cardMissing) return questionMissing ? 'BOTH' : 'CARD';
   return questionMissing ? 'QUESTION' : null;
@@ -145,9 +164,7 @@ export async function produceStepContent(
     allowedMaterialIds: scope?.allowedMaterialIds,
     topK: TUTOR_TOP_K,
   });
-  const chunks: DidacticChunk[] = found.chunks.filter(
-    (c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY,
-  );
+  const chunks: DidacticChunk[] = relevantChunks(found.chunks, item);
   if (chunks.length === 0) {
     // O que o rascunho já tinha continua valendo; noMaterial fala só do que falta.
     return finish({ status: 'DONE', noMaterial: true, card, question, failure: null });
