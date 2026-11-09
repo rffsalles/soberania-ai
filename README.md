@@ -134,7 +134,7 @@ The study group uses the same log: messages are `GROUP_MESSAGE` events and the c
 
 - Five categories (40 cases): grounded facts with the right chapter citation (10), answer-seeking during class (8, must stay Socratic), off-corpus questions (8, must refuse), style limits (6), and prompt injection (8).
 - Deterministic graders covered by pytest, plus an optional LLM judge on the same OpenAI-compatible gateway (`temperature=0`, closed rubric, JSON verdict).
-- Each run writes a Markdown and JSON report with per-category pass rates and exits non-zero below the threshold. Latest full run with the Groq `openai/gpt-oss-120b` tutor and judge: 38/40 (95%), up from 29/40 before the fixes it motivated; the remaining failures are analysed in [`evals/reports/depois-2026-11-07.md`](evals/reports/depois-2026-11-07.md) (baseline: [`exemplo-2026-11-07.md`](evals/reports/exemplo-2026-11-07.md)).
+- Each run writes a Markdown and JSON report with per-category pass rates and exits non-zero below the threshold. Latest full run with the Groq `openai/gpt-oss-120b` tutor and judge: 40/40 (100%) with hybrid search (bge-m3 embeddings) on 2026-11-09; lexical search scores 38/40 (95%), up from 29/40 before the fixes it motivated, and its remaining failures are analysed in [`evals/reports/depois-2026-11-07.md`](evals/reports/depois-2026-11-07.md) (baseline: [`exemplo-2026-11-07.md`](evals/reports/exemplo-2026-11-07.md)). The two runs are not exactly comparable because the 38/40 run used an LLM judge.
 - A sixth, opt-in `proativo` category (10 cases, needs a real provider) logs in as the teacher, advances the seeded live lesson step by step and grades the proactive cards and questions. It scored 10/10 on 2026-11-09 (3 runs). It consumes the demo class; `node evals/reset-demo.cjs` resets only that agenda's events and drafts on a local database, with no fresh seed.
 
 ## Quick start
@@ -202,8 +202,8 @@ All variables are documented in [.env.example](.env.example). The essential ones
 
 - Socratic behavior in class is mostly prompt-enforced. Deterministic parts: a regex detector for answer requests (`answer-request.ts`), a citation guard that strips chapter/page references not present in the retrieved chunks, and a no-material short-circuit. The exam guardrail is keyword-based, so paraphrased cheating requests can reach the model.
 - Retrieval takes only the top 2 chunks in the chat (3 for the proactive tutor) and has no reranking step.
-- `TUTOR_MIN_SIMILARITY=0.55`, the cutoff for the proactive tutor when embeddings are on, is not calibrated: embeddings are off in my Groq setup. In lexical mode the relevance gate is a term-coverage heuristic with a truncated stem (6 letters), which can merge unrelated words with the same prefix.
-- The `proativo` evals depend on the seed's corpus and lesson, and I have only run them against Groq.
+- `TUTOR_MIN_SIMILARITY=0.55` was measured with real embeddings (bge-m3 via Ollama, 2026-11-09): similarity does not separate steps with material from steps without (valid 0.50–0.70; invalid 0.62), so the cutoff only works as a floor for unrelated passages and stays at 0.55. What decides the topic is term coverage of the step title (≥ 50%, 6-letter stem), applied in both lexical and hybrid modes. Limitation: a generic step title with no terms in the passage can fall into `NO_MATERIAL` even when the passage is relevant.
+- The `proativo` evals depend on the seed's corpus and lesson; they scored 10/10 in both lexical and hybrid (bge-m3) modes, with the tutor and judge on Groq.
 - RAG search filters by category, material and chapter, but not by subject yet: the subject parameter is ignored.
 - When the provider fails, chat falls back to a deterministic offline stream. Lesson and assessment generation return 429 on rate limits, but plan-unit and chapter-distribution generation report rate limits as 503.
 - Exam answers live only in browser memory until submission; reloading the page loses them.
