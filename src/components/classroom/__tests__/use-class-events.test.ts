@@ -68,7 +68,7 @@ describe('useClassEvents', () => {
   it('abre o stream com after=0, vira live no open e mescla eventos ordenados sem duplicatas', () => {
     const { result } = renderHook(() => useClassEvents('ag1'));
     expect(latest().url).toBe('/api/v1/agendas/ag1/events/stream?after=0');
-    expect(result.current.status).toBe('polling');
+    expect(result.current.status).toBe('updating');
     act(() => latest().open());
     expect(result.current.status).toBe('live');
     act(() => {
@@ -113,7 +113,7 @@ describe('useClassEvents', () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(FakeEventSource.instances[0].closed).toBe(true);
-    expect(result.current.status).toBe('polling');
+    expect(result.current.status).toBe('updating');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
@@ -186,7 +186,7 @@ describe('useClassEvents', () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(FakeEventSource.instances[0].closed).toBe(true);
-    expect(result.current.status).toBe('polling');
+    expect(result.current.status).toBe('updating');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });

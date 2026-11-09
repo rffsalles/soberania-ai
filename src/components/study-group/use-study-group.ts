@@ -37,7 +37,7 @@ function writeKnownSeq(agendaId: string, seq: number): void {
   }
 }
 
-/** Mescla por id e mantém a ordem cronológica (o POST pode trazer mensagens mais novas que as do polling). */
+/** Mescla por id e mantém a ordem cronológica (o POST pode trazer mensagens mais novas que as já carregadas). */
 function mergeById(current: MessageDTO[], incoming: MessageDTO[]): MessageDTO[] {
   const seen = new Set(current.map((m) => m.id));
   const added = incoming.filter((m) => !seen.has(m.id));
@@ -74,7 +74,7 @@ export function useStudyGroupMessages(
   const { events } = useClassEvents(agendaId, { after: knownSeq });
 
   /**
-   * Aplica mensagens recebidas. Só o polling avança o cursor `lastCreatedAt`: o POST devolve a resposta da tutora,
+   * Aplica mensagens recebidas. Só a recarga por GET avança o cursor `lastCreatedAt`: o POST devolve a resposta da tutora,
    * criada segundos depois, e avançar por ela esconderia mensagens de colegas postadas nesse intervalo.
    */
   const apply = React.useCallback((incoming: MessageDTO[], fromPoll: boolean) => {

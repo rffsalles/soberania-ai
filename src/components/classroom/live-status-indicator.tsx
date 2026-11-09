@@ -5,7 +5,7 @@ import type { ClassEventsStatus } from '@/components/classroom/use-class-events'
 
 export const LIVE_STATUS_LABEL: Record<ClassEventsStatus, string> = {
   live: 'Ao vivo',
-  polling: 'Atualizando',
+  updating: 'Atualizando',
   offline: 'Reconectando',
 };
 

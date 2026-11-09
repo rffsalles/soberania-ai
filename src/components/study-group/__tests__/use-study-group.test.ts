@@ -148,7 +148,7 @@ describe('useStudyGroupMessages', () => {
     expect(gets(f)).toHaveLength(1);
   });
 
-  it('sem eventos e sem stalemateEnabled, o relógio não gera GET (sem polling)', async () => {
+  it('sem eventos e sem stalemateEnabled, o relógio não gera GET (sem timer periódico)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const f = vi.fn(async () => json({ success: true, messages: [msg('m0', '2026-10-20T12:00:00.000Z')] }));
     vi.stubGlobal('fetch', f);

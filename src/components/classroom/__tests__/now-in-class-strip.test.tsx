@@ -58,7 +58,7 @@ describe('NowInClassStrip', () => {
     expect(screen.getByText('INNER JOIN e LEFT JOIN na prática')).not.toBeNull();
     expect(screen.getByRole('status').textContent).toContain('Ao vivo');
     cleanup();
-    renderStrip({ ...empty, stepIndex: 2, activity: null }, { status: 'polling' });
+    renderStrip({ ...empty, stepIndex: 2, activity: null }, { status: 'updating' });
     expect(screen.getByText('Passo 3')).not.toBeNull();
     expect(screen.getByRole('status').textContent).toContain('Atualizando');
   });

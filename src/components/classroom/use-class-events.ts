@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CLASS_EVENT_TYPES, type ClassEventDTO } from '@/domains/classroom/class-event-schema';
 import { reduceClassState, type ClassState } from '@/domains/classroom/class-state';
 
-export type ClassEventsStatus = 'live' | 'polling' | 'offline';
+export type ClassEventsStatus = 'live' | 'updating' | 'offline';
 
 const ERROR_GRACE_MS = 10_000;
 const POLL_INTERVAL_MS = 5_000;
@@ -25,7 +25,7 @@ export function useClassEvents(
 ): { events: ClassEventDTO[]; status: ClassEventsStatus; lastSeq: number; state: ClassState } {
   const after = options.after ?? 0;
   const [events, setEvents] = useState<ClassEventDTO[]>([]);
-  const [status, setStatus] = useState<ClassEventsStatus>('polling');
+  const [status, setStatus] = useState<ClassEventsStatus>('updating');
   const [lastSeq, setLastSeq] = useState(after);
   const lastSeqRef = useRef(after);
 
@@ -40,7 +40,7 @@ export function useClassEvents(
     lastSeqRef.current = after;
     setEvents([]);
     setLastSeq(after);
-    setStatus('polling');
+    setStatus('updating');
 
     const advance = (seq: number) => {
       if (seq > lastSeqRef.current) {
@@ -80,7 +80,7 @@ export function useClassEvents(
           finishClass();
           return;
         }
-        setStatus((s) => (s === 'live' ? s : 'polling'));
+        setStatus((s) => (s === 'live' ? s : 'updating'));
       } catch {
         if (!disposed) setStatus((s) => (s === 'live' ? s : 'offline'));
       }
@@ -101,7 +101,7 @@ export function useClassEvents(
       errorTimer = setTimeout(() => {
         errorTimer = null;
         es.close();
-        setStatus('polling');
+        setStatus('updating');
         startPolling();
       }, ERROR_GRACE_MS);
     };

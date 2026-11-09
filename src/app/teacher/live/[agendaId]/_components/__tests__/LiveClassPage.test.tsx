@@ -6,7 +6,7 @@ import type { ClassState } from '@/domains/classroom/class-state';
 
 const mocks = vi.hoisted(() => ({
   state: null as unknown as ClassState,
-  status: 'live' as 'live' | 'polling' | 'offline',
+  status: 'live' as 'live' | 'updating' | 'offline',
   lesson: null as unknown,
   type: 'CLASSROOM',
   lastSeq: 0,
@@ -255,8 +255,8 @@ describe('LiveClassPage', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('indicador mostra Atualizando quando status é polling', () => {
-    mocks.status = 'polling';
+  it('indicador mostra Atualizando quando status é updating', () => {
+    mocks.status = 'updating';
     render(<LiveClassPage agendaId="a1" />);
     expect(screen.getByRole('status').textContent).toContain('Atualizando');
   });
