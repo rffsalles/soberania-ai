@@ -23,7 +23,7 @@ const chunk = (over: Partial<DidacticChunk> = {}): DidacticChunk => ({
   chapter: 'Cap',
   chapterId: 'ch1',
   pageNumber: 5,
-  content: 'conteúdo',
+  content: 'Descrição do passo na prática.',
   similarityScore: 0.8,
   ...over,
 });
@@ -187,17 +187,47 @@ describe('produceStepContent', () => {
     expect((r as Extract<StepContent, { status: 'DONE' }>).card?.payload.source).toBe('GENERATED');
   });
 
-  it('com embeddings, trecho léxico abaixo do corte de similaridade continua passando (caminho inalterado)', async () => {
+  it('com embeddings, trecho léxico abaixo do corte de similaridade passa se cobre o tópico', async () => {
     const m = makeDeps({ chunks: [chunk({ similarityScore: 0.3, bm25Score: 0.1 })], script: [{ text: cardJson }] });
     const r = await produceStepContent({ ...input, wantQuestion: false }, m.deps);
     expect(r).toMatchObject({ status: 'DONE', noMaterial: false });
   });
 
-  it('lista mista (um trecho com similaridade, outro só léxico): vale o caminho antigo', async () => {
-    const lexicalOff = chunk({ id: 'k2', similarityScore: undefined, bm25Score: 0.2, content: 'nada a ver' });
-    const m = makeDeps({ chunks: [chunk({ similarityScore: 0.3 }), lexicalOff], script: [{ text: cardJson }] });
-    const r = await produceStepContent({ ...input, wantQuestion: false }, m.deps);
-    expect(r).toMatchObject({ status: 'DONE', noMaterial: false });
+  it('híbrido: trecho de JOIN com sim 0,62 e casamento léxico, passo Subqueries: noMaterial', async () => {
+    const join = chunk({
+      similarityScore: 0.62,
+      bm25Score: 0.2,
+      chapter: 'Capítulo 4: Álgebra Relacional e SQL',
+      content: 'A cláusula INNER JOIN combina tuplas de duas tabelas com base em uma condição de junção.',
+    });
+    const m = makeDeps({ chunks: [join] });
+    const step = {
+      ...item,
+      activity: 'Subqueries e operações de conjunto',
+      description: 'Reescrever uma junção como subquery e combinar consultas com UNION e EXCEPT.',
+    };
+    const r = await produceStepContent({ ...input, item: step }, m.deps);
+    expect(r).toEqual({ status: 'DONE', noMaterial: true, card: null, question: null, failure: null });
+    expect(m.streamChat).not.toHaveBeenCalled();
+  });
+
+  it('híbrido: trecho do Cap. 8 com sim 0,69 cobrindo "Propriedades ACID": publica', async () => {
+    const acid = chunk({
+      similarityScore: 0.69,
+      bm25Score: 0.3,
+      chapter: 'Capítulo 8: Transações',
+      content: 'As propriedades ACID (atomicidade, consistência, isolamento e durabilidade) garantem transações.',
+    });
+    const m = makeDeps({ chunks: [acid], script: [{ text: cardJson }] });
+    const step = { ...item, activity: 'Propriedades ACID', description: 'Atomicidade e durabilidade.' };
+    const r = await produceStepContent({ ...input, item: step, wantQuestion: false }, m.deps);
+    expect(r).toMatchObject({ status: 'DONE', noMaterial: false, failure: null });
+  });
+
+  it('lista mista: o gate de tópico vale por trecho, só o que cobre o tópico segue', () => {
+    const off = chunk({ id: 'k2', similarityScore: undefined, bm25Score: 0.2, content: 'nada a ver' });
+    const on = chunk({ id: 'k3', similarityScore: 0.7 });
+    expect(relevantChunks([chunk({ similarityScore: 0.3 }), off, on], item, 'Descrição do passo', 0).map((c) => c.id)).toEqual(['k3']);
   });
 
   it('busca só léxica com tópico vazio: avisa com o passo e fica sem material', async () => {

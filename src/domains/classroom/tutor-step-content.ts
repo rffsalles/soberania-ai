@@ -97,16 +97,39 @@ export function parseDraftQuestion(raw: unknown, stepIndex: number): MultipleCho
   return payload.kind === 'MULTIPLE_CHOICE' ? { ...payload, source: 'DRAFT' } : null;
 }
 
+/** Estágio 1 (recuperação): com similaridade vale o corte OU o casamento léxico; sem similaridade, tudo o que a busca trouxe. */
+function retrievalChunks(found: DidacticChunk[]): DidacticChunk[] {
+  const lexicalOnly = found.every((c) => c.similarityScore == null);
+  if (lexicalOnly) return found;
+  return found.filter((c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY);
+}
+
+/** Estágio 2 (tópico): o trecho precisa cobrir os termos do tópico do passo. */
+function topicChunks(kept: DidacticChunk[], item: TimeScriptItem, searchQuery: string, stepIndex: number): DidacticChunk[] {
+  if (kept.length === 0) return [];
+  const topic = stepTopicTerms(item.activity, item.description, searchQuery);
+  if (topic.length === 0) {
+    console.warn(`[TutorStepContent] passo ${stepIndex} sem termo significativo no tópico; tratado como sem material.`);
+    return [];
+  }
+  return kept.filter((c) =>
+    isLexicallyRelevant(topic, [c.chapter, c.section, c.content].join(' '), TUTOR_MIN_TERM_COVERAGE),
+  );
+}
+
 /**
- * Com algum trecho trazendo similaridade vale o corte de similaridade, e trecho com casamento léxico
- * passa como antes. Sem similaridade em nenhum trecho, o casamento por OR não basta: o trecho precisa
- * cobrir os termos do tópico do passo, senão o passo fica sem material. Isso vale com embeddings
- * desligados e também com embeddings ligados mas degradados (EmbeddingUnavailableError cai para só
- * léxico) ou com materiais ainda sem embedding: efeito desejado, é o mesmo risco de trecho fora do tópico.
+ * Dois estágios, iguais com ou sem embeddings quanto ao tópico.
+ * 1. Recuperação: com algum trecho trazendo similaridade vale o corte de similaridade OU o casamento
+ *    léxico (bm25Score); sem similaridade em nenhum trecho, fica tudo o que a busca trouxe.
+ * 2. Tópico: cada trecho mantido precisa cobrir os termos do tópico do passo (TUTOR_MIN_TERM_COVERAGE),
+ *    senão o passo fica sem material. A similaridade não separa passos válidos de inválidos (medição
+ *    com bge-m3: Revisão 0,499 válido, Subqueries 0,622 inválido), a cobertura de termos do título separa.
+ *    Vale também com embeddings degradados (EmbeddingUnavailableError cai para só léxico) ou materiais
+ *    ainda sem embedding.
  *
- * Assimetria proposital: a busca usa a descrição do passo (mais palavras para recuperar), o filtro usa
- * o título da atividade (o assunto), caindo para a descrição e depois para a consulta da busca quando o
- * título só tem rótulos ("Revisão", "Intervalo"). Tópico ainda vazio: aviso no log e sem material.
+ * Assimetria proposital: a busca usa a descrição do passo (mais palavras para recuperar), o filtro de
+ * tópico usa o título da atividade (o assunto), caindo para a descrição e depois para a consulta da busca
+ * quando o título só tem rótulos ("Revisão", "Intervalo"). Tópico ainda vazio: aviso no log e sem material.
  */
 export function relevantChunks(
   found: DidacticChunk[],
@@ -114,23 +137,16 @@ export function relevantChunks(
   searchQuery: string,
   stepIndex: number,
 ): DidacticChunk[] {
-  if (found.length === 0) return [];
-  const lexicalOnly = found.every((c) => c.similarityScore == null);
-  if (!lexicalOnly) {
-    return found.filter((c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY);
-  }
-  const topic = stepTopicTerms(item.activity, item.description, searchQuery);
-  if (topic.length === 0) {
-    console.warn(`[TutorStepContent] passo ${stepIndex} sem termo significativo no tópico; tratado como sem material.`);
-    return [];
-  }
-  return found.filter((c) =>
-    isLexicallyRelevant(topic, [c.chapter, c.section, c.content].join(' '), TUTOR_MIN_TERM_COVERAGE),
-  );
+  return relevantChunksStaged(found, item, searchQuery, stepIndex).onTopic;
+}
+
+function relevantChunksStaged(found: DidacticChunk[], item: TimeScriptItem, searchQuery: string, stepIndex: number) {
+  const retrieved = retrievalChunks(found);
+  return { retrieved, onTopic: topicChunks(retrieved, item, searchQuery, stepIndex) };
 }
 
 /** Uma linha por passo para calibrar TUTOR_MIN_SIMILARITY com embeddings reais (a suíte de evals não expõe a similaridade). */
-function logStepRetrieval(stepIndex: number, found: DidacticChunk[], kept: number): void {
+function logStepRetrieval(stepIndex: number, found: DidacticChunk[], keptAfterRetrieval: number, keptAfterTopic: number): void {
   const mode = found.some((c) => c.similarityScore != null) ? 'vector' : 'lexical';
   const sims = found.map((c) => c.similarityScore).filter((s): s is number => s != null);
   const round = (n: number) => Math.round(n * 1000) / 1000;
@@ -140,8 +156,10 @@ function logStepRetrieval(stepIndex: number, found: DidacticChunk[], kept: numbe
       mode,
       bestSimilarity: sims.length > 0 ? round(Math.max(...sims)) : null,
       before: found.length,
-      after: kept,
-      cut: mode === 'vector' ? TUTOR_MIN_SIMILARITY : TUTOR_MIN_TERM_COVERAGE,
+      keptAfterRetrieval,
+      keptAfterTopic,
+      retrievalCut: mode === 'vector' ? TUTOR_MIN_SIMILARITY : null,
+      topicCut: TUTOR_MIN_TERM_COVERAGE,
       chunks: found.map((c) => ({
         sim: c.similarityScore != null ? round(c.similarityScore) : null,
         lex: c.bm25Score != null,
@@ -203,8 +221,8 @@ export async function produceStepContent(
     allowedMaterialIds: scope?.allowedMaterialIds,
     topK: TUTOR_TOP_K,
   });
-  const chunks: DidacticChunk[] = relevantChunks(found.chunks, item, searchQuery, stepIndex);
-  logStepRetrieval(stepIndex, found.chunks, chunks.length);
+  const { retrieved, onTopic: chunks } = relevantChunksStaged(found.chunks, item, searchQuery, stepIndex);
+  logStepRetrieval(stepIndex, found.chunks, retrieved.length, chunks.length);
   if (chunks.length === 0) {
     // O que o rascunho já tinha continua valendo; noMaterial fala só do que falta.
     return finish({ status: 'DONE', noMaterial: true, card, question, failure: null });
