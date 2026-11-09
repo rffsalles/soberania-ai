@@ -98,18 +98,34 @@ export function parseDraftQuestion(raw: unknown, stepIndex: number): MultipleCho
 }
 
 /**
- * Com embeddings (algum trecho traz similaridade) vale o corte de similaridade, e trecho com casamento
- * léxico passa como antes. Só léxica (nenhum trecho com similaridade), o casamento por OR não basta:
- * o trecho precisa cobrir os termos do tópico do passo, senão o passo fica sem material.
+ * Com algum trecho trazendo similaridade vale o corte de similaridade, e trecho com casamento léxico
+ * passa como antes. Sem similaridade em nenhum trecho, o casamento por OR não basta: o trecho precisa
+ * cobrir os termos do tópico do passo, senão o passo fica sem material. Isso vale com embeddings
+ * desligados e também com embeddings ligados mas degradados (EmbeddingUnavailableError cai para só
+ * léxico) ou com materiais ainda sem embedding: efeito desejado, é o mesmo risco de trecho fora do tópico.
+ *
+ * Assimetria proposital: a busca usa a descrição do passo (mais palavras para recuperar), o filtro usa
+ * o título da atividade (o assunto), caindo para a descrição e depois para a consulta da busca quando o
+ * título só tem rótulos ("Revisão", "Intervalo"). Tópico ainda vazio: aviso no log e sem material.
  */
-function relevantChunks(found: DidacticChunk[], item: TimeScriptItem): DidacticChunk[] {
+export function relevantChunks(
+  found: DidacticChunk[],
+  item: TimeScriptItem,
+  searchQuery: string,
+  stepIndex: number,
+): DidacticChunk[] {
+  if (found.length === 0) return [];
   const lexicalOnly = found.every((c) => c.similarityScore == null);
   if (!lexicalOnly) {
     return found.filter((c) => c.bm25Score != null || (c.similarityScore ?? 0) >= TUTOR_MIN_SIMILARITY);
   }
-  const topic = stepTopicTerms(item.activity, item.description);
-  return found.filter(
-    (c) => c.bm25Score != null && isLexicallyRelevant(topic, [c.chapter, c.section, c.content].join(' '), TUTOR_MIN_TERM_COVERAGE),
+  const topic = stepTopicTerms(item.activity, item.description, searchQuery);
+  if (topic.length === 0) {
+    console.warn(`[TutorStepContent] passo ${stepIndex} sem termo significativo no tópico; tratado como sem material.`);
+    return [];
+  }
+  return found.filter((c) =>
+    isLexicallyRelevant(topic, [c.chapter, c.section, c.content].join(' '), TUTOR_MIN_TERM_COVERAGE),
   );
 }
 
@@ -158,13 +174,14 @@ export async function produceStepContent(
   const LOST: StepContent = { status: 'BUSY' };
 
   const scope = await deps.loadScope(lessonPlanId);
+  const searchQuery = item.description.trim() || item.activity;
   const found = await deps.search({
-    query: item.description.trim() || item.activity,
+    query: searchQuery,
     allowedChapterIds: scope?.allowedChapterIds,
     allowedMaterialIds: scope?.allowedMaterialIds,
     topK: TUTOR_TOP_K,
   });
-  const chunks: DidacticChunk[] = relevantChunks(found.chunks, item);
+  const chunks: DidacticChunk[] = relevantChunks(found.chunks, item, searchQuery, stepIndex);
   if (chunks.length === 0) {
     // O que o rascunho já tinha continua valendo; noMaterial fala só do que falta.
     return finish({ status: 'DONE', noMaterial: true, card, question, failure: null });

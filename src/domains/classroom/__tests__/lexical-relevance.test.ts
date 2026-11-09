@@ -29,11 +29,35 @@ describe('significantTerms', () => {
     expect(significantTerms('Sobre a JUNÇÃO de uma tabela com outra')).toEqual(['juncao', 'tabela']);
   });
 
-  it('reduz plural e radical: chaves = chave, junções = junção, relacionamentos ~ relacionais', () => {
+  it('reduz plural: chaves = chave, junções = junção, transações = transação, propriedades = propriedade', () => {
     expect(significantTerms('chaves')).toEqual(significantTerms('chave'));
     expect(significantTerms('junções')).toEqual(significantTerms('junção'));
-    expect(significantTerms('relacionamentos')).toEqual(significantTerms('Relacionais'));
+    expect(significantTerms('transações')).toEqual(significantTerms('transação'));
     expect(significantTerms('propriedades')).toEqual(significantTerms('propriedade'));
+  });
+
+  // Documentação executável do radical de 6 letras: erros conhecidos e aceitos.
+  it('radical: normalização e normal colapsam (falso positivo aceito)', () => {
+    expect(isLexicallyRelevant(significantTerms('normalização'), 'valor normal', COVERAGE)).toBe(true);
+  });
+
+  it('radical: índice e indexação não casam (falso negativo aceito)', () => {
+    expect(isLexicallyRelevant(significantTerms('índice'), 'a indexação acelera consultas', COVERAGE)).toBe(false);
+  });
+
+  it('aceita sigla curta (toda maiúscula ou com dígito) com comparação exata', () => {
+    expect(significantTerms('Introdução ao SQL')).toEqual(['sql']);
+    expect(significantTerms('Da 2FN à 3FN')).toEqual(['2fn', '3fn']);
+    expect(significantTerms('DER e UML')).toEqual(['der', 'uml']);
+    // Palavra curta minúscula não é sigla; preposição em título todo maiúsculo também não.
+    expect(significantTerms('uso de api')).toEqual([]);
+    expect(significantTerms('MODELO DE DADOS')).toEqual(['modelo', 'dado']);
+  });
+
+  it('sigla casa no trecho sem diferenciar caixa; "SQL básico" não aprova trecho só por "básico"', () => {
+    expect(isLexicallyRelevant(stepTopicTerms('Introdução ao SQL', ''), 'A linguagem SQL define tabelas.', COVERAGE)).toBe(true);
+    expect(isLexicallyRelevant(stepTopicTerms('Introdução ao SQL', ''), 'a linguagem sql', COVERAGE)).toBe(true);
+    expect(isLexicallyRelevant(stepTopicTerms('SQL básico', ''), 'Um exemplo básico de árvore.', COVERAGE)).toBe(false);
   });
 
   it('descarta rótulos de atividade (revisão, exercício, prática) e repete termo uma vez só', () => {
@@ -57,6 +81,17 @@ describe('stepTopicTerms', () => {
     expect(stepTopicTerms('INNER JOIN e LEFT JOIN na prática', 'Comparar resultados')).toEqual(['inner', 'join', 'left']);
     expect(stepTopicTerms('Revisão', 'Retomar normalização')).toEqual(significantTerms('Retomar normalização'));
   });
+
+  it('sem termo no título nem na descrição, cai na consulta usada na busca', () => {
+    expect(stepTopicTerms('Revisão', '', 'chave estrangeira')).toEqual(significantTerms('chave estrangeira'));
+    expect(stepTopicTerms('Revisão geral', 'Pausa.', '')).toEqual([]);
+  });
+
+  it('rótulos de formato não viram tópico (intervalo, quiz, estudo de caso, dúvidas, fundamentos)', () => {
+    expect(stepTopicTerms('Intervalo', '')).toEqual([]);
+    expect(stepTopicTerms('Quiz: estudo de caso e dúvidas', '')).toEqual([]);
+    expect(stepTopicTerms('Fundamentos: conceito geral, exemplos usando tipos', '')).toEqual([]);
+  });
 });
 
 describe('isLexicallyRelevant (passos da aula demo)', () => {
@@ -79,8 +114,18 @@ describe('isLexicallyRelevant (passos da aula demo)', () => {
     expect(step('Subqueries e operações de conjunto', CAP4)).toBe(false);
   });
 
-  it('Intervalo não casa com nenhum trecho', () => {
+  it('Revisão de chaves e relacionamentos (caso real do seed) casa com o Cap. 6 via título do capítulo', () => {
+    // "relacionamentos" ~ "Relacionais" no título do capítulo; sem o título o trecho só cobre "chave".
+    expect(isLexicallyRelevant(stepTopicTerms('Revisão: chaves e relacionamentos', ''), CAP6.content, COVERAGE)).toBe(false);
+    expect(step('Revisão: chaves e relacionamentos', CAP6)).toBe(true);
+  });
+
+  it('Intervalo não casa com nenhum trecho, nem com "intervalo de confiança"', () => {
     for (const c of [CAP4, CAP6, CAP8]) expect(step('Intervalo', c)).toBe(false);
+    const estat = { chapter: 'Capítulo 9: Estimação', content: 'O intervalo de confiança de 95% para a média.' };
+    expect(step('Intervalo', estat)).toBe(false);
+    const real = isLexicallyRelevant(stepTopicTerms('Intervalo', 'Pausa para café e alongamento.'), estat.content, COVERAGE);
+    expect(real).toBe(false);
   });
 
   it('sem termo significativo no tópico: não é relevante', () => {

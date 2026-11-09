@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DidacticChunk } from '@/domains/rag/types';
 import type { InferenceMeta } from '@/domains/telemetry/services/logged-stream-chat';
-import { produceStepContent, type StepContent, type StepContentDeps, type StepContentInput } from '../tutor-step-content';
+import { produceStepContent, relevantChunks, type StepContent, type StepContentDeps, type StepContentInput } from '../tutor-step-content';
 import { stepHash } from '../tutor-step-hash';
 
 const item = { timeSeconds: 0, timeRange: '0-10', activity: 'Ato', description: 'Descrição do passo' };
@@ -191,6 +191,27 @@ describe('produceStepContent', () => {
     const m = makeDeps({ chunks: [chunk({ similarityScore: 0.3, bm25Score: 0.1 })], script: [{ text: cardJson }] });
     const r = await produceStepContent({ ...input, wantQuestion: false }, m.deps);
     expect(r).toMatchObject({ status: 'DONE', noMaterial: false });
+  });
+
+  it('lista mista (um trecho com similaridade, outro só léxico): vale o caminho antigo', async () => {
+    const lexicalOff = chunk({ id: 'k2', similarityScore: undefined, bm25Score: 0.2, content: 'nada a ver' });
+    const m = makeDeps({ chunks: [chunk({ similarityScore: 0.3 }), lexicalOff], script: [{ text: cardJson }] });
+    const r = await produceStepContent({ ...input, wantQuestion: false }, m.deps);
+    expect(r).toMatchObject({ status: 'DONE', noMaterial: false });
+  });
+
+  it('busca só léxica com tópico vazio: avisa com o passo e fica sem material', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const lexical = chunk({ similarityScore: undefined, bm25Score: 0.2, content: 'O intervalo de confiança de 95%.' });
+    const m = makeDeps({ chunks: [lexical] });
+    const r = await produceStepContent({ ...input, item: { ...item, activity: 'Intervalo', description: '' } }, m.deps);
+    expect(r).toEqual({ status: 'DONE', noMaterial: true, card: null, question: null, failure: null });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('passo 1'));
+    warn.mockRestore();
+  });
+
+  it('relevantChunks sem trechos devolve lista vazia', () => {
+    expect(relevantChunks([], item, 'consulta', 0)).toEqual([]);
   });
 
   it('sem trechos com cartão do rascunho: devolve o cartão (fromDraft) e noMaterial só da pergunta', async () => {
