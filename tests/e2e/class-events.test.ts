@@ -174,3 +174,75 @@ describe.skipIf(!TEST_DB_URL)('class-event-repository (banco)', () => {
     expect(rows.map((r) => r.type).sort()).toEqual(['TUTOR_CARD', 'TUTOR_SKIPPED']);
   });
 });
+
+describe.skipIf(!TEST_DB_URL)('grupo de estudos por eventos (banco)', () => {
+  let db: typeof import('@/lib/db').db;
+  let agendaId: string;
+  let studentId: string;
+
+  beforeAll(async () => {
+    process.env.DATABASE_URL = TEST_DB_URL;
+    db = (await import('@/lib/db')).db;
+    const student = await db.user.findFirstOrThrow({ where: { enrollment: STUDENT_ENROLLMENT } });
+    studentId = student.id;
+    const start = new Date();
+    const agenda = await db.agenda.create({
+      data: {
+        title: 'Grupo descartável',
+        subject: 'Teste',
+        type: 'STUDY_GROUP',
+        startTime: start,
+        endTime: new Date(start.getTime() + MS_PER_HOUR),
+        classId: student.classId!,
+      },
+    });
+    agendaId = agenda.id;
+  });
+
+  afterAll(async () => {
+    if (agendaId) await db.agenda.deleteMany({ where: { id: agendaId } });
+    await db.$disconnect();
+  });
+
+  it('createMessage grava a mensagem e o GROUP_MESSAGE com o messageId dela; createMessageIfLast com id velho não grava nada', async () => {
+    const { createMessage, createMessageIfLast } = await import('@/domains/agendas/services/study-group-repository');
+    const msg = await createMessage({ agendaId, authorId: studentId, content: 'oi', isAi: false });
+    expect(await db.studyGroupMessage.count({ where: { agendaId } })).toBe(1);
+    const events = await db.classEvent.findMany({ where: { agendaId, type: 'GROUP_MESSAGE' } });
+    expect(events).toHaveLength(1);
+    expect(events[0].payload).toEqual({ messageId: msg.id });
+
+    const stale = await createMessageIfLast(
+      { agendaId, authorId: null, content: 'resposta', isAi: true },
+      'id-velho',
+    );
+    expect(stale).toBeNull();
+    expect(await db.studyGroupMessage.count({ where: { agendaId } })).toBe(1);
+    expect(await db.classEvent.count({ where: { agendaId, type: 'GROUP_MESSAGE' } })).toBe(1);
+
+    const ok = await createMessageIfLast({ agendaId, authorId: null, content: 'resposta', isAi: true }, msg.id);
+    expect(ok).not.toBeNull();
+    expect(await db.studyGroupMessage.count({ where: { agendaId } })).toBe(2);
+    expect(await db.classEvent.count({ where: { agendaId, type: 'GROUP_MESSAGE' } })).toBe(2);
+  });
+
+  it('findLastStalemateFailureAt filtra pelo reason no JSON', async () => {
+    const { findLastStalemateFailureAt, appendStalemateFailure } = await import(
+      '@/domains/classroom/class-event-repository'
+    );
+    await db.classEvent.create({
+      data: {
+        agendaId,
+        seq: 1000,
+        type: 'TUTOR_SKIPPED',
+        stepIndex: 0,
+        payload: { reason: 'NO_MATERIAL', kind: 'CARD' },
+        audience: 'TEACHER',
+        createdBy: 'TUTOR',
+      },
+    });
+    await expect(findLastStalemateFailureAt(agendaId)).resolves.toBeNull();
+    await appendStalemateFailure(agendaId);
+    await expect(findLastStalemateFailureAt(agendaId)).resolves.toBeInstanceOf(Date);
+  });
+});

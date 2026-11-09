@@ -30,7 +30,16 @@ vi.mock('@/lib/db', () => ({
   db: { $transaction: (fn: never) => $transaction(fn), classEvent: { findMany: (a: never) => findMany(a), findFirst: (a: never) => findFirst(a) } },
 }));
 
-import { appendEvents, appendTutorEvents, findEventBySeq, findEventsAfter, hasEvent } from '../class-event-repository';
+import {
+  appendEvents,
+  appendEventsWith,
+  appendStalemateFailure,
+  appendTutorEvents,
+  findEventBySeq,
+  findEventsAfter,
+  findLastStalemateFailureAt,
+  hasEvent,
+} from '../class-event-repository';
 
 const ev = { type: 'TEACHER_NOTE', stepIndex: null, payload: {}, audience: 'TEACHER', createdBy: 'TEACHER' } as const;
 const p2002 = () => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
@@ -207,5 +216,75 @@ describe('hasEvent', () => {
     expect(findFirst.mock.calls[0][0].where).not.toHaveProperty('seq');
     findFirst.mockResolvedValueOnce(null);
     await expect(hasEvent('a1', 'SESSION_ENDED')).resolves.toBe(false);
+  });
+});
+
+describe('appendEventsWith', () => {
+  it('roda work depois do lock e grava os eventos devolvidos a partir de MAX+1', async () => {
+    const work = vi.fn(async () => {
+      calls.push('work');
+      return { value: 'v', events: [ev, ev] };
+    });
+    const out = await appendEventsWith('a1', work);
+    expect(calls).toEqual(['lock', 'read', 'read', 'work', 'max', 'insert:5', 'insert:6']);
+    expect(out.value).toBe('v');
+    expect(out.rows.map((r) => r.seq)).toEqual([5, 6]);
+    expect(work).toHaveBeenCalledWith(tx, { phase: 'NOT_STARTED', currentStepIndex: null, audienceStepIndex: null });
+  });
+
+  it('events vazio: não insere', async () => {
+    const out = await appendEventsWith('a1', async () => ({ value: 1, events: [] }));
+    expect(out).toEqual({ value: 1, rows: [] });
+    expect(calls.some((c) => c.startsWith('insert') || c === 'max')).toBe(false);
+  });
+
+  it('P2002 na primeira tentativa repete a transação inteira (work roda duas vezes)', async () => {
+    create.mockRejectedValueOnce(p2002());
+    const work = vi.fn(async () => ({ value: null, events: [ev] }));
+    const out = await appendEventsWith('a1', work);
+    expect(work).toHaveBeenCalledTimes(2);
+    expect($transaction).toHaveBeenCalledTimes(2);
+    expect(out.rows).toHaveLength(1);
+  });
+});
+
+describe('findLastStalemateFailureAt', () => {
+  it('consulta o reason no JSON e devolve createdAt', async () => {
+    const at = new Date('2026-11-08T10:00:00Z');
+    findFirst.mockResolvedValue({ createdAt: at });
+    await expect(findLastStalemateFailureAt('a1')).resolves.toBe(at);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        agendaId: 'a1',
+        type: 'TUTOR_SKIPPED',
+        stepIndex: null,
+        payload: { path: ['reason'], equals: 'STALEMATE_FAILED' },
+      },
+      orderBy: { seq: 'desc' },
+      select: { createdAt: true },
+    });
+  });
+
+  it('sem falha: null', async () => {
+    await expect(findLastStalemateFailureAt('a1')).resolves.toBeNull();
+  });
+});
+
+describe('appendStalemateFailure', () => {
+  it('insere TUTOR_SKIPPED STALEMATE_FAILED para o professor', async () => {
+    await appendStalemateFailure('a1');
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          agendaId: 'a1',
+          seq: 5,
+          type: 'TUTOR_SKIPPED',
+          stepIndex: null,
+          payload: { reason: 'STALEMATE_FAILED' },
+          audience: 'TEACHER',
+          createdBy: 'TUTOR',
+        },
+      }),
+    );
   });
 });

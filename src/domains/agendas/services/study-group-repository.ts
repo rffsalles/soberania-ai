@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
+import { appendEventsWith } from '@/domains/classroom/class-event-repository';
 import { STUDY_GROUP_LIST_LIMIT } from '@/lib/constants/tutor';
 
 const messageInclude = { author: { select: { name: true } } } satisfies Prisma.StudyGroupMessageInclude;
@@ -38,8 +39,41 @@ export async function listRecentMessages(agendaId: string, limit: number): Promi
   return rows.reverse();
 }
 
-export function createMessage(data: NewStudyGroupMessage): Promise<StudyGroupMessageRecord> {
-  return db.studyGroupMessage.create({ data, include: messageInclude });
+function groupMessageEvent(msg: StudyGroupMessageRecord, isAi: boolean) {
+  return {
+    type: 'GROUP_MESSAGE',
+    stepIndex: null,
+    payload: { messageId: msg.id },
+    audience: 'ALL',
+    createdBy: isAi ? 'TUTOR' : 'SYSTEM',
+  } as const;
+}
+
+/** Grava a mensagem e o evento GROUP_MESSAGE na mesma transação. */
+export async function createMessage(data: NewStudyGroupMessage): Promise<StudyGroupMessageRecord> {
+  const { value } = await appendEventsWith(data.agendaId, async (tx) => {
+    const msg = await tx.studyGroupMessage.create({ data, include: messageInclude });
+    return { value: msg, events: [groupMessageEvent(msg, data.isAi)] };
+  });
+  return value;
+}
+
+/** Como createMessage, mas só grava se a última mensagem da agenda ainda for `expectedLastId` (lida sob a trava). */
+export async function createMessageIfLast(
+  data: NewStudyGroupMessage,
+  expectedLastId: string,
+): Promise<StudyGroupMessageRecord | null> {
+  const { value } = await appendEventsWith(data.agendaId, async (tx) => {
+    const last = await tx.studyGroupMessage.findFirst({
+      where: { agendaId: data.agendaId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (last?.id !== expectedLastId) return { value: null, events: [] };
+    const msg = await tx.studyGroupMessage.create({ data, include: messageInclude });
+    return { value: msg, events: [groupMessageEvent(msg, data.isAi)] };
+  });
+  return value;
 }
 
 export function findLastMessage(agendaId: string): Promise<StudyGroupMessageRecord | null> {

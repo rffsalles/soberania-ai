@@ -96,17 +96,36 @@ async function insertEvents(tx: Tx, agendaId: string, events: NewClassEvent[]): 
   return rows;
 }
 
-async function appendOnce(
+type AppendWork<T> = (tx: Tx, ctx: AppendContext) => Promise<{ value: T; events: NewClassEvent[] }>;
+
+async function appendOnce<T>(
   agendaId: string,
-  build: (ctx: AppendContext) => NewClassEvent[],
+  work: AppendWork<T>,
   options?: AppendOptions,
-): Promise<ClassEventRow[]> {
+): Promise<{ value: T; rows: ClassEventRow[] }> {
   return db.$transaction(async (tx) => {
     const ctx = await lockAndReadState(tx, agendaId, options?.stepAudience);
-    const events = build(ctx);
-    if (events.length === 0) return [];
-    return insertEvents(tx, agendaId, events);
+    const { value, events } = await work(tx, ctx);
+    if (events.length === 0) return { value, rows: [] };
+    return { value, rows: await insertEvents(tx, agendaId, events) };
   });
+}
+
+/**
+ * Como appendEvents, mas `work` roda na mesma transação (sob a trava da agenda) e pode gravar outras linhas.
+ * P2002 repete a transação inteira uma vez: `work` roda de novo e o que a tentativa desfeita gravou não existe mais.
+ */
+export async function appendEventsWith<T>(
+  agendaId: string,
+  work: AppendWork<T>,
+  options?: AppendOptions,
+): Promise<{ value: T; rows: ClassEventRow[] }> {
+  try {
+    return await appendOnce(agendaId, work, options);
+  } catch (e) {
+    if (!isUniqueViolation(e)) throw e;
+    return appendOnce(agendaId, work, options);
+  }
 }
 
 export async function appendEvents(
@@ -114,12 +133,35 @@ export async function appendEvents(
   build: (ctx: AppendContext) => NewClassEvent[],
   options?: AppendOptions,
 ): Promise<ClassEventRow[]> {
-  try {
-    return await appendOnce(agendaId, build, options);
-  } catch (e) {
-    if (!isUniqueViolation(e)) throw e;
-    return appendOnce(agendaId, build, options);
-  }
+  const { rows } = await appendEventsWith(agendaId, async (_tx, ctx) => ({ value: null, events: build(ctx) }), options);
+  return rows;
+}
+
+/** Quando a tutora falhou pela última vez em destravar o grupo (STALEMATE_FAILED), ou null. */
+export async function findLastStalemateFailureAt(agendaId: string): Promise<Date | null> {
+  const row = await db.classEvent.findFirst({
+    where: {
+      agendaId,
+      type: 'TUTOR_SKIPPED',
+      stepIndex: null,
+      payload: { path: ['reason'], equals: 'STALEMATE_FAILED' },
+    },
+    orderBy: { seq: 'desc' },
+    select: { createdAt: true },
+  });
+  return row?.createdAt ?? null;
+}
+
+export async function appendStalemateFailure(agendaId: string): Promise<void> {
+  await appendEvents(agendaId, () => [
+    {
+      type: 'TUTOR_SKIPPED',
+      stepIndex: null,
+      payload: { reason: 'STALEMATE_FAILED' },
+      audience: 'TEACHER',
+      createdBy: 'TUTOR',
+    },
+  ]);
 }
 
 export function findEventsAfter(
