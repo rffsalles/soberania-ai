@@ -74,3 +74,17 @@ __pycache__/
 test-results/
 playwright-report/
 playwright/.cache/
+# aia-harness
+.claude/settings.local.json
+.claude/*.local.*
+.claude/.aia-harness-pending/
+graphify-out/
+graphify-out/cost.json
+graphify-out/cache/
+
+# aia-harness — obsidian vault: local, not committed
+vault-obsidian/.obsidian/
+.claude/hooks/log/
+.claude/scripts/node_modules/
+.claude/scripts/package.json
+.claude/scripts/package-lock.json
