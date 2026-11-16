@@ -189,7 +189,8 @@ const pathHit = candidates.some(
 // character check is what actually stops it, not the split. `&` is checked
 // separately, below — `&&` (the segment separator) must stay legal, so it
 // can't sit in this same blanket character class.
-const DANGEROUS_CHAR_RE = /[`<>\\\n\r$]/;
+// Quotes hide flags from the textual UNSAFE_GIT_FLAG_RE check (`"--output=x"`), so they are rejected too.
+const DANGEROUS_CHAR_RE = /[`<>\\\n\r$'"]/;
 
 // Strip an optional leading `rtk ` before matching: an rtk wrapper (this
 // project's own `rtk-hook.mjs`, if installed via `/add-tools`, or a user's
