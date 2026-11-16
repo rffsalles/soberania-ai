@@ -466,6 +466,22 @@ export async function compileOne(ctx) {
     hooks: {
       PreToolUse: [
         {
+          // Allowlist barrier: deny every tool outside ALLOWED_TOOLS, whatever
+          // the permission mode does (the daily note is untrusted content).
+          hooks: [
+            async (input) =>
+              ALLOWED_TOOLS.includes(input.tool_name)
+                ? {}
+                : {
+                    hookSpecificOutput: {
+                      hookEventName: "PreToolUse",
+                      permissionDecision: "deny",
+                      permissionDecisionReason: `Tool not permitted: only ${ALLOWED_TOOLS.join(", ")} are allowed`,
+                    },
+                  },
+          ],
+        },
+        {
           hooks: [
             async (input) => {
               // Unconditional, permanent, and FIRST — every other branch below
@@ -670,11 +686,9 @@ export async function compileOne(ctx) {
         },
       ],
     },
-    permissionMode: "bypassPermissions",
-    // Mandatory companion to permissionMode:"bypassPermissions" — the SDK
-    // requires this explicit second flag as a safety measure against
-    // accidental blanket permission bypass.
-    allowDangerouslySkipPermissions: true,
+    // dontAsk: never prompts, denies anything not pre-approved in allowedTools
+    // (replaces bypassPermissions, which auto-approved every tool).
+    permissionMode: "dontAsk",
     maxTurns: 20,
     cwd: projectDir,
     env: { ...process.env, CLAUDE_INVOKED_BY: "compile" },

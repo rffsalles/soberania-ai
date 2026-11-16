@@ -265,11 +265,29 @@ async function main() {
       "mcp__obsidian__rename_note_tool",
       "mcp__obsidian__update_note_tool",
     ],
-    permissionMode: "bypassPermissions",
-    // Mandatory companion to permissionMode:"bypassPermissions" — the SDK
-    // requires this explicit second flag as a safety measure against
-    // accidental blanket permission bypass.
-    allowDangerouslySkipPermissions: true,
+    // dontAsk: never prompts, denies anything not pre-approved in allowedTools
+    // (replaces bypassPermissions, which auto-approved every tool).
+    permissionMode: "dontAsk",
+    // Second barrier: deny every tool except add_daily_note_tool, whatever the
+    // permission mode does (the digest is an untrusted-content surface).
+    hooks: {
+      PreToolUse: [
+        {
+          hooks: [
+            async (input) =>
+              input.tool_name === "mcp__obsidian__add_daily_note_tool"
+                ? {}
+                : {
+                    hookSpecificOutput: {
+                      hookEventName: "PreToolUse",
+                      permissionDecision: "deny",
+                      permissionDecisionReason: "Only add_daily_note_tool is permitted",
+                    },
+                  },
+          ],
+        },
+      ],
+    },
     maxTurns: 6,
     cwd: projectDir,
     env: { ...process.env, CLAUDE_INVOKED_BY: "session_log" },

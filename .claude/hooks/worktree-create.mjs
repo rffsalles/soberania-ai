@@ -162,7 +162,17 @@ if (wtPathInput) {
 }
 
 if (!name) process.exit(0);
+// Reject unsafe names (path traversal) before any path or git use; create nothing.
+if (!/^[A-Za-z0-9._-]+$/.test(name) || name === "." || name === ".." || name.startsWith("-")) {
+  process.stderr.write(`worktree-create: invalid worktree name rejected: ${JSON.stringify(name)}\n`);
+  process.exit(0);
+}
 const dir = path.join(cwd, ".claude", "worktrees", name);
+const worktreesRoot = path.resolve(cwd, ".claude", "worktrees");
+if (!path.resolve(dir).startsWith(worktreesRoot + path.sep)) {
+  process.stderr.write("worktree-create: worktree path escapes .claude/worktrees; rejected\n");
+  process.exit(0);
+}
 
 // Worktree already on disk (EnterWorktree entering an existing local worktree) → skip git creation.
 if (!fs.existsSync(dir)) {

@@ -199,6 +199,8 @@ const DANGEROUS_CHAR_RE = /[`<>\\\n\r$]/;
 // commit` this allowlist exists to permit.
 const SAFE_GIT_SUBCOMMAND_RE = /^\s*git\s+(add|status|diff|commit|push|log)\b/;
 const RTK_PREFIX_RE = /^\s*rtk\s+/;
+const UNSAFE_GIT_FLAG_RE =
+  /(^|\s)(--output(=\S*)?|-o\S*|-c|--ext-diff|--textconv|--exec(=\S*)?|--upload-pack(=\S*)?|--receive-pack(=\S*)?)(?=\s|$)/;
 
 // Every `&&`/`;`/`|`-separated segment of the command must independently
 // match — `git add .vault-obsidian/ && cat .vault-obsidian/x.md` stays
@@ -211,6 +213,8 @@ const RTK_PREFIX_RE = /^\s*rtk\s+/;
  */
 function isSafeGitPlumbing(cmd) {
   if (DANGEROUS_CHAR_RE.test(cmd)) return false;
+  // Flags that write files or run code (`git diff --output=...`, `git -c ...`).
+  if (UNSAFE_GIT_FLAG_RE.test(cmd)) return false;
   // A lone `&` backgrounds/detaches a command — dangerous, reject. `&&` is
   // the separator this allowlist itself relies on, so strip every `&&` pair
   // first; anything left over is a real single ampersand.
