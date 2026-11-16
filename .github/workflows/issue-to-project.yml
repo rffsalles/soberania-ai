@@ -20,7 +20,7 @@ jobs:
         if: env.PROJECTS_PAT != ''
         uses: actions/add-to-project@v2.0.0
         with:
-          project-url: https://github.com/users/${{ github.repository_owner }}/projects/1
+          project-url: https://github.com/users/${{ github.repository_owner }}/projects/2
           github-token: ${{ env.PROJECTS_PAT }}
 
       - name: Set status to Triage
@@ -29,7 +29,7 @@ jobs:
         with:
           github_token: ${{ env.PROJECTS_PAT }}
           organization: ${{ github.repository_owner }}
-          project_number: 1
+          project_number: 2
           content_id: ${{ github.event.issue.node_id }}
           field: Status
           value: Triage
