@@ -1,0 +1,125 @@
+# .graphifyignore — gitignore syntax; seeded from project .gitignore + graphify extraction filters.
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing / Coverage
+coverage/
+*.lcov
+.nyc_output
+
+# Production / Next.js / Vite build
+.next/
+out/
+build/
+dist/
+
+# Environment Variables
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary & Cache
+.cache/
+.turbo/
+.agent/preview.log
+.agent/scratch_test.js
+.agent/reviews/
+
+# Local Uploads / Storage
+storage/*
+!storage/.gitkeep
+
+
+# Claude worktrees / SDD scratch
+.claude/worktrees/
+.claude/tmp/
+.superpowers/
+tsconfig.tsbuildinfo
+scratch/
+
+# Playwright MCP (logs e snapshots de navegador)
+.playwright-mcp/
+
+# Dicionários baixados pelo tesseract.js (OCR) no diretório de trabalho
+*.traineddata
+
+# Ferramental local de IA de terceiros e bytecode Python
+.agent/
+.agents/
+__pycache__/
+*.pyc
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+.claude/settings.local.json
+.claude/*.local.*
+.claude/.aia-harness-pending/
+graphify-out/
+graphify-out/cost.json
+graphify-out/cache/
+
+node_modules/
+dist/
+build/
+out/
+coverage/
+.next/
+.nuxt/
+.turbo/
+*.min.js
+*.generated.*
+
+# graphify extraction filters
+# Skip binary/media files from semantic extraction
+# (AST still processes code files normally)
+
+# Images — rendered separately, not needed for semantic
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.webp
+*.ico
+
+# PDFs — low signal-to-noise in semantic extraction
+*.pdf
+
+# Videos/audio — transcribed but usually verbose; filter at source if needed
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.flac
+
+.claude/
+docs/
+.agents/
+.code-review-graph/
+.superpowers/
+
+*.md
